@@ -17,7 +17,7 @@ from psycopg2.extras import RealDictCursor
 import redis
 import aiohttp
 import uvicorn
-from persistent_memory import memory, remember, recall, learn, know
+# from persistent_memory import memory, remember, recall, learn, know  # Temp disabled for startup
 
 # Initialize FastAPI
 app = FastAPI(title="BrainOps AI Orchestration", version="1.0.0")
