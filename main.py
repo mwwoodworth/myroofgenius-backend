@@ -9,7 +9,7 @@ import json
 import time
 from datetime import datetime
 from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
@@ -237,8 +237,83 @@ orchestrator = AIOrchestrator()
 @app.on_event("startup")
 async def startup_event():
     """Start AI orchestration on server startup"""
+    # Import and start production orchestrator
+    from orchestrator import orchestrator as prod_orchestrator
     asyncio.create_task(orchestrator.start())
+    asyncio.create_task(prod_orchestrator.start())
     print("🚀 BrainOps AI Orchestration Started")
+
+@app.get("/healthz")
+async def healthz():
+    """Kubernetes-style health check"""
+    return {"status": "ok"}
+
+@app.get("/readyz")
+async def readyz():
+    """Readiness check with dependency validation"""
+    checks = {
+        "database": False,
+        "redis": False,
+        "orchestrator": False
+    }
+    
+    # Check database
+    try:
+        conn = get_db()
+        if conn:
+            conn.close()
+            checks["database"] = True
+    except:
+        pass
+    
+    # Check Redis
+    try:
+        r = get_redis()
+        if r and r.ping():
+            checks["redis"] = True
+    except:
+        pass
+    
+    # Check orchestrator
+    checks["orchestrator"] = orchestrator_state["status"] == "active"
+    
+    all_ready = all(checks.values())
+    return {
+        "ready": all_ready,
+        "checks": checks,
+        "timestamp": datetime.now().isoformat()
+    }, 200 if all_ready else 503
+
+@app.get("/livez")
+async def livez():
+    """Liveness probe"""
+    return {"alive": True}
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus-compatible metrics endpoint"""
+    metrics_data = f"""
+# HELP http_requests_total Total HTTP requests
+# TYPE http_requests_total counter
+http_requests_total {{method="GET",status="200"}} {orchestrator_state.get("ai_actions_count", 0)}
+
+# HELP revenue_today_dollars Today's revenue in dollars  
+# TYPE revenue_today_dollars gauge
+revenue_today_dollars {orchestrator_state.get("revenue_today", 0)}
+
+# HELP active_users Current active users
+# TYPE active_users gauge
+active_users {orchestrator_state.get("active_users", 0)}
+
+# HELP ai_actions_total Total AI actions executed
+# TYPE ai_actions_total counter
+ai_actions_total {orchestrator_state.get("ai_actions_count", 0)}
+
+# HELP system_health_score System health score 0-100
+# TYPE system_health_score gauge
+system_health_score {orchestrator_state.get("metrics", {}).get("system_health", 100)}
+"""
+    return Response(content=metrics_data, media_type="text/plain")
 
 @app.get("/")
 async def root():
