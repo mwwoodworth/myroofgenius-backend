@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: brainops-ai-orchestrator
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://postgres:postgres@db.wvkoiekcybvhpqvgqvtc.supabase.co:5432/postgres
+      - key: REDIS_URL
+        value: redis://red-cqkt5qij1k6c738eongg:6379
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+    autoDeploy: true
+    healthCheckPath: /health
