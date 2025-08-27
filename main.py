@@ -8,12 +8,22 @@ import asyncio
 import json
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+# Import new system components if available
+try:
+    from webhook_processor import WebhookProcessor
+    from log_streaming import LogStreamingService  
+    from claudeos_automation import CLAUDEOSAutomation
+    FULL_SYSTEM_ENABLED = True
+except ImportError:
+    FULL_SYSTEM_ENABLED = False
+    logger.warning("Advanced components not available - running in basic mode")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
