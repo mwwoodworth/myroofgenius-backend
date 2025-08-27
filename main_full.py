@@ -348,6 +348,81 @@ async def get_metrics():
         system_health=orchestrator_state["metrics"].get("system_health", 100),
     )
 
+@app.post("/api/v1/estimates/generate")
+async def generate_estimate(request: Dict[str, Any]):
+    """Generate AI-powered estimate"""
+    property_info = request.get('property', {})
+    damage_info = request.get('damage', {})
+    
+    sqft = property_info.get('sqft', 2000)
+    roof_type = property_info.get('roofType', 'shingle')
+    severity = damage_info.get('severity', 'moderate')
+    
+    rates = {'shingle': 5.50, 'tile': 8.50, 'metal': 7.00, 'flat': 6.00}
+    multipliers = {'minor': 0.8, 'moderate': 1.0, 'major': 1.5, 'severe': 2.0}
+    
+    base_rate = rates.get(roof_type, 5.50)
+    multiplier = multipliers.get(severity, 1.0)
+    
+    material_cost = sqft * base_rate * multiplier
+    labor_cost = material_cost * 0.6
+    overhead = (material_cost + labor_cost) * 0.15
+    profit = (material_cost + labor_cost) * 0.10
+    total = material_cost + labor_cost + overhead + profit
+    
+    return {
+        "id": f"EST-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "property": property_info,
+        "damage": damage_info,
+        "costs": {
+            "materials": round(material_cost, 2),
+            "labor": round(labor_cost, 2),
+            "overhead": round(overhead, 2),
+            "profit": round(profit, 2),
+            "total": round(total, 2)
+        },
+        "timeline": f"{max(3, int(sqft/500))} days",
+        "confidence": 0.85,
+        "generated_at": datetime.now().isoformat()
+    }
+
+@app.post("/api/v1/projects/create")
+async def create_project(request: Dict[str, Any]):
+    """Create new roofing project"""
+    project_id = f"PRJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return {
+        "id": project_id,
+        "name": request.get('name', 'New Project'),
+        "customer": request.get('customer', {}),
+        "details": request.get('details', {}),
+        "status": "pending",
+        "created_at": datetime.now().isoformat()
+    }
+
+@app.post("/api/v1/estimates/create")
+async def create_estimate(data: Dict[str, Any]):
+    """Create basic estimate"""
+    sqft = data.get('square_footage', 2000)
+    damage = data.get('damage_assessment', 'moderate')
+    
+    base_cost = sqft * 5.50
+    if damage == 'severe':
+        base_cost *= 1.5
+    elif damage == 'minor':
+        base_cost *= 0.8
+        
+    return {
+        "id": f"EST-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "customer_name": data.get('customer_name', 'Unknown'),
+        "property_address": data.get('property_address', 'Not specified'),
+        "estimated_cost": round(base_cost, 2),
+        "square_footage": sqft,
+        "damage_assessment": damage,
+        "created_at": datetime.now().isoformat(),
+        "status": "draft"
+    }
+
 @app.post("/api/ai/execute")
 async def execute_ai_action(request: AIRequest):
     """Execute AI action"""
