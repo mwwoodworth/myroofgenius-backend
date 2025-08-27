@@ -27,6 +27,10 @@ from revenue_engine import RevenueEngine, Lead
 from critical_context import BUSINESS_REALITY, store_permanent_context
 from monitoring_system import MonitoringSystem
 from security_system import SecuritySystem
+from rag_system import RAGSystem
+from observability import setup_monitoring, MonitoringSystem as ObservabilitySystem
+from content_pipeline import ContentPipeline
+from rag_system import get_rag_system
 
 # Configure logging
 logging.basicConfig(
@@ -44,11 +48,12 @@ weathercraft = None
 revenue_engine = None
 monitoring = None
 security = None
+rag_system = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize ALL systems on startup"""
-    global brain, neural_network, env_manager, centerpoint, weathercraft, revenue_engine, monitoring, security
+    global brain, neural_network, env_manager, centerpoint, weathercraft, revenue_engine, monitoring, security, rag_system
     
     logger.info("=" * 80)
     logger.info("INITIALIZING BRAINOPS - THE MONEY-MAKING MACHINE")
@@ -91,6 +96,10 @@ async def lifespan(app: FastAPI):
         
         revenue_engine = RevenueEngine(pg_pool, redis_client)
         logger.info("✅ Revenue engine ready to make money")
+        
+        # Initialize RAG system for AI responses
+        rag_system = await get_rag_system(pg_pool)
+        logger.info("✅ RAG system ready for intelligent responses")
         
         # Start revenue automation
         asyncio.create_task(revenue_engine.automated_lead_nurturing())
@@ -159,6 +168,12 @@ class EstimateRequest(BaseModel):
     condition: str = "needs_replacement"
     needs_tearoff: bool = True
 
+class RAGQueryRequest(BaseModel):
+    query: str
+    category: Optional[str] = None
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+
 # ROOT ENDPOINT - Shows reality
 @app.get("/")
 async def root():
@@ -177,7 +192,8 @@ async def root():
             "brain": brain_status,
             "centerpoint": centerpoint_status,
             "revenue_engine": "active" if revenue_engine else "inactive",
-            "weathercraft_erp": "active" if weathercraft else "inactive"
+            "weathercraft_erp": "active" if weathercraft else "inactive",
+            "rag_system": "active" if rag_system else "inactive"
         },
         "urls": {
             "backend": "https://brainops-backend-prod.onrender.com",
@@ -373,6 +389,140 @@ async def websocket_endpoint(websocket: WebSocket):
             
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+
+# RAG ENDPOINTS - AI-Powered Knowledge System
+@app.post("/api/rag/query")
+async def rag_query(request: RAGQueryRequest):
+    """
+    Query the RAG system for intelligent responses
+    This powers all AI copilots and knowledge features
+    """
+    try:
+        if not rag_system:
+            raise HTTPException(status_code=503, detail="RAG system not initialized")
+            
+        result = await rag_system.query_rag(
+            query=request.query,
+            category=request.category,
+            user_id=request.user_id,
+            session_id=request.session_id
+        )
+        
+        # Store in brain for learning
+        await brain.store_thought({
+            "type": "rag_query",
+            "query": request.query,
+            "intent": result.get("intent"),
+            "response_quality": result.get("quality_score", 0),
+            "documents_used": result.get("documents_retrieved", 0),
+            "response_time": result.get("response_time_ms", 0)
+        }, importance=0.6)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"RAG query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/rag/stats")
+async def get_rag_stats():
+    """Get RAG system performance statistics"""
+    try:
+        if not rag_system:
+            raise HTTPException(status_code=503, detail="RAG system not initialized")
+            
+        stats = await rag_system.get_rag_stats()
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Failed to get RAG stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# AI COPILOT ENDPOINTS - Streaming Responses  
+@app.post("/api/copilot/estimating")
+async def copilot_estimating(request: RAGQueryRequest):
+    """AI Copilot for Estimating - specialized responses"""
+    try:
+        # Force category for estimating queries
+        request.category = "cost_estimation"
+        
+        result = await rag_system.query_rag(
+            query=request.query,
+            category=request.category,
+            user_id=request.user_id,
+            session_id=request.session_id
+        )
+        
+        return {
+            **result,
+            "copilot_type": "estimating",
+            "specialized_features": [
+                "Material cost calculations",
+                "Labor time estimates", 
+                "Profit margin recommendations",
+                "Regional pricing adjustments"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Estimating copilot failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/copilot/safety")  
+async def copilot_safety(request: RAGQueryRequest):
+    """AI Copilot for Safety - OSHA compliance and protocols"""
+    try:
+        request.category = "safety"
+        
+        result = await rag_system.query_rag(
+            query=request.query,
+            category=request.category,
+            user_id=request.user_id,
+            session_id=request.session_id
+        )
+        
+        return {
+            **result,
+            "copilot_type": "safety",
+            "specialized_features": [
+                "OSHA compliance checks",
+                "Safety protocol recommendations",
+                "Risk assessment guidance",
+                "Equipment requirements"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Safety copilot failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/copilot/materials")
+async def copilot_materials(request: RAGQueryRequest):
+    """AI Copilot for Materials - product selection and specifications"""
+    try:
+        request.category = "materials"
+        
+        result = await rag_system.query_rag(
+            query=request.query,
+            category=request.category,
+            user_id=request.user_id,
+            session_id=request.session_id
+        )
+        
+        return {
+            **result,
+            "copilot_type": "materials",
+            "specialized_features": [
+                "Material comparisons",
+                "Durability ratings",
+                "Installation requirements",
+                "Warranty information"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Materials copilot failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Health check that shows the truth
 @app.get("/health")
