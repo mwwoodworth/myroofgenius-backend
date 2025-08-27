@@ -31,8 +31,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database connection
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db.wvkoiekcybvhpqvgqvtc.supabase.co:5432/postgres")
+# Database connection - LIVE PRODUCTION
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Global state
