@@ -1,0 +1,127 @@
+{
+  "summary": {
+    "total": 18,
+    "passed": 0,
+    "failed": 18,
+    "success_rate": 0.0
+  },
+  "results": [
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "No lead ID returned",
+      "timestamp": "2025-09-11T18:07:58.436969"
+    },
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "Failed to create lead: {\"detail\":\"(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint \\\"leads_email_key\\\"\\nDETAIL:  Key (email)=(test_7cd2352a@example.com) already exists.\\n\\n[SQL: \\n            INSERT INTO leads (\\n                id, lead_number, \\n                name, email, phone, company,\\n                company_name, contact_name, contact_email, contact_phone,\\n                source, property_type, urgency, estimated_value, notes,\\n                status, lead_score, score, created_at\\n            ) VALUES (\\n                %(id)s, %(lead_number)s,\\n                %(name)s, %(email)s, %(phone)s, %(company)s,\\n                %(company_name)s, %(contact_name)s, %(contact_email)s, %(contact_phone)s,\\n                %(source)s, %(property_type)s, %(urgency)s, %(estimated_value)s, %(notes)s,\\n                'new', 50, 50, NOW()\\n            )\\n        ]\\n[parameters: {'id': 'fbccc790-6d56-4a7f-acdb-13b30643cdc4', 'lead_number': 'L-2025-C881A', 'name': 'Test Customer', 'email': 'test_7cd2352a@example.com', 'phone': '(303) 555-0100', 'company': 'Test Roofing Co', 'company_name': 'Test Roofing Co', 'contact_name': 'Test Customer', 'contact_email': 'test_7cd2352a@example.com', 'contact_phone': '(303) 555-0100', 'source': 'website', 'property_type': None, 'urgency': 'high', 'estimated_value': None, 'notes': 'E2E test lead'}]\\n(Background on this error at: https://sqlalche.me/e/20/gkpj)\"}",
+      "timestamp": "2025-09-11T18:08:00.010335"
+    },
+    {
+      "test": "Estimate to Job Flow",
+      "success": false,
+      "details": "Failed to create customer for testing",
+      "timestamp": "2025-09-11T18:08:00.010368"
+    },
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "Failed to create lead: {\"detail\":\"(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint \\\"leads_email_key\\\"\\nDETAIL:  Key (email)=(test_7cd2352a@example.com) already exists.\\n\\n[SQL: \\n            INSERT INTO leads (\\n                id, lead_number, \\n                name, email, phone, company,\\n                company_name, contact_name, contact_email, contact_phone,\\n                source, property_type, urgency, estimated_value, notes,\\n                status, lead_score, score, created_at\\n            ) VALUES (\\n                %(id)s, %(lead_number)s,\\n                %(name)s, %(email)s, %(phone)s, %(company)s,\\n                %(company_name)s, %(contact_name)s, %(contact_email)s, %(contact_phone)s,\\n                %(source)s, %(property_type)s, %(urgency)s, %(estimated_value)s, %(notes)s,\\n                'new', 50, 50, NOW()\\n            )\\n        ]\\n[parameters: {'id': 'd042cdc7-ce37-43bc-8fd3-0907d909fcd4', 'lead_number': 'L-2025-08A83', 'name': 'Test Customer', 'email': 'test_7cd2352a@example.com', 'phone': '(303) 555-0100', 'company': 'Test Roofing Co', 'company_name': 'Test Roofing Co', 'contact_name': 'Test Customer', 'contact_email': 'test_7cd2352a@example.com', 'contact_phone': '(303) 555-0100', 'source': 'website', 'property_type': None, 'urgency': 'high', 'estimated_value': None, 'notes': 'E2E test lead'}]\\n(Background on this error at: https://sqlalche.me/e/20/gkpj)\"}",
+      "timestamp": "2025-09-11T18:08:01.397153"
+    },
+    {
+      "test": "Estimate to Job Flow",
+      "success": false,
+      "details": "Failed to create customer for testing",
+      "timestamp": "2025-09-11T18:08:01.397177"
+    },
+    {
+      "test": "Job Completion Flow",
+      "success": false,
+      "details": "Failed to create job for testing",
+      "timestamp": "2025-09-11T18:08:01.397189"
+    },
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "Failed to create lead: {\"detail\":\"(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint \\\"leads_email_key\\\"\\nDETAIL:  Key (email)=(test_7cd2352a@example.com) already exists.\\n\\n[SQL: \\n            INSERT INTO leads (\\n                id, lead_number, \\n                name, email, phone, company,\\n                company_name, contact_name, contact_email, contact_phone,\\n                source, property_type, urgency, estimated_value, notes,\\n                status, lead_score, score, created_at\\n            ) VALUES (\\n                %(id)s, %(lead_number)s,\\n                %(name)s, %(email)s, %(phone)s, %(company)s,\\n                %(company_name)s, %(contact_name)s, %(contact_email)s, %(contact_phone)s,\\n                %(source)s, %(property_type)s, %(urgency)s, %(estimated_value)s, %(notes)s,\\n                'new', 50, 50, NOW()\\n            )\\n        ]\\n[parameters: {'id': '9c9a8063-4f97-482a-b9dc-d282011f2d0c', 'lead_number': 'L-2025-37042', 'name': 'Test Customer', 'email': 'test_7cd2352a@example.com', 'phone': '(303) 555-0100', 'company': 'Test Roofing Co', 'company_name': 'Test Roofing Co', 'contact_name': 'Test Customer', 'contact_email': 'test_7cd2352a@example.com', 'contact_phone': '(303) 555-0100', 'source': 'website', 'property_type': None, 'urgency': 'high', 'estimated_value': None, 'notes': 'E2E test lead'}]\\n(Background on this error at: https://sqlalche.me/e/20/gkpj)\"}",
+      "timestamp": "2025-09-11T18:08:03.270414"
+    },
+    {
+      "test": "Estimate to Job Flow",
+      "success": false,
+      "details": "Failed to create customer for testing",
+      "timestamp": "2025-09-11T18:08:03.270463"
+    },
+    {
+      "test": "Job Completion Flow",
+      "success": false,
+      "details": "Failed to create job for testing",
+      "timestamp": "2025-09-11T18:08:03.270493"
+    },
+    {
+      "test": "Invoice Payment Flow",
+      "success": false,
+      "details": "Failed to create invoice for testing",
+      "timestamp": "2025-09-11T18:08:03.270520"
+    },
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "Failed to create lead: {\"detail\":\"(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint \\\"leads_email_key\\\"\\nDETAIL:  Key (email)=(test_7cd2352a@example.com) already exists.\\n\\n[SQL: \\n            INSERT INTO leads (\\n                id, lead_number, \\n                name, email, phone, company,\\n                company_name, contact_name, contact_email, contact_phone,\\n                source, property_type, urgency, estimated_value, notes,\\n                status, lead_score, score, created_at\\n            ) VALUES (\\n                %(id)s, %(lead_number)s,\\n                %(name)s, %(email)s, %(phone)s, %(company)s,\\n                %(company_name)s, %(contact_name)s, %(contact_email)s, %(contact_phone)s,\\n                %(source)s, %(property_type)s, %(urgency)s, %(estimated_value)s, %(notes)s,\\n                'new', 50, 50, NOW()\\n            )\\n        ]\\n[parameters: {'id': '41e52ab2-a527-406a-9be8-d20e593705b5', 'lead_number': 'L-2025-10C78', 'name': 'Test Customer', 'email': 'test_7cd2352a@example.com', 'phone': '(303) 555-0100', 'company': 'Test Roofing Co', 'company_name': 'Test Roofing Co', 'contact_name': 'Test Customer', 'contact_email': 'test_7cd2352a@example.com', 'contact_phone': '(303) 555-0100', 'source': 'website', 'property_type': None, 'urgency': 'high', 'estimated_value': None, 'notes': 'E2E test lead'}]\\n(Background on this error at: https://sqlalche.me/e/20/gkpj)\"}",
+      "timestamp": "2025-09-11T18:08:04.795733"
+    },
+    {
+      "test": "Lead to Customer Flow",
+      "success": false,
+      "details": "Failed to create lead: {\"detail\":\"(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint \\\"leads_email_key\\\"\\nDETAIL:  Key (email)=(test_7cd2352a@example.com) already exists.\\n\\n[SQL: \\n            INSERT INTO leads (\\n                id, lead_number, \\n                name, email, phone, company,\\n                company_name, contact_name, contact_email, contact_phone,\\n                source, property_type, urgency, estimated_value, notes,\\n                status, lead_score, score, created_at\\n            ) VALUES (\\n                %(id)s, %(lead_number)s,\\n                %(name)s, %(email)s, %(phone)s, %(company)s,\\n                %(company_name)s, %(contact_name)s, %(contact_email)s, %(contact_phone)s,\\n                %(source)s, %(property_type)s, %(urgency)s, %(estimated_value)s, %(notes)s,\\n                'new', 50, 50, NOW()\\n            )\\n        ]\\n[parameters: {'id': 'd3663388-0578-4871-8b5c-64a08183a237', 'lead_number': 'L-2025-18A70', 'name': 'Test Customer', 'email': 'test_7cd2352a@example.com', 'phone': '(303) 555-0100', 'company': 'Test Roofing Co', 'company_name': 'Test Roofing Co', 'contact_name': 'Test Customer', 'contact_email': 'test_7cd2352a@example.com', 'contact_phone': '(303) 555-0100', 'source': 'website', 'property_type': None, 'urgency': 'high', 'estimated_value': None, 'notes': 'E2E test lead'}]\\n(Background on this error at: https://sqlalche.me/e/20/gkpj)\"}",
+      "timestamp": "2025-09-11T18:08:09.656908"
+    },
+    {
+      "test": "Estimate to Job Flow",
+      "success": false,
+      "details": "Failed to create customer for testing",
+      "timestamp": "2025-09-11T18:08:09.656952"
+    },
+    {
+      "test": "Service Ticket Flow",
+      "success": false,
+      "details": "Failed to create ticket: {\"detail\":\"'issue_type'\"}",
+      "timestamp": "2025-09-11T18:08:09.699937"
+    },
+    {
+      "test": "Workflow Automation",
+      "success": false,
+      "details": "Failed to create workflow: {\"detail\":\"Not Found\"}",
+      "timestamp": "2025-09-11T18:08:10.702198"
+    },
+    {
+      "test": "Inventory Management",
+      "success": false,
+      "details": "Failed to get inventory: {\"detail\":\"(psycopg2.errors.UndefinedColumn) column i.unit_of_measure does not exist\\nLINE 7:                 i.unit_of_measure,\\n                        ^\\n\\n[SQL: \\n            SELECT \\n                i.id,\\n                i.item_number,\\n                i.name,\\n                i.sku,\\n                i.unit_of_measure,\\n                COALESCE(SUM(il.quantity_on_hand), 0) as on_hand,\\n                COALESCE(SUM(il.quantity_on_order), 0) as on_order,\\n                COALESCE(SUM(il.quantity_available), 0) as available,\\n                i.reorder_point,\\n                i.reorder_quantity\\n            FROM inventory_items i\\n            LEFT JOIN inventory_levels il ON i.id = il.item_id\\n            GROUP BY i.id, i.item_number, i.name, i.sku, i.unit_of_measure, i.reorder_point, i.reorder_quantity\\n            ORDER BY i.name\\n        ]\\n(Background on this error at: https://sqlalche.me/e/20/f405)\"}",
+      "timestamp": "2025-09-11T18:08:12.663108"
+    },
+    {
+      "test": "Scheduling System",
+      "success": false,
+      "details": "Failed to get crews: {\"detail\":\"Not Found\"}",
+      "timestamp": "2025-09-11T18:08:13.664863"
+    },
+    {
+      "test": "Analytics & Reporting",
+      "success": false,
+      "details": "Some analytics endpoints failed",
+      "timestamp": "2025-09-11T18:08:15.233982"
+    }
+  ],
+  "created_entities": {
+    "leads": [],
+    "customers": [],
+    "estimates": [],
+    "jobs": [],
+    "invoices": [],
+    "tickets": []
+  },
+  "timestamp": "2025-09-11T18:08:16.234566"
+}

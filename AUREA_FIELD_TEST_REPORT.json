@@ -1,0 +1,92 @@
+{
+  "timestamp": "2025-08-01T16:11:09.276648",
+  "voice_tests": {
+    "voice_status": {
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/aurea/voice/status",
+      "status": 200,
+      "success": true
+    },
+    "voice_session": {
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/aurea/voice/session",
+      "status": 200,
+      "success": true
+    },
+    "voice_synthesis": {
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/aurea/voice/synthesize",
+      "status": 200,
+      "success": true
+    }
+  },
+  "ui_integration": {
+    "Homepage": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app",
+      "status": 200,
+      "aurea_present": true,
+      "indicators_found": 3
+    },
+    "Dashboard": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/dashboard",
+      "status": 200,
+      "aurea_present": true,
+      "indicators_found": 2
+    },
+    "AUREA Dashboard": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/aurea-dashboard",
+      "status": 200,
+      "aurea_present": true,
+      "indicators_found": 3
+    },
+    "Marketplace": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/marketplace",
+      "status": 200,
+      "aurea_present": true,
+      "indicators_found": 2
+    }
+  },
+  "fallback_tests": {
+    "claude": {
+      "description": "Primary (Sonnet)",
+      "status": 200,
+      "success": true,
+      "provider_used": "unknown"
+    },
+    "openai": {
+      "description": "Fallback 1 (ChatGPT)",
+      "status": 200,
+      "success": true,
+      "provider_used": "unknown"
+    },
+    "gemini": {
+      "description": "Fallback 2 (Gemini)",
+      "status": 200,
+      "success": true,
+      "provider_used": "unknown"
+    },
+    "automatic": {
+      "success": true,
+      "provider": null
+    }
+  },
+  "field_workflows": {
+    "Job Creation via Voice": {
+      "endpoint": "https://brainops-backend-prod.onrender.com/api/v1/aurea/command",
+      "status": 200,
+      "success": true
+    },
+    "Estimate Generation": {
+      "endpoint": "https://brainops-backend-prod.onrender.com/api/v1/aurea/command",
+      "status": 200,
+      "success": true
+    },
+    "Photo Analysis": {
+      "endpoint": "https://brainops-backend-prod.onrender.com/api/v1/aurea/analyze",
+      "status": 200,
+      "success": true
+    },
+    "memory_persistence": {
+      "success": true,
+      "test_id": "field_test_1754086274"
+    }
+  },
+  "issues": []
+}

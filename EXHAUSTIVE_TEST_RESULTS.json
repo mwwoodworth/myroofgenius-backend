@@ -1,0 +1,118 @@
+{
+  "timestamp": "2025-07-28T08:29:44.361575",
+  "summary": {
+    "total_tests": 108,
+    "passed": 56,
+    "failed": 52,
+    "pass_rate": 51.85185185185185
+  },
+  "errors": [
+    "GET https://brainops-backend-prod.onrender.com/api/v1/version - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://brainops-backend-prod.onrender.com/docs - ERROR: Expecting value: line 2 column 5 (char 5)",
+    "GET https://brainops-backend-prod.onrender.com/redoc - ERROR: Expecting value: line 2 column 5 (char 5)",
+    "GET https://www.myroofgenius.com/ - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/login - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/dashboard - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/admin - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/marketplace - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/roofing/estimate - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/roofing/contractors - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/tasks - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/projects - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/settings - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/profile - ERROR: Expecting value: line 1 column 1 (char 0)",
+    "GET https://www.myroofgenius.com/notifications - ERROR: Expecting value: line 1 column 1 (char 0)"
+  ],
+  "warnings": [
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/tasks took 2.14s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/tasks took 2.20s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/tasks took 2.20s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/tasks took 2.20s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/memory/recent took 2.16s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/memory/recent took 2.20s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/memory/recent took 2.20s",
+    "Slow response: GET https://brainops-backend-prod.onrender.com/api/v1/memory/recent took 2.21s"
+  ],
+  "by_category": {
+    "1. BACKEND HEALTH & VERSION CHECKS": {
+      "passed": 0,
+      "failed": 0
+    },
+    "2. AUTHENTICATION SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "3. USER MANAGEMENT & PROFILES": {
+      "passed": 0,
+      "failed": 0
+    },
+    "4. ROOFING BUSINESS FEATURES": {
+      "passed": 0,
+      "failed": 0
+    },
+    "5. TASK MANAGEMENT SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "6. AI SERVICES INTEGRATION": {
+      "passed": 0,
+      "failed": 0
+    },
+    "7. CLAUDE SUB-AGENT SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "8. PERSISTENT MEMORY SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "9. MARKETPLACE & E-COMMERCE": {
+      "passed": 0,
+      "failed": 0
+    },
+    "10. PROJECT MANAGEMENT": {
+      "passed": 0,
+      "failed": 0
+    },
+    "11. AUTOMATION SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "12. ADMIN & SYSTEM MANAGEMENT": {
+      "passed": 0,
+      "failed": 0
+    },
+    "13. THIRD-PARTY INTEGRATIONS": {
+      "passed": 0,
+      "failed": 0
+    },
+    "14. NOTIFICATION SYSTEM": {
+      "passed": 0,
+      "failed": 0
+    },
+    "15. FRONTEND PAGES & ACCESSIBILITY": {
+      "passed": 0,
+      "failed": 0
+    },
+    "16. PERFORMANCE & LOAD TESTS": {
+      "passed": 0,
+      "failed": 0
+    },
+    "17. DATABASE SYNCHRONIZATION": {
+      "passed": 0,
+      "failed": 0
+    },
+    "18. DEPLOYMENT & MONITORING": {
+      "passed": 0,
+      "failed": 0
+    },
+    "19. SECURITY & AUTHORIZATION": {
+      "passed": 0,
+      "failed": 0
+    },
+    "20. EDGE CASES & ERROR HANDLING": {
+      "passed": 0,
+      "failed": 0
+    }
+  }
+}

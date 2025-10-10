@@ -1,0 +1,61 @@
+
+============================================================
+  📝 MANUAL NOTION SETUP INSTRUCTIONS
+============================================================
+
+Since we need proper Notion integration permissions, please follow these steps:
+
+1. OPEN NOTION:
+   - Go to https://notion.so
+   - Login with: matthew@brainstackstudio.com
+   - Password: Mww00dw0rth@2O1S$
+
+2. CREATE NEW WORKSPACE PAGE:
+   - Click "+ New Page" 
+   - Title it: "🎯 BrainOps Master Command Center"
+   - Use the Full Page template
+
+3. CREATE SECTIONS (Copy & Paste from NOTION_MASTER_COMMAND_CENTER_TEMPLATE.md):
+
+   A. ACTIVE TASKS DATABASE:
+      - Type /table
+      - Name: "📋 Active Tasks"
+      - Add columns: Status, Priority, Assigned To, Progress, Notes, Due Date
+      - Add the 3 critical tasks from the template
+
+   B. CREDENTIALS VAULT:
+      - Type /table
+      - Name: "🔐 Credentials Vault"
+      - Add columns: Service, Username, Password/Token, URL, Category, Status
+      - Import credentials from the template
+
+   C. DEVOPS DASHBOARD:
+      - Type /page
+      - Name: "📊 DevOps Dashboard"
+      - Add current metrics from the template
+
+   D. ENVIRONMENT VARIABLES:
+      - Type /table
+      - Name: "🔧 Environment Variables"
+      - Add columns: Name, Value, Status, Notes
+      - Import all env vars from the template
+
+4. ENABLE API INTEGRATION:
+   - Go to Settings & Members → Integrations
+   - Click "Develop your own integrations"
+   - Use token: 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
+   - Add integration to your workspace
+
+5. IMPORT DATA:
+   - Use the notion_workspace_data.json file
+   - Or copy from NOTION_MASTER_COMMAND_CENTER_TEMPLATE.md
+
+============================================================
+  📁 FILES READY FOR IMPORT:
+============================================================
+
+1. Template File: /home/matt-woodworth/fastapi-operator-env/NOTION_MASTER_COMMAND_CENTER_TEMPLATE.md
+2. Data File: /home/matt-woodworth/fastapi-operator-env/notion_workspace_data.json
+3. Setup Script: /home/matt-woodworth/fastapi-operator-env/setup_notion_workspace.py
+
+============================================================

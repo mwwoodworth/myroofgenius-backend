@@ -1,0 +1,14 @@
+{
+  "passed": 19,
+  "failed": 0,
+  "warnings": 2,
+  "critical_features": [
+    "System Health",
+    "Products API",
+    "Revenue Metrics",
+    "Automations",
+    "Task Management"
+  ],
+  "missing_features": [],
+  "operational_percentage": 95.23809523809523
+}

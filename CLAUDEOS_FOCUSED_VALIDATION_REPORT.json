@@ -1,0 +1,82 @@
+{
+  "timestamp": "2025-08-02T20:03:53.370690",
+  "tests": {
+    "Backend Health": {
+      "name": "Backend Health",
+      "url": "https://brainops-backend-prod.onrender.com/health",
+      "method": "GET",
+      "status_code": 200,
+      "passed": true,
+      "timestamp": "2025-08-02T20:04:24.119564",
+      "response": {
+        "status": "healthy",
+        "version": "3.1.216",
+        "build_timestamp": "2025-08-02T19:51:10.335908",
+        "environment": "production",
+        "timestamp": "2025-08-02T20:04:24.046256",
+        "routes_loaded": 166,
+        "total_endpoints": 1032,
+        "deployment": "v3.1.122-ultra-powerful",
+        "langgraphos": "operational"
+      }
+    },
+    "API Health": {
+      "name": "API Health",
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/health",
+      "method": "GET",
+      "status_code": 200,
+      "passed": true,
+      "timestamp": "2025-08-02T20:04:24.690294",
+      "response": {
+        "status": "healthy",
+        "version": "3.1.216",
+        "build_timestamp": "2025-08-02T19:51:10.335908",
+        "api": "operational",
+        "database": "connected",
+        "cache": "ready",
+        "timestamp": "2025-08-02T20:04:24.616613",
+        "routes_loaded": 166,
+        "total_endpoints": 1032,
+        "route_loading": "ultra-powerful-v3.1.122",
+        "langgraphos": "operational"
+      }
+    },
+    "Version": {
+      "name": "Version",
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/version",
+      "method": "GET",
+      "status_code": 429,
+      "passed": false,
+      "timestamp": "2025-08-02T20:04:25.274620"
+    },
+    "Routes List": {
+      "name": "Routes List",
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/routes",
+      "method": "GET",
+      "status_code": 429,
+      "passed": false,
+      "timestamp": "2025-08-02T20:04:25.844298"
+    },
+    "AUREA Status": {
+      "name": "AUREA Status",
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/aurea/status",
+      "method": "GET",
+      "status_code": 429,
+      "passed": false,
+      "timestamp": "2025-08-02T20:04:26.430208"
+    },
+    "User Registration": {
+      "name": "User Registration",
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/auth/register",
+      "method": "POST",
+      "status_code": 429,
+      "passed": false,
+      "timestamp": "2025-08-02T20:04:27.004491"
+    }
+  },
+  "summary": {
+    "total": 6,
+    "passed": 2,
+    "failed": 4
+  }
+}

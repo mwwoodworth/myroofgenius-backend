@@ -1,0 +1,15 @@
+[Unit]
+Description=System monitoring and health MCP
+After=network.target
+
+[Service]
+Type=simple
+User=mwwoodworth
+WorkingDirectory=/home/mwwoodworth/code/mcp-servers/monitoring-mcp
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 /home/mwwoodworth/code/mcp-servers/monitoring-mcp/server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,48 @@
+{
+  "servers": {
+    "filesystem": {
+      "command": "mcp-server-filesystem",
+      "args": ["--workspace", "/workspace"],
+      "env": {
+        "WORKSPACE": "/workspace"
+      }
+    },
+    "postgres": {
+      "command": "mcp-server-postgres",
+      "args": [],
+      "env": {
+        "DATABASE_URL": "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+      }
+    },
+    "github": {
+      "command": "mcp-server-github",
+      "args": [],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "GITHUB_OWNER": "mwwoodworth"
+      }
+    },
+    "fetch": {
+      "command": "mcp-server-fetch",
+      "args": [],
+      "env": {}
+    }
+  },
+  "gateway": {
+    "port": 8080,
+    "adminPort": 8081,
+    "cors": {
+      "enabled": true,
+      "origins": ["*"]
+    },
+    "authentication": {
+      "type": "bearer",
+      "token": "${MCP_AUTH_TOKEN}"
+    },
+    "monitoring": {
+      "enabled": true,
+      "metrics": true,
+      "healthCheck": "/health"
+    }
+  }
+}
