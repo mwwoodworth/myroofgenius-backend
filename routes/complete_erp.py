@@ -1037,12 +1037,12 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
             INSERT INTO estimates (
                 id, estimate_number, customer_id, lead_id, project_name, property_address,
                 customer_name, customer_email, customer_phone, roof_type, roof_size_sqft,
-                status, subtotal, tax_rate, tax_amount, discount_percent, discount_amount,
+                status, estimate_date, subtotal, tax_rate, tax_amount, discount_percent, discount_amount,
                 total_amount, payment_terms, notes, created_at
             ) VALUES (
                 :id, :estimate_number, :customer_id, :lead_id, :project_name, :property_address,
                 :customer_name, :customer_email, :customer_phone, :roof_type, :roof_size_sqft,
-                'draft', :subtotal, :tax_rate, :tax_amount, :discount_percent, :discount_amount,
+                'draft', :estimate_date, :subtotal, :tax_rate, :tax_amount, :discount_percent, :discount_amount,
                 :total_amount, :payment_terms, :notes, NOW()
             )
         """), {
@@ -1057,6 +1057,7 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
             "customer_phone": estimate.customer_phone,
             "roof_type": estimate.roof_type,
             "roof_size_sqft": estimate.roof_size_sqft,
+            "estimate_date": estimate.estimate_date if hasattr(estimate, 'estimate_date') and estimate.estimate_date else datetime.now().date(),
             "subtotal": subtotal,
             "tax_rate": estimate.tax_rate if estimate.tax_rate else 0,
             "tax_amount": tax_amount,
