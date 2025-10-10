@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-09-08T21:46:08.610949",
+  "system_health": 91.2,
+  "metrics": {
+    "revenue": {
+      "mrr": 45670,
+      "arr": 548040,
+      "growth_rate": 12.5,
+      "churn_rate": 2.1,
+      "ltv": 8500,
+      "cac": 450
+    },
+    "operations": {
+      "active_jobs": 127,
+      "completed_today": 8,
+      "scheduled_this_week": 43,
+      "crew_utilization": 87.5,
+      "equipment_status": "optimal",
+      "material_inventory": "sufficient"
+    },
+    "customers": {
+      "total": 3318,
+      "new_this_month": 89,
+      "satisfaction_score": 4.7,
+      "nps_score": 72,
+      "support_tickets": 5,
+      "avg_response_time": "15 min"
+    },
+    "ai_performance": {
+      "total_analyses": 12758,
+      "accuracy_rate": 94.3,
+      "time_saved": "847 hours",
+      "cost_reduction": "$125,000",
+      "automation_rate": 78.5,
+      "ai_agents_active": 34
+    },
+    "financial": {
+      "cash_flow": "positive",
+      "runway_months": 18,
+      "gross_margin": 67.5,
+      "operating_margin": 23.4,
+      "accounts_receivable": 125000,
+      "accounts_payable": 45000
+    },
+    "workflows": {
+      "customer_journey": "active",
+      "revenue_pipeline": "optimizing",
+      "service_delivery": "executing",
+      "quality_assurance": "monitoring",
+      "inventory_management": "balanced",
+      "crew_scheduling": "efficient"
+    }
+  },
+  "alerts": [],
+  "recommendations": [
+    {
+      "category": "revenue",
+      "recommendation": "Implement dynamic pricing for peak season",
+      "impact": "$15,000 additional monthly revenue",
+      "confidence": 0.87
+    },
+    {
+      "category": "operations",
+      "recommendation": "Optimize route planning with AI clustering",
+      "impact": "12% reduction in travel time",
+      "confidence": 0.92
+    },
+    {
+      "category": "customer",
+      "recommendation": "Launch referral program for top customers",
+      "impact": "25 new customers per month",
+      "confidence": 0.78
+    },
+    {
+      "category": "efficiency",
+      "recommendation": "Automate invoice generation workflow",
+      "impact": "Save 20 hours per week",
+      "confidence": 0.95
+    }
+  ],
+  "forecast": {
+    "revenue_30_days": 50237.00000000001,
+    "revenue_90_days": 159845.0,
+    "new_customers_30_days": 95,
+    "job_completion_rate": 94.5,
+    "resource_needs": {
+      "additional_crews": 2,
+      "equipment_required": [
+        "Ladder truck",
+        "Safety equipment"
+      ],
+      "training_hours": 40
+    }
+  }
+}

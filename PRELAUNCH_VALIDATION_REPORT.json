@@ -1,0 +1,273 @@
+{
+  "validation_timestamp": "2025-08-03T02:26:54.951607+00:00",
+  "summary": {
+    "total_tests": 10,
+    "passed": 5,
+    "failed": 5,
+    "success_rate": "50.0%"
+  },
+  "categories": {
+    "Authentication": {
+      "pass": 0,
+      "fail": 2,
+      "tests": [
+        {
+          "test": "Login as user",
+          "status": "FAIL",
+          "message": "Failed to authenticate: None",
+          "timestamp": "2025-08-03T02:26:48.250085+00:00"
+        },
+        {
+          "test": "Login as admin",
+          "status": "FAIL",
+          "message": "Failed to authenticate: None",
+          "timestamp": "2025-08-03T02:26:49.571134+00:00"
+        }
+      ]
+    },
+    "Backend": {
+      "pass": 1,
+      "fail": 1,
+      "tests": [
+        {
+          "test": "Health Check",
+          "status": "PASS",
+          "message": "Backend is healthy",
+          "timestamp": "2025-08-03T02:26:51.194274+00:00"
+        },
+        {
+          "test": "Database Connection",
+          "status": "FAIL",
+          "message": "No admin token available",
+          "timestamp": "2025-08-03T02:26:51.768341+00:00"
+        }
+      ]
+    },
+    "AUREA": {
+      "pass": 1,
+      "fail": 0,
+      "tests": [
+        {
+          "test": "System Status",
+          "status": "PASS",
+          "message": "AUREA is operational",
+          "timestamp": "2025-08-03T02:26:51.768361+00:00"
+        }
+      ]
+    },
+    "LangGraphOS": {
+      "pass": 1,
+      "fail": 0,
+      "tests": [
+        {
+          "test": "Public Status",
+          "status": "PASS",
+          "message": "LangGraphOS status accessible",
+          "timestamp": "2025-08-03T02:26:52.339494+00:00"
+        }
+      ]
+    },
+    "Marketplace": {
+      "pass": 1,
+      "fail": 1,
+      "tests": [
+        {
+          "test": "Public Products",
+          "status": "FAIL",
+          "message": "Products endpoint failed: {'error': 'HTTPException', 'detail': 'Not authenticated', 'timestamp': '2025-08-03T02:26:52.950750'}",
+          "timestamp": "2025-08-03T02:26:52.960692+00:00"
+        },
+        {
+          "test": "Categories",
+          "status": "PASS",
+          "message": "Categories accessible",
+          "timestamp": "2025-08-03T02:26:53.532269+00:00"
+        }
+      ]
+    },
+    "Automations": {
+      "pass": 0,
+      "fail": 1,
+      "tests": [
+        {
+          "test": "System Status",
+          "status": "FAIL",
+          "message": "Automation status failed: {'error': 'HTTPException', 'detail': 'Not authenticated', 'timestamp': '2025-08-03T02:26:54.049593'}",
+          "timestamp": "2025-08-03T02:26:54.044540+00:00"
+        }
+      ]
+    },
+    "Frontend": {
+      "pass": 1,
+      "fail": 0,
+      "tests": [
+        {
+          "test": "Homepage",
+          "status": "PASS",
+          "message": "Frontend is accessible",
+          "timestamp": "2025-08-03T02:26:54.628661+00:00"
+        }
+      ]
+    }
+  },
+  "all_tests": [
+    {
+      "category": "Authentication",
+      "test": "Login as user",
+      "status": "FAIL",
+      "message": "Failed to authenticate: None",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:48.250085+00:00"
+    },
+    {
+      "category": "Authentication",
+      "test": "Login as admin",
+      "status": "FAIL",
+      "message": "Failed to authenticate: None",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:49.571134+00:00"
+    },
+    {
+      "category": "Backend",
+      "test": "Health Check",
+      "status": "PASS",
+      "message": "Backend is healthy",
+      "details": {
+        "status": "healthy",
+        "version": "3.1.225",
+        "build_timestamp": "2025-08-03T02:13:20.233543",
+        "api": "operational",
+        "database": "connected",
+        "cache": "ready",
+        "timestamp": "2025-08-03T02:26:51.238328",
+        "routes_loaded": 171,
+        "total_endpoints": 1063,
+        "route_loading": "ultra-powerful-v3.1.122",
+        "langgraphos": "operational"
+      },
+      "timestamp": "2025-08-03T02:26:51.194274+00:00"
+    },
+    {
+      "category": "Backend",
+      "test": "Database Connection",
+      "status": "FAIL",
+      "message": "No admin token available",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:51.768341+00:00"
+    },
+    {
+      "category": "AUREA",
+      "test": "System Status",
+      "status": "PASS",
+      "message": "AUREA is operational",
+      "details": {
+        "status": "operational",
+        "version": "3.1.147",
+        "message": "AUREA Ultimate AI Assistant",
+        "features": {
+          "chat": "enabled",
+          "voice": "ready",
+          "memory": "active",
+          "automation": "operational"
+        },
+        "timestamp": "2025-08-03T02:26:51.761527"
+      },
+      "timestamp": "2025-08-03T02:26:51.768361+00:00"
+    },
+    {
+      "category": "LangGraphOS",
+      "test": "Public Status",
+      "status": "PASS",
+      "message": "LangGraphOS status accessible",
+      "details": {
+        "status": "operational",
+        "version": "0.2.59",
+        "message": "LangGraphOS autonomous AI orchestration system",
+        "agents": [
+          "planner",
+          "developer",
+          "memory",
+          "deployer",
+          "tester"
+        ],
+        "workflows": [
+          "roof_estimator",
+          "automation_chain",
+          "memory_sync"
+        ]
+      },
+      "timestamp": "2025-08-03T02:26:52.339494+00:00"
+    },
+    {
+      "category": "Marketplace",
+      "test": "Public Products",
+      "status": "FAIL",
+      "message": "Products endpoint failed: {'error': 'HTTPException', 'detail': 'Not authenticated', 'timestamp': '2025-08-03T02:26:52.950750'}",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:52.960692+00:00"
+    },
+    {
+      "category": "Marketplace",
+      "test": "Categories",
+      "status": "PASS",
+      "message": "Categories accessible",
+      "details": {
+        "categories": [
+          {
+            "id": "shingles",
+            "name": "Roofing Shingles",
+            "description": "Asphalt and architectural shingles",
+            "product_count": 12
+          },
+          {
+            "id": "metal",
+            "name": "Metal Roofing",
+            "description": "Metal panels and accessories",
+            "product_count": 8
+          },
+          {
+            "id": "underlayment",
+            "name": "Underlayment",
+            "description": "Roof deck protection",
+            "product_count": 6
+          },
+          {
+            "id": "ventilation",
+            "name": "Ventilation",
+            "description": "Ridge vents and exhaust systems",
+            "product_count": 5
+          },
+          {
+            "id": "tools",
+            "name": "Tools & Equipment",
+            "description": "Professional roofing tools",
+            "product_count": 15
+          },
+          {
+            "id": "safety",
+            "name": "Safety Equipment",
+            "description": "Fall protection and safety gear",
+            "product_count": 9
+          }
+        ]
+      },
+      "timestamp": "2025-08-03T02:26:53.532269+00:00"
+    },
+    {
+      "category": "Automations",
+      "test": "System Status",
+      "status": "FAIL",
+      "message": "Automation status failed: {'error': 'HTTPException', 'detail': 'Not authenticated', 'timestamp': '2025-08-03T02:26:54.049593'}",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:54.044540+00:00"
+    },
+    {
+      "category": "Frontend",
+      "test": "Homepage",
+      "status": "PASS",
+      "message": "Frontend is accessible",
+      "details": {},
+      "timestamp": "2025-08-03T02:26:54.628661+00:00"
+    }
+  ]
+}

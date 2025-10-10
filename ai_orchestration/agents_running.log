@@ -1,0 +1,121 @@
+2025-09-02 11:00:16,570 - __main__ - INFO - ============================================================
+2025-09-02 11:00:16,570 - __main__ - INFO - 🚀 AI ORCHESTRATION SYSTEM INITIALIZATION
+2025-09-02 11:00:16,570 - __main__ - INFO - ============================================================
+2025-09-02 11:00:16,570 - __main__ - INFO - Creating orchestration tables...
+2025-09-02 11:00:17,913 - __main__ - ERROR - Error executing statement: unterminated dollar-quoted string at or near "$$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP"
+2025-09-02 11:00:17,913 - __main__ - ERROR - Statement: 
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+R...
+2025-09-02 11:00:17,950 - __main__ - ERROR - Error executing statement: syntax error at or near "RETURN"
+2025-09-02 11:00:17,950 - __main__ - ERROR - Statement: 
+    RETURN NEW...
+2025-09-02 11:00:18,029 - __main__ - ERROR - Error executing statement: unterminated dollar-quoted string at or near "$$ language 'plpgsql'"
+2025-09-02 11:00:18,029 - __main__ - ERROR - Statement: 
+$$ language 'plpgsql'...
+2025-09-02 11:00:18,192 - __main__ - ERROR - Error executing statement: column "workflow_name" of relation "orchestration_workflows" does not exist
+2025-09-02 11:00:18,193 - __main__ - ERROR - Statement: 
+
+-- Insert default workflows
+INSERT INTO orchestration_workflows (workflow_id, workflow_name, descr...
+2025-09-02 11:00:18,313 - __main__ - INFO - ✅ Tables created successfully
+2025-09-02 11:00:18,414 - __main__ - INFO - ✅ Verified 9 orchestration tables exist
+2025-09-02 11:00:18,466 - __main__ - INFO - Starting AI agents...
+2025-09-02 11:00:18,512 - __main__ - INFO - Starting SystemArchitect agent...
+2025-09-02 11:00:18,512 - __main__ - INFO - Starting DatabaseAgent...
+2025-09-02 11:00:18,512 - __main__ - INFO - ✅ All agents started
+2025-09-02 11:00:18,909 - core - INFO - Agent DatabaseAgent initialized with ID 2167275a-194a-48f3-92fb-3f55814983c7
+2025-09-02 11:00:18,924 - core - INFO - Agent SystemArchitect initialized with ID 9d34fc99-aac7-452e-adf1-35daaa3968f8
+2025-09-02 11:00:19,233 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:00:19,479 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:00:19,991 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:00:21,399 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:00:25,978 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:00:32,811 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:00:40,374 - core - INFO - Agent DatabaseAgent completed learning cycle
+2025-09-02 11:01:21,806 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:01:21,987 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:01:22,170 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:01:22,789 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:01:44,352 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:02:23,158 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:02:23,351 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:02:23,520 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:02:24,156 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:02:48,209 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:03:24,536 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:03:24,704 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:03:24,880 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:03:25,490 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:03:52,067 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:04:25,921 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:04:26,078 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:04:26,298 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:04:26,934 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:04:55,784 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:05:27,341 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:05:28,009 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:05:28,341 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:05:29,518 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:06:05,740 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:06:29,886 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:06:30,024 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:06:30,185 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:06:30,868 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:07:09,520 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:07:31,288 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:07:31,439 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:07:31,609 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:07:32,240 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:08:13,343 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:08:32,697 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:08:32,845 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:08:33,009 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:08:33,607 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:09:17,254 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:09:34,137 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:09:34,296 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:09:34,471 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:09:35,168 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:10:21,102 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:10:35,577 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:10:35,760 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:10:35,967 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:10:37,096 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:11:31,016 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:11:37,503 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:11:37,657 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:11:38,249 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:11:38,874 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:12:35,034 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:12:39,225 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:12:39,401 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:12:39,569 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:12:40,193 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:13:39,085 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:13:40,725 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:13:40,877 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:13:41,051 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:13:41,663 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:14:42,127 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:14:42,354 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:14:42,724 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:14:43,151 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:14:43,358 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:15:43,793 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:15:43,977 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:15:44,204 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:15:45,423 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:15:47,249 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:16:45,831 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:16:45,982 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:16:46,149 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:16:46,773 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 11:16:56,334 - agents.database_agent - ERROR - Failed to update system state: name 'uuid' is not defined
+2025-09-02 11:17:47,196 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 11:17:47,606 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 11:17:47,913 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 11:17:48,535 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'

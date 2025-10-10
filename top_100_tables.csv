@@ -1,0 +1,101 @@
+rank,table_name,rows,size,sequential_scans,index_scans,category
+1,public.production_memory,284054,117 MB,13151,951682,Inventory/Materials/Equipment
+2,public.cron_job_history,15179,5304 kB,22,1,System/Admin/Monitoring
+3,public.jobs,12849,17 MB,631,58683,Job/Project Management
+4,public.centerpoint_sync_status,6601,13 MB,25,2,CenterPoint/Data Integration
+5,public.customers,3651,4432 kB,36751,251661,Customer Management
+6,public.agent_executions,2337,1832 kB,37,6,AI/Agent Infrastructure
+7,public.context_snapshots,2088,31 MB,22,1,Other
+8,public.system_monitoring,2079,648 kB,23,0,System/Admin/Monitoring
+9,public.invoices,2012,4928 kB,213,51871,Financial Management
+10,public.expenses,500,272 kB,34,0,Financial Management
+11,public.ai_task_queue,365,456 kB,600,461,AI/Agent Infrastructure
+12,public.neural_pathways,302,104 kB,123931,302,AI/Agent Infrastructure
+13,public.cns_memory,191,1872 kB,28,6,AI/Agent Infrastructure
+14,public.app_users,154,192 kB,23,123,Other
+15,public.customer_notes,100,80 kB,24,147,Customer Management
+16,public.job_tasks,100,128 kB,26,100,Job/Project Management
+17,public.erp_completion_todos,90,80 kB,26,1,Other
+18,public.persistent_memory,83,168 kB,27,0,Other
+19,public.master_todo,60,80 kB,30,1,Other
+20,public.ai_agents,59,160 kB,64801,957577,AI/Agent Infrastructure
+21,public.customer_history,54,64 kB,23,47,Customer Management
+22,public.tenants,35,160 kB,142,47,Other
+23,public.ai_improvement_cycles,34,104 kB,23,0,AI/Agent Infrastructure
+24,public.production_todos,33,32 kB,24,0,Inventory/Materials/Equipment
+25,public.master_env_vars,29,176 kB,554,0,Other
+26,public.claude_persistent_memory,23,88 kB,36,59,Other
+27,public.automated_leads,21,80 kB,96,55,Other
+28,public.automated_emails,20,32 kB,36,0,Other
+29,public.assembly_components,19,56 kB,17,19,Other
+30,public.materials,19,80 kB,454,41,Inventory/Materials/Equipment
+31,public.erp_completion_categories,15,32 kB,37,105,Other
+32,public.leads,15,328 kB,95,158,Sales/Marketing
+33,public.automation_events,14,72 kB,23,0,Workflow/Automation
+34,public.inventory_items,12,176 kB,34,36,Inventory/Materials/Equipment
+35,public.revenue_streams,12,32 kB,9,0,Financial Management
+36,public.ai_workflow_executions,11,32 kB,41,4,AI/Agent Infrastructure
+37,public.agent_registry,10,32 kB,83,10,AI/Agent Infrastructure
+38,public.master_credentials,10,96 kB,27,23,Other
+39,public.weathercraft_system_status,10,48 kB,16,16,Roofing/CAD/Weather
+40,public.ai_task_manager,10,80 kB,85,5,AI/Agent Infrastructure
+41,public.ai_email_queue,10,32 kB,76,0,AI/Agent Infrastructure
+42,public.standard_operating_procedures,10,120 kB,8,0,Other
+43,public.users,9,112 kB,2691,0,Other
+44,public.auth_tokens,8,80 kB,23,0,Other
+45,public.ai_agents_active,8,80 kB,60,8,AI/Agent Infrastructure
+46,public.weathercraft_test_results,8,32 kB,13,0,Roofing/CAD/Weather
+47,public.estimates,6,312 kB,142,24804,Estimates/Quotes
+48,public.ai_automations_active,5,48 kB,55,5,AI/Agent Infrastructure
+49,public.weathercraft_rewrite_progress,5,48 kB,20,19,Roofing/CAD/Weather
+50,public.admin_dashboard_widgets,5,32 kB,26,0,System/Admin/Monitoring
+51,public.ai_autonomous_config,5,48 kB,27,5,AI/Agent Infrastructure
+52,public.admin_dashboard_views,4,48 kB,27,4,System/Admin/Monitoring
+53,public.system_persistence,4,48 kB,11,4,System/Admin/Monitoring
+54,public.cns_tasks,4,96 kB,17,0,AI/Agent Infrastructure
+55,public.employees,4,128 kB,101,0,Employee/HR
+56,public.brainops_system_status,4,48 kB,7,4,AI/Agent Infrastructure
+57,public.ai_memory_store,3,48 kB,28,5,AI/Agent Infrastructure
+58,public.cns_system_documentation,3,96 kB,11,3,AI/Agent Infrastructure
+59,public.cns_threads,3,64 kB,12,0,AI/Agent Infrastructure
+60,public.automation_executions,3,64 kB,25,0,Workflow/Automation
+61,public.assemblies,3,80 kB,18,25,Other
+62,public.ai_workflows,3,32 kB,33,3,AI/Agent Infrastructure
+63,public.automation_workflows,3,64 kB,36,0,Workflow/Automation
+64,public.system_memory,2,1776 kB,13,1,System/Admin/Monitoring
+65,public.ai_development_sessions,2,32 kB,24,0,AI/Agent Infrastructure
+66,public.chart_of_accounts,1,80 kB,27,24,Other
+67,public.revenue_goals,1,24 kB,6,0,Financial Management
+68,public.task_memory,1,128 kB,12,1,Job/Project Management
+69,public.payments,1,192 kB,90,0,Financial Management
+70,public.deployment_validations,1,32 kB,20,0,System/Admin/Monitoring
+71,public.deployment_history,1,32 kB,21,0,System/Admin/Monitoring
+72,public.system_requirements,1,32 kB,20,0,System/Admin/Monitoring
+73,public.weathercraft_analysis_sessions,1,24 kB,16,1,Roofing/CAD/Weather
+74,public.ai_persistence_test,1,32 kB,24,1,AI/Agent Infrastructure
+75,public.memory_access_log,0,40 kB,23,0,Memory/Knowledge Base
+76,public.memory_search_log,0,24 kB,23,0,Memory/Knowledge Base
+77,public.memory_versions,0,32 kB,23,0,Memory/Knowledge Base
+78,public.memory_duplicates,0,24 kB,23,0,Memory/Knowledge Base
+79,public.memory_jobs,0,40 kB,23,0,Memory/Knowledge Base
+80,public.memory_acl,0,48 kB,23,0,Memory/Knowledge Base
+81,public.memory_locations,0,48 kB,23,0,Memory/Knowledge Base
+82,public.memory_entries,0,224 kB,22,1,Memory/Knowledge Base
+83,public.user_profiles,0,32 kB,24,0,Other
+84,public.user_activities,0,32 kB,23,0,Other
+85,public.user_api_keys,0,32 kB,23,0,Other
+86,public.user_notifications,0,40 kB,23,0,Other
+87,public.inventory,0,32 kB,456,0,Inventory/Materials/Equipment
+88,public.carts,0,16 kB,23,0,Other
+89,public.organizations,0,96 kB,2143,0,Other
+90,public.organization_members,0,16 kB,23,0,Other
+91,public.knowledge_articles,0,32 kB,23,0,Memory/Knowledge Base
+92,public.knowledge_categories,0,16 kB,23,0,Memory/Knowledge Base
+93,public.ai_memories,0,416 kB,23,0,AI/Agent Infrastructure
+94,public.ai_memory_feedback,0,32 kB,23,0,AI/Agent Infrastructure
+95,public.ai_memory_relationships,0,48 kB,23,0,AI/Agent Infrastructure
+96,public.execution_logs,0,64 kB,23,0,Other
+97,public.task_queue,0,16 kB,23,0,Job/Project Management
+98,public.env_vars,0,24 kB,23,0,Other
+99,public.deploy_hooks,0,16 kB,23,0,System/Admin/Monitoring
+100,public.personal_notes,0,16 kB,23,0,Other

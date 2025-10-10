@@ -1,0 +1,674 @@
+{
+  "core": {
+    "passed": 6,
+    "failed": 0,
+    "endpoints": [
+      {
+        "endpoint": "/api/v1/health",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "endpoint": "/api/v1/customers",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "endpoint": "/api/v1/jobs",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "endpoint": "/api/v1/estimates",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "endpoint": "/api/v1/invoices",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "endpoint": "/api/v1/ai/agents",
+        "status_code": 200,
+        "status": "OK"
+      }
+    ]
+  },
+  "tasks": {
+    "passed": 13,
+    "failed": 88,
+    "endpoints": [
+      {
+        "task": 61,
+        "endpoint": "/api/v1/leads",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 61,
+        "endpoint": "/api/v1/leads/scoring",
+        "status_code": 400,
+        "status": "FAIL"
+      },
+      {
+        "task": 61,
+        "endpoint": "/api/v1/leads/bant",
+        "status_code": 400,
+        "status": "FAIL"
+      },
+      {
+        "task": 62,
+        "endpoint": "/api/v1/opportunities",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 62,
+        "endpoint": "/api/v1/opportunities/pipeline",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 63,
+        "endpoint": "/api/v1/pipelines",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 63,
+        "endpoint": "/api/v1/pipelines/stages",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 64,
+        "endpoint": "/api/v1/quotes",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 64,
+        "endpoint": "/api/v1/quotes/templates",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 65,
+        "endpoint": "/api/v1/proposals",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 65,
+        "endpoint": "/api/v1/proposals/generate",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 66,
+        "endpoint": "/api/v1/contracts",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 66,
+        "endpoint": "/api/v1/contracts/lifecycle",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 67,
+        "endpoint": "/api/v1/commissions",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 67,
+        "endpoint": "/api/v1/commissions/calculate",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 68,
+        "endpoint": "/api/v1/forecasts",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 68,
+        "endpoint": "/api/v1/forecasts/revenue",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 69,
+        "endpoint": "/api/v1/territories",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 69,
+        "endpoint": "/api/v1/territories/assignments",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 70,
+        "endpoint": "/api/v1/sales/analytics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 70,
+        "endpoint": "/api/v1/sales/metrics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 71,
+        "endpoint": "/api/v1/campaigns",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 71,
+        "endpoint": "/api/v1/campaigns/metrics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 72,
+        "endpoint": "/api/v1/email-marketing",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 72,
+        "endpoint": "/api/v1/email/templates",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 73,
+        "endpoint": "/api/v1/social-media",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 73,
+        "endpoint": "/api/v1/social/posts",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 74,
+        "endpoint": "/api/v1/lead-nurturing",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 74,
+        "endpoint": "/api/v1/nurturing/workflows",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 75,
+        "endpoint": "/api/v1/content-marketing",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 75,
+        "endpoint": "/api/v1/content/assets",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 76,
+        "endpoint": "/api/v1/marketing/analytics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 76,
+        "endpoint": "/api/v1/marketing/roi",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 77,
+        "endpoint": "/api/v1/segmentation",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 77,
+        "endpoint": "/api/v1/segments/create",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 78,
+        "endpoint": "/api/v1/ab-testing",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 78,
+        "endpoint": "/api/v1/experiments",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 79,
+        "endpoint": "/api/v1/marketing-automation",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 79,
+        "endpoint": "/api/v1/automation/workflows",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 80,
+        "endpoint": "/api/v1/landing-pages",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 80,
+        "endpoint": "/api/v1/pages/conversions",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 81,
+        "endpoint": "/api/v1/tickets",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 81,
+        "endpoint": "/api/v1/tickets/queue",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 82,
+        "endpoint": "/api/v1/knowledge-base",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 82,
+        "endpoint": "/api/v1/kb/articles",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 83,
+        "endpoint": "/api/v1/live-chat",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 83,
+        "endpoint": "/api/v1/chat/sessions",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 84,
+        "endpoint": "/api/v1/feedback",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 84,
+        "endpoint": "/api/v1/surveys",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 85,
+        "endpoint": "/api/v1/sla",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 85,
+        "endpoint": "/api/v1/sla/compliance",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 86,
+        "endpoint": "/api/v1/customer-portal",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 86,
+        "endpoint": "/api/v1/portal/access",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 87,
+        "endpoint": "/api/v1/service-catalog",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 87,
+        "endpoint": "/api/v1/services",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 88,
+        "endpoint": "/api/v1/faq",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 88,
+        "endpoint": "/api/v1/faq/categories",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 89,
+        "endpoint": "/api/v1/support/analytics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 89,
+        "endpoint": "/api/v1/support/metrics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 90,
+        "endpoint": "/api/v1/escalations",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 90,
+        "endpoint": "/api/v1/escalations/rules",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 91,
+        "endpoint": "/api/v1/analytics/bi/dashboards",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 91,
+        "endpoint": "/api/v1/bi/reports",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 92,
+        "endpoint": "/api/v1/data-warehouse",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 92,
+        "endpoint": "/api/v1/etl/pipelines",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 93,
+        "endpoint": "/api/v1/reporting",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 93,
+        "endpoint": "/api/v1/reports/generate",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 94,
+        "endpoint": "/api/v1/predictive",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 94,
+        "endpoint": "/api/v1/predictions/models",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 95,
+        "endpoint": "/api/v1/realtime-analytics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 95,
+        "endpoint": "/api/v1/realtime/streams",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 96,
+        "endpoint": "/api/v1/visualizations",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 96,
+        "endpoint": "/api/v1/charts",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 97,
+        "endpoint": "/api/v1/metrics",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 97,
+        "endpoint": "/api/v1/kpis",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 98,
+        "endpoint": "/api/v1/data-governance",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 98,
+        "endpoint": "/api/v1/governance/policies",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 99,
+        "endpoint": "/api/v1/executive-dashboards",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 99,
+        "endpoint": "/api/v1/executive/overview",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 100,
+        "endpoint": "/api/v1/analytics-api",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 100,
+        "endpoint": "/api/v1/analytics/endpoints",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 101,
+        "endpoint": "/api/v1/vendors",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 101,
+        "endpoint": "/api/v1/vendors/evaluations",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 102,
+        "endpoint": "/api/v1/procurement",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 102,
+        "endpoint": "/api/v1/purchase-orders",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 103,
+        "endpoint": "/api/v1/contract-lifecycle",
+        "status_code": 500,
+        "status": "FAIL"
+      },
+      {
+        "task": 103,
+        "endpoint": "/api/v1/contracts/renewals",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 104,
+        "endpoint": "/api/v1/risk-management",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 104,
+        "endpoint": "/api/v1/risks/assessments",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 105,
+        "endpoint": "/api/v1/compliance",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 105,
+        "endpoint": "/api/v1/compliance/audits",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 106,
+        "endpoint": "/api/v1/legal",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 106,
+        "endpoint": "/api/v1/legal/cases",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "task": 107,
+        "endpoint": "/api/v1/insurance",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 107,
+        "endpoint": "/api/v1/insurance/claims",
+        "status_code": 405,
+        "status": "FAIL"
+      },
+      {
+        "task": 108,
+        "endpoint": "/api/v1/sustainability",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 108,
+        "endpoint": "/api/v1/carbon-footprint",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 109,
+        "endpoint": "/api/v1/rd_projects",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 109,
+        "endpoint": "/api/v1/research/experiments",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 110,
+        "endpoint": "/api/v1/strategic-planning",
+        "status_code": 404,
+        "status": "FAIL"
+      },
+      {
+        "task": 110,
+        "endpoint": "/api/v1/okrs",
+        "status_code": 404,
+        "status": "FAIL"
+      }
+    ]
+  },
+  "frontend": {
+    "passed": 2,
+    "failed": 1,
+    "apps": [
+      {
+        "app": "MyRoofGenius",
+        "url": "https://myroofgenius.com",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "app": "WeatherCraft ERP",
+        "url": "https://weathercraft-erp.vercel.app",
+        "status_code": 200,
+        "status": "OK"
+      },
+      {
+        "app": "WeatherCraft Public",
+        "url": "https://weathercraft-app.vercel.app",
+        "status_code": 404,
+        "status": "FAIL"
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Enterprise resource planning MCP
+After=network.target
+
+[Service]
+Type=simple
+User=mwwoodworth
+WorkingDirectory=/home/mwwoodworth/code/mcp-servers/erp-mcp
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 /home/mwwoodworth/code/mcp-servers/erp-mcp/server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

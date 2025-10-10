@@ -1,0 +1,283 @@
+{
+  "timestamp": "2025-09-18T18:23:40.551416",
+  "summary": {
+    "total_schemas": 29,
+    "total_tables": 797,
+    "temp_tables": 11,
+    "active_connections": 20
+  },
+  "schemas": {
+    "public": {
+      "schemaname": "public",
+      "table_count": 661,
+      "temp_tables": 8
+    },
+    "landing_": {
+      "schemaname": "landing_",
+      "table_count": 19,
+      "temp_tables": 0
+    },
+    "auth": {
+      "schemaname": "auth",
+      "table_count": 17,
+      "temp_tables": 0
+    },
+    "revenue": {
+      "schemaname": "revenue",
+      "table_count": 11,
+      "temp_tables": 0
+    },
+    "realtime": {
+      "schemaname": "realtime",
+      "table_count": 10,
+      "temp_tables": 0
+    },
+    "app_": {
+      "schemaname": "app_",
+      "table_count": 7,
+      "temp_tables": 0
+    },
+    "storage": {
+      "schemaname": "storage",
+      "table_count": 7,
+      "temp_tables": 0
+    },
+    "task_os": {
+      "schemaname": "task_os",
+      "table_count": 6,
+      "temp_tables": 0
+    },
+    "email": {
+      "schemaname": "email",
+      "table_count": 6,
+      "temp_tables": 0
+    },
+    "landing": {
+      "schemaname": "landing",
+      "table_count": 5,
+      "temp_tables": 0
+    },
+    "langgraph": {
+      "schemaname": "langgraph",
+      "table_count": 5,
+      "temp_tables": 0
+    },
+    "data": {
+      "schemaname": "data",
+      "table_count": 5,
+      "temp_tables": 0
+    },
+    "testing": {
+      "schemaname": "testing",
+      "table_count": 5,
+      "temp_tables": 3
+    },
+    "ops": {
+      "schemaname": "ops",
+      "table_count": 4,
+      "temp_tables": 0
+    },
+    "docs": {
+      "schemaname": "docs",
+      "table_count": 4,
+      "temp_tables": 0
+    },
+    "observability": {
+      "schemaname": "observability",
+      "table_count": 3,
+      "temp_tables": 0
+    },
+    "kpi": {
+      "schemaname": "kpi",
+      "table_count": 3,
+      "temp_tables": 0
+    },
+    "shadow_centerpoint": {
+      "schemaname": "shadow_centerpoint",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "memory": {
+      "schemaname": "memory",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "topology": {
+      "schemaname": "topology",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "core": {
+      "schemaname": "core",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "supabase_functions": {
+      "schemaname": "supabase_functions",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "cron": {
+      "schemaname": "cron",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "net": {
+      "schemaname": "net",
+      "table_count": 2,
+      "temp_tables": 0
+    },
+    "extensions": {
+      "schemaname": "extensions",
+      "table_count": 1,
+      "temp_tables": 0
+    },
+    "governance": {
+      "schemaname": "governance",
+      "table_count": 1,
+      "temp_tables": 0
+    },
+    "pgmq": {
+      "schemaname": "pgmq",
+      "table_count": 1,
+      "temp_tables": 0
+    },
+    "vault": {
+      "schemaname": "vault",
+      "table_count": 1,
+      "temp_tables": 0
+    },
+    "drizzle": {
+      "schemaname": "drizzle",
+      "table_count": 1,
+      "temp_tables": 0
+    }
+  },
+  "critical_tables": {
+    "jobs": {
+      "table_name": "jobs",
+      "row_count": 12828,
+      "dead_rows": 75,
+      "total_size": "16 MB",
+      "last_vacuum": "2025-08-24 00:41:37.697313+00:00",
+      "last_analyze": "2025-09-02 17:00:38.682792+00:00"
+    },
+    "customers": {
+      "table_name": "customers",
+      "row_count": 3593,
+      "dead_rows": 0,
+      "total_size": "4160 kB",
+      "last_vacuum": "2025-08-24 00:41:34.483106+00:00",
+      "last_analyze": "2025-09-02 17:00:38.409266+00:00"
+    },
+    "invoices": {
+      "table_name": "invoices",
+      "row_count": 2004,
+      "dead_rows": 24,
+      "total_size": "1856 kB",
+      "last_vacuum": "2025-08-24 00:41:32.027050+00:00",
+      "last_analyze": "2025-08-24 00:41:32.068466+00:00"
+    },
+    "ai_agents": {
+      "table_name": "ai_agents",
+      "row_count": 59,
+      "dead_rows": 59,
+      "total_size": "160 kB",
+      "last_vacuum": "2025-08-24 00:41:35.809529+00:00",
+      "last_analyze": "2025-09-02 17:00:38.810068+00:00"
+    },
+    "users": {
+      "table_name": "users",
+      "row_count": 9,
+      "dead_rows": 2,
+      "total_size": "96 kB",
+      "last_vacuum": "2025-08-24 00:41:30.631158+00:00",
+      "last_analyze": "2025-08-24 00:41:30.631390+00:00"
+    },
+    "subscriptions": {
+      "table_name": "subscriptions",
+      "row_count": 8,
+      "dead_rows": 0,
+      "total_size": "72 kB",
+      "last_vacuum": null,
+      "last_analyze": null
+    },
+    "estimates": {
+      "table_name": "estimates",
+      "row_count": 6,
+      "dead_rows": 0,
+      "total_size": "280 kB",
+      "last_vacuum": "2025-08-24 00:41:32.167751+00:00",
+      "last_analyze": "2025-08-24 00:41:32.167986+00:00"
+    },
+    "equipment": {
+      "table_name": "equipment",
+      "row_count": 6,
+      "dead_rows": 10,
+      "total_size": "64 kB",
+      "last_vacuum": null,
+      "last_analyze": null
+    },
+    "materials": {
+      "table_name": "materials",
+      "row_count": 5,
+      "dead_rows": 1,
+      "total_size": "80 kB",
+      "last_vacuum": null,
+      "last_analyze": null
+    },
+    "employees": {
+      "table_name": "employees",
+      "row_count": 4,
+      "dead_rows": 0,
+      "total_size": "80 kB",
+      "last_vacuum": "2025-08-24 00:41:37.696543+00:00",
+      "last_analyze": "2025-08-24 00:41:37.696700+00:00"
+    },
+    "crews": {
+      "table_name": "crews",
+      "row_count": 4,
+      "dead_rows": 0,
+      "total_size": "48 kB",
+      "last_vacuum": null,
+      "last_analyze": null
+    },
+    "blog_posts": {
+      "table_name": "blog_posts",
+      "row_count": 3,
+      "dead_rows": 0,
+      "total_size": "112 kB",
+      "last_vacuum": "2025-08-24 00:41:37.897073+00:00",
+      "last_analyze": "2025-08-24 00:41:37.897290+00:00"
+    },
+    "timesheets": {
+      "table_name": "timesheets",
+      "row_count": 0,
+      "dead_rows": 0,
+      "total_size": "48 kB",
+      "last_vacuum": null,
+      "last_analyze": null
+    },
+    "payments": {
+      "table_name": "payments",
+      "row_count": 0,
+      "dead_rows": 0,
+      "total_size": "88 kB",
+      "last_vacuum": "2025-08-24 00:41:37.846939+00:00",
+      "last_analyze": "2025-08-24 00:41:37.847080+00:00"
+    }
+  },
+  "issues": [
+    "High number of temporary tables (11)",
+    "Table ai_agents has high dead row ratio",
+    "Table users has high dead row ratio",
+    "Table equipment has high dead row ratio",
+    "Found duplicate customer emails"
+  ],
+  "recommendations": [
+    "Clean up test/temporary tables",
+    "VACUUM ai_agents",
+    "VACUUM users",
+    "VACUUM equipment"
+  ]
+}

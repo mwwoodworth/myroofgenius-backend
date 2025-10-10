@@ -1,0 +1,27 @@
+{
+  "timestamp": "2025-08-18T07:54:21.869201",
+  "health_percentage": 54.54545454545454,
+  "status": "DEGRADED",
+  "results": {
+    "backend": {
+      "health": "\u2705 PASS",
+      "version": "6.0",
+      "crm": "\u2705 PASS",
+      "revenue": "0/7 working"
+    },
+    "frontends": {
+      "MyRoofGenius": "\u2705 PASS",
+      "WeatherCraft ERP": "\u2705 PASS",
+      "Task OS": "\u2705 PASS"
+    },
+    "database": {
+      "status": "\u2705 CONNECTED",
+      "tables": 313,
+      "customers": 120
+    },
+    "integrations": {
+      "stripe": "\ud83d\udd11 Needs real key"
+    },
+    "overall": "\u26a0\ufe0f DEGRADED"
+  }
+}

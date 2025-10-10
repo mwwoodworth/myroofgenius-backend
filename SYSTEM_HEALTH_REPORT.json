@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-08-19T16:46:06.665409",
+  "total_systems": 6,
+  "healthy_systems": 5,
+  "unhealthy_systems": 1,
+  "health_percentage": 83.33333333333334,
+  "systems": {
+    "backend_api": {
+      "status": "healthy",
+      "failures": 0,
+      "last_check": "2025-08-19T16:46:06.029224",
+      "critical": true
+    },
+    "myroofgenius": {
+      "status": "healthy",
+      "failures": 0,
+      "last_check": "2025-08-19T16:46:06.340169",
+      "critical": true
+    },
+    "weathercraft_erp": {
+      "status": "healthy",
+      "failures": 0,
+      "last_check": "2025-08-19T16:46:06.470755",
+      "critical": false
+    },
+    "task_os": {
+      "status": "healthy",
+      "failures": 0,
+      "last_check": "2025-08-19T16:46:06.596835",
+      "critical": false
+    },
+    "database": {
+      "status": "unhealthy",
+      "failures": 230,
+      "last_check": "2025-08-19T16:46:06.618643",
+      "critical": true
+    },
+    "centerpoint_sync": {
+      "status": "healthy",
+      "failures": 0,
+      "last_check": "2025-08-19T16:46:06.656918",
+      "critical": false
+    }
+  }
+}

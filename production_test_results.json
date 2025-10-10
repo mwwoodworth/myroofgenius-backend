@@ -1,0 +1,261 @@
+{
+  "health": {
+    "/health": {
+      "status": "\u2705 PASS",
+      "version": "4.47",
+      "details": {
+        "status": "healthy",
+        "version": "4.47",
+        "timestamp": "2025-08-17T17:40:05.076070+00:00",
+        "loaded_routers": 54,
+        "operational": true,
+        "real_features": [
+          "authentication",
+          "revenue_processing",
+          "estimates",
+          "job_management",
+          "ai_vision",
+          "products",
+          "ai_chat",
+          "blog",
+          "analytics",
+          "task_os",
+          "aurea_ai",
+          "automation_orchestrator",
+          "universal_ai",
+          "distributed_monitoring",
+          "operating_system"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "status": "\u2705 PASS",
+      "version": "4.47",
+      "details": {
+        "status": "healthy",
+        "version": "4.47",
+        "timestamp": "2025-08-17T17:40:05.302377+00:00",
+        "loaded_routers": 54,
+        "operational": true,
+        "real_features": [
+          "authentication",
+          "revenue_processing",
+          "estimates",
+          "job_management",
+          "ai_vision",
+          "products",
+          "ai_chat",
+          "blog",
+          "analytics",
+          "task_os",
+          "aurea_ai",
+          "automation_orchestrator",
+          "universal_ai",
+          "distributed_monitoring",
+          "operating_system"
+        ]
+      }
+    },
+    "/": {
+      "status": "\u2705 PASS",
+      "version": "4.47",
+      "details": {
+        "name": "BrainOps API",
+        "version": "4.47",
+        "status": "operational",
+        "loaded_routers": 54,
+        "message": "Real working system - no fake features"
+      }
+    },
+    "/api/v1/version": {
+      "status": "\u2705 PASS",
+      "version": "4.30",
+      "details": {
+        "version": "4.30",
+        "api_version": "1.0",
+        "build": "2025.08.16",
+        "environment": "production",
+        "features": {
+          "payments": true,
+          "ai": true,
+          "automation": true,
+          "analytics": true
+        }
+      }
+    }
+  },
+  "auth": {
+    "/api/v1/auth/login": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/auth/register": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/auth/refresh": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/auth/logout": {
+      "status": "\u274c Unexpected (403)"
+    },
+    "/api/v1/auth/me": {
+      "status": "\u274c Unexpected (403)"
+    },
+    "/api/v1/auth/verify": {
+      "status": "\u2705 Endpoint exists"
+    }
+  },
+  "payments": {
+    "/api/v1/payments/test": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/payments/create-intent": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/payments/confirm": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/payments/webhook": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/payments/customers": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/payments/subscriptions": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/stripe/products": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/stripe/prices": {
+      "status": "\u2705 Endpoint exists"
+    }
+  },
+  "email": {
+    "/api/v1/email/test": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/email/send": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/email/templates": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/email/bulk": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/email/status": {
+      "status": "\u274c Status 404"
+    }
+  },
+  "ai": {
+    "/api/v1/ai/analyze": {
+      "status": "\u274c Status 405"
+    },
+    "/api/v1/ai/chat": {
+      "status": "\u274c Status 405"
+    },
+    "/api/v1/ai/vision": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/ai/board": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/aurea/status": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/aurea/health": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/aurea/command": {
+      "status": "\u274c Status 405"
+    },
+    "/api/v1/automations": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/automations/status": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/tasks": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/memory/recent": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/marketplace/products": {
+      "status": "\u2705 Endpoint exists"
+    }
+  },
+  "database": {
+    "/api/v1/env/validate": {
+      "status": "\u2705 Connected"
+    },
+    "/api/v1/env/sync": {
+      "status": "\u274c Status 405"
+    },
+    "/api/v1/db-sync/status": {
+      "status": "\u2705 Connected"
+    },
+    "/api/v1/memory/recent": {
+      "status": "\u2705 Connected"
+    }
+  },
+  "frontends": {
+    "MyRoofGenius": {
+      "status": "\u2705 ONLINE",
+      "url": "https://myroofgenius.com",
+      "final_url": "https://www.myroofgenius.com/"
+    },
+    "WeatherCraft": {
+      "status": "\u274c Status 404",
+      "url": "https://weathercraft-app.vercel.app"
+    },
+    "BrainOps Task OS": {
+      "status": "\u2705 ONLINE",
+      "url": "https://brainops-task-os.vercel.app",
+      "final_url": "https://brainops-task-os.vercel.app/"
+    }
+  },
+  "endpoints": {
+    "/api/v1/estimates": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/estimates/calculate": {
+      "status": "\u274c Status 404"
+    },
+    "/api/v1/jobs": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/customers": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/invoices": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/products": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/products/public": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/revenue/metrics": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/analytics": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/blog/posts": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/erp/customers": {
+      "status": "\u2705 Endpoint exists"
+    },
+    "/api/v1/task-os/tasks": {
+      "status": "\u2705 Endpoint exists"
+    }
+  },
+  "gaps": [
+    "Email endpoint /api/v1/email/status not found",
+    "Business endpoint /api/v1/estimates/calculate not found",
+    "Frontend WeatherCraft returned status 404"
+  ]
+}
