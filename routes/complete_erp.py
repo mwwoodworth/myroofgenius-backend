@@ -1128,24 +1128,28 @@ async def convert_estimate_to_job(estimate_id: str, db: Session = Depends(get_db
         # Get estimate
         est_result = db.execute(text("SELECT * FROM estimates WHERE id = :id"), {"id": estimate_id})
         estimate = est_result.fetchone()
-        
+
         if not estimate:
             raise HTTPException(status_code=404, detail="Estimate not found")
-        
+
+        # Extract tenant_id from estimate with default fallback
+        tenant_id = estimate.tenant_id if hasattr(estimate, 'tenant_id') and estimate.tenant_id else '00000000-0000-0000-0000-000000000001'
+
         # Create job
         job_id = str(uuid.uuid4())
         db.execute(text("""
             INSERT INTO jobs (
-                id, customer_id, title, description, status, total_amount, created_at
+                id, customer_id, title, description, status, total_amount, tenant_id, created_at
             ) VALUES (
-                :id, :customer_id, :title, :description, 'scheduled', :total_amount, NOW()
+                :id, :customer_id, :title, :description, 'scheduled', :total_amount, :tenant_id, NOW()
             )
         """), {
             "id": job_id,
             "customer_id": estimate.customer_id,
             "title": estimate.project_name,
             "description": f"Job created from estimate {estimate.estimate_number}",
-            "total_amount": estimate.total_amount
+            "total_amount": estimate.total_amount,
+            "tenant_id": tenant_id
         })
         
         # Update estimate
