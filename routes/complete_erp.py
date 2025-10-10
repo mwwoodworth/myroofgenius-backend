@@ -999,7 +999,12 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
     try:
         estimate_id = str(uuid.uuid4())
         estimate_number = f"EST-{datetime.now().year}-{str(uuid.uuid4())[:5].upper()}"
-        
+
+        # Extract tenant_id with default for single-tenant mode
+        tenant_id = getattr(estimate, 'tenant_id', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = '00000000-0000-0000-0000-000000000001'
+
         # Handle customer creation if needed
         customer_id = estimate.customer_id
         if not customer_id and estimate.customer_name:
@@ -1046,14 +1051,14 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
                 status, estimate_date,
                 subtotal, tax_rate, tax_amount, discount_amount, total,
                 subtotal_cents, tax_cents, discount_cents, total_cents,
-                payment_terms, notes, line_items, created_at
+                payment_terms, notes, line_items, tenant_id, created_at
             ) VALUES (
                 :id, :estimate_number, :customer_id, :lead_id, :project_name, :property_address,
                 :customer_name, :customer_email, :customer_phone, :roof_type, :roof_size_sqft,
                 'draft', :estimate_date,
                 :subtotal, :tax_rate, :tax_amount, :discount_amount, :total,
                 :subtotal_cents, :tax_cents, :discount_cents, :total_cents,
-                :payment_terms, :notes, '[]'::json, NOW()
+                :payment_terms, :notes, '[]'::json, :tenant_id, NOW()
             )
         """), {
             "id": estimate_id,
@@ -1078,7 +1083,8 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
             "discount_cents": discount_cents,
             "total_cents": total_cents,
             "payment_terms": estimate.payment_terms,
-            "notes": estimate.notes
+            "notes": estimate.notes,
+            "tenant_id": tenant_id
         })
         
         # Add line items
