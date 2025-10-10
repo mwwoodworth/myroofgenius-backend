@@ -1023,27 +1023,37 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
                     "phone": estimate.customer_phone
                 })
         
-        # Calculate totals
+        # Calculate totals (both dollars and cents for dual schema support)
         subtotal = sum(item.get("quantity", 1) * item.get("unit_price", 0) for item in estimate.items)
         tax_amount = subtotal * (float(estimate.tax_rate) / 100) if estimate.tax_rate else 0
         discount_amount = subtotal * (float(estimate.discount_percent) / 100) if estimate.discount_percent else 0
         total_amount = subtotal + tax_amount - discount_amount
-        
+
+        # Convert to cents for integer columns (required by schema)
+        subtotal_cents = int(subtotal * 100)
+        tax_cents = int(tax_amount * 100)
+        discount_cents = int(discount_amount * 100)
+        total_cents = int(total_amount * 100)
+
         property_address = estimate.property_address or estimate.project_address
         project_name = estimate.project_name or "Roofing Project"
-        
-        # Create estimate
+
+        # Create estimate (includes both legacy double columns and new integer cents columns)
         db.execute(text("""
             INSERT INTO estimates (
                 id, estimate_number, customer_id, lead_id, project_name, property_address,
                 customer_name, customer_email, customer_phone, roof_type, roof_size_sqft,
-                status, estimate_date, subtotal, tax_rate, tax_amount, discount_percent, discount_amount,
-                total_amount, payment_terms, notes, created_at
+                status, estimate_date,
+                subtotal, tax_rate, tax_amount, discount_amount, total,
+                subtotal_cents, tax_cents, discount_cents, total_cents,
+                payment_terms, notes, line_items, created_at
             ) VALUES (
                 :id, :estimate_number, :customer_id, :lead_id, :project_name, :property_address,
                 :customer_name, :customer_email, :customer_phone, :roof_type, :roof_size_sqft,
-                'draft', :estimate_date, :subtotal, :tax_rate, :tax_amount, :discount_percent, :discount_amount,
-                :total_amount, :payment_terms, :notes, NOW()
+                'draft', :estimate_date,
+                :subtotal, :tax_rate, :tax_amount, :discount_amount, :total,
+                :subtotal_cents, :tax_cents, :discount_cents, :total_cents,
+                :payment_terms, :notes, '[]'::json, NOW()
             )
         """), {
             "id": estimate_id,
@@ -1061,9 +1071,12 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
             "subtotal": subtotal,
             "tax_rate": estimate.tax_rate if estimate.tax_rate else 0,
             "tax_amount": tax_amount,
-            "discount_percent": estimate.discount_percent if estimate.discount_percent else 0,
             "discount_amount": discount_amount,
-            "total_amount": total_amount,
+            "total": total_amount,
+            "subtotal_cents": subtotal_cents,
+            "tax_cents": tax_cents,
+            "discount_cents": discount_cents,
+            "total_cents": total_cents,
             "payment_terms": estimate.payment_terms,
             "notes": estimate.notes
         })
