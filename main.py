@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
     global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness
 
-    print("🚀 Starting BrainOps Backend v160.0.1 - ESTIMATE CREATION BUG FIX")
+    print("🚀 Starting BrainOps Backend v160.0.2 - ESTIMATE DATE FIX")
     print("=" * 80)
 
     # Initialize database pool
@@ -197,7 +197,7 @@ async def lifespan(app: FastAPI):
             print(f"⚠️  Relationship Awareness initialization failed: {e}")
 
         print("\n" + "=" * 80)
-        print("✅ BrainOps Backend v160.0.1 FULLY OPERATIONAL")
+        print("✅ BrainOps Backend v160.0.2 FULLY OPERATIONAL")
         print("=" * 80 + "\n")
 
     except Exception as e:
@@ -207,7 +207,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
-    print("👋 Shutting down BrainOps Backend v160.0.1")
+    print("👋 Shutting down BrainOps Backend v160.0.2")
     if db_pool:
         await db_pool.close()
     print("✅ Shutdown complete")
@@ -215,7 +215,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
-    version="160.0.1",
+    version="160.0.2",
     description="AI-Powered Business Operations Platform with Deep Relationship Awareness",
     lifespan=lifespan
 )
