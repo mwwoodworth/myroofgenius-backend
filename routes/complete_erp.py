@@ -1058,9 +1058,13 @@ async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db
             "roof_type": estimate.roof_type,
             "roof_size_sqft": estimate.roof_size_sqft,
             "subtotal": subtotal,
+            "tax_rate": estimate.tax_rate if estimate.tax_rate else 0,
             "tax_amount": tax_amount,
+            "discount_percent": estimate.discount_percent if estimate.discount_percent else 0,
             "discount_amount": discount_amount,
-            "total_amount": total_amount
+            "total_amount": total_amount,
+            "payment_terms": estimate.payment_terms,
+            "notes": estimate.notes
         })
         
         # Add line items
