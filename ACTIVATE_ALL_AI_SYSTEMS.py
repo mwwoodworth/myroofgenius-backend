@@ -219,9 +219,9 @@ ai_model_configs = {
         "endpoint": "https://api.openai.com/v1/chat/completions",
         "max_tokens": 4096
     },
-    "gemini-pro": {
+    "gemini-1.5-pro-002": {
         "api_key": os.environ.get("GEMINI_API_KEY", ""),
-        "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent",
         "max_tokens": 4096
     }
 }
@@ -240,7 +240,7 @@ try:
         elif "gpt" in model.lower():
             config = ai_model_configs.get("gpt-4", {})
         elif "gemini" in model.lower():
-            config = ai_model_configs.get("gemini-pro", {})
+            config = ai_model_configs.get("gemini-1.5-pro-002", {})
         else:
             config = {}
         

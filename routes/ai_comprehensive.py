@@ -53,7 +53,7 @@ async def get_ai_status():
             "multi_modal": True
         },
         "models": {
-            "text": ["gpt-4", "claude-3", "gemini-pro"],
+            "text": ["gpt-4", "claude-3", "gemini-1.5-pro-002"],
             "vision": ["gpt-4o", "claude-3-vision"],
             "specialized": ["roof-analyzer-v2", "estimate-generator-v3"]
         },

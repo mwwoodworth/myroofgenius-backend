@@ -116,7 +116,7 @@ class NeuralAgent:
             )
         else:
             self.llm = ChatGoogleGenerativeAI(
-                model="gemini-pro",
+                model="gemini-1.5-pro-002",
                 temperature=0.2,
                 max_tokens=2000
             )

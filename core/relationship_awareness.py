@@ -520,3 +520,60 @@ class RelationshipAwareness:
                 })
 
         return graph
+
+    async def refresh_entity_relationships(
+        self,
+        entity_type: str,
+        entity_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Recompute and persist relationship details for an entity.
+
+        Returns the latest complete view, or None if the entity does not exist.
+        """
+        async with self.db_pool.acquire() as conn:
+            async with conn.transaction():
+                complete_view = await self._get_complete_entity_view_impl(
+                    conn, entity_type, entity_id
+                )
+
+                if not complete_view:
+                    return None
+
+                parent_entities = complete_view["relationships"].get("parent")
+                child_entities = {
+                    key: value
+                    for key, value in complete_view["relationships"].items()
+                    if key != "parent"
+                }
+
+                await conn.execute(
+                    """
+                    INSERT INTO entity_relationships (
+                        entity_type,
+                        entity_id,
+                        relationship_graph,
+                        parent_entities,
+                        child_entities,
+                        computed_fields,
+                        last_computed_at,
+                        updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                    ON CONFLICT (entity_type, entity_id) DO UPDATE
+                    SET relationship_graph = EXCLUDED.relationship_graph,
+                        parent_entities = EXCLUDED.parent_entities,
+                        child_entities = EXCLUDED.child_entities,
+                        computed_fields = EXCLUDED.computed_fields,
+                        last_computed_at = NOW(),
+                        updated_at = NOW()
+                    """,
+                    entity_type,
+                    entity_id,
+                    json.dumps(complete_view["relationship_graph"]),
+                    json.dumps(parent_entities),
+                    json.dumps(child_entities),
+                    json.dumps(complete_view["computed_fields"]),
+                )
+
+                return complete_view

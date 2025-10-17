@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 -- =====================================================
 
 -- Master memory table for all system knowledge
-CREATE TABLE IF NOT EXISTS system_memory (
+CREATE TABLE IF NOT EXISTS cns_system_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     memory_type VARCHAR(50) NOT NULL, -- context, task, decision, learning, insight, warning
     category VARCHAR(100),
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS system_memory (
 );
 
 -- Task management with full history
-CREATE TABLE IF NOT EXISTS task_memory (
+CREATE TABLE IF NOT EXISTS cns_task_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id UUID UNIQUE,
     project_id UUID,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS task_memory (
 );
 
 -- Project tracking with complete history
-CREATE TABLE IF NOT EXISTS project_memory (
+CREATE TABLE IF NOT EXISTS cns_project_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     code VARCHAR(50) UNIQUE,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS project_memory (
 );
 
 -- Conversation and context threads
-CREATE TABLE IF NOT EXISTS context_threads (
+CREATE TABLE IF NOT EXISTS cns_context_threads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     thread_type VARCHAR(50), -- conversation, development, planning, debugging
     title TEXT,
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS context_threads (
 -- =====================================================
 
 -- Track every decision for future reference
-CREATE TABLE IF NOT EXISTS decisions (
+CREATE TABLE IF NOT EXISTS cns_decisions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     decision_type VARCHAR(100),
     title TEXT NOT NULL,
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS decisions (
 );
 
 -- System learning and improvements
-CREATE TABLE IF NOT EXISTS system_learnings (
+CREATE TABLE IF NOT EXISTS cns_system_learnings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category VARCHAR(100),
     learning_type VARCHAR(50), -- pattern, mistake, success, optimization
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS system_learnings (
 -- =====================================================
 
 -- Automation rules for the CNS
-CREATE TABLE IF NOT EXISTS automation_rules (
+CREATE TABLE IF NOT EXISTS cns_automation_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     rule_name TEXT NOT NULL,
     description TEXT,
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS automation_rules (
 -- =====================================================
 
 -- Claude Code session tracking
-CREATE TABLE IF NOT EXISTS claude_sessions (
+CREATE TABLE IF NOT EXISTS cns_claude_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id VARCHAR(100) UNIQUE,
     session_start TIMESTAMP DEFAULT NOW(),
@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS claude_sessions (
 -- =====================================================
 
 -- Track all external system integrations
-CREATE TABLE IF NOT EXISTS integration_sync (
+CREATE TABLE IF NOT EXISTS cns_integration_sync (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     integration_name VARCHAR(100), -- github, render, vercel, slack, etc.
     sync_type VARCHAR(50), -- pull, push, bidirectional
@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS integration_sync (
 -- =====================================================
 
 -- System metrics for performance tracking
-CREATE TABLE IF NOT EXISTS system_metrics (
+CREATE TABLE IF NOT EXISTS cns_system_metrics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_type VARCHAR(100),
     metric_name VARCHAR(100),
@@ -246,41 +246,41 @@ CREATE TABLE IF NOT EXISTS system_metrics (
 -- =====================================================
 
 -- System memory indexes
-CREATE INDEX idx_system_memory_type ON system_memory(memory_type);
-CREATE INDEX idx_system_memory_category ON system_memory(category);
-CREATE INDEX idx_system_memory_tags ON system_memory USING gin(tags);
-CREATE INDEX idx_system_memory_importance ON system_memory(importance_score DESC);
-CREATE INDEX idx_system_memory_created ON system_memory(created_at DESC);
-CREATE INDEX idx_system_memory_embeddings ON system_memory USING ivfflat (embeddings vector_cosine_ops);
+CREATE INDEX idx_cns_system_memory_type ON cns_system_memory(memory_type);
+CREATE INDEX idx_cns_system_memory_category ON cns_system_memory(category);
+CREATE INDEX idx_cns_system_memory_tags ON cns_system_memory USING gin(tags);
+CREATE INDEX idx_cns_system_memory_importance ON cns_system_memory(importance_score DESC);
+CREATE INDEX idx_cns_system_memory_created ON cns_system_memory(created_at DESC);
+CREATE INDEX idx_cns_system_memory_embeddings ON cns_system_memory USING ivfflat (embeddings vector_cosine_ops);
 
 -- Task memory indexes
-CREATE INDEX idx_task_memory_status ON task_memory(status);
-CREATE INDEX idx_task_memory_priority ON task_memory(priority DESC);
-CREATE INDEX idx_task_memory_project ON task_memory(project_id);
-CREATE INDEX idx_task_memory_assignee ON task_memory(assignee_id);
-CREATE INDEX idx_task_memory_due ON task_memory(due_date);
+CREATE INDEX idx_cns_task_memory_status ON cns_task_memory(status);
+CREATE INDEX idx_cns_task_memory_priority ON cns_task_memory(priority DESC);
+CREATE INDEX idx_cns_task_memory_project ON cns_task_memory(project_id);
+CREATE INDEX idx_cns_task_memory_assignee ON cns_task_memory(assignee_id);
+CREATE INDEX idx_cns_task_memory_due ON cns_task_memory(due_date);
 
 -- Project memory indexes
-CREATE INDEX idx_project_memory_status ON project_memory(status);
-CREATE INDEX idx_project_memory_category ON project_memory(category);
+CREATE INDEX idx_cns_project_memory_status ON cns_project_memory(status);
+CREATE INDEX idx_cns_project_memory_category ON cns_project_memory(category);
 
 -- Context threads indexes
-CREATE INDEX idx_context_threads_type ON context_threads(thread_type);
-CREATE INDEX idx_context_threads_active ON context_threads(is_active, last_active DESC);
-CREATE INDEX idx_context_threads_embeddings ON context_threads USING ivfflat (embeddings vector_cosine_ops);
+CREATE INDEX idx_cns_context_threads_type ON cns_context_threads(thread_type);
+CREATE INDEX idx_cns_context_threads_active ON cns_context_threads(is_active, last_active DESC);
+CREATE INDEX idx_cns_context_threads_embeddings ON cns_context_threads USING ivfflat (embeddings vector_cosine_ops);
 
 -- Decision indexes
-CREATE INDEX idx_decisions_type ON decisions(decision_type);
-CREATE INDEX idx_decisions_created ON decisions(created_at DESC);
+CREATE INDEX idx_cns_decisions_type ON cns_decisions(decision_type);
+CREATE INDEX idx_cns_decisions_created ON cns_decisions(created_at DESC);
 
 -- Learning indexes
-CREATE INDEX idx_learnings_category ON system_learnings(category);
-CREATE INDEX idx_learnings_type ON system_learnings(learning_type);
-CREATE INDEX idx_learnings_impact ON system_learnings(impact_score DESC);
+CREATE INDEX idx_cns_learnings_category ON cns_system_learnings(category);
+CREATE INDEX idx_cns_learnings_type ON cns_system_learnings(learning_type);
+CREATE INDEX idx_cns_learnings_impact ON cns_system_learnings(impact_score DESC);
 
 -- Session indexes
-CREATE INDEX idx_claude_sessions_active ON claude_sessions(is_active);
-CREATE INDEX idx_claude_sessions_start ON claude_sessions(session_start DESC);
+CREATE INDEX idx_cns_claude_sessions_active ON cns_claude_sessions(is_active);
+CREATE INDEX idx_cns_claude_sessions_start ON cns_claude_sessions(session_start DESC);
 
 -- =====================================================
 -- TRIGGERS FOR AUTO-UPDATES
@@ -295,8 +295,8 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_system_memory_updated_at
-    BEFORE UPDATE ON system_memory
+CREATE TRIGGER update_cns_system_memory_updated_at
+    BEFORE UPDATE ON cns_system_memory
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Auto-increment access count
@@ -316,7 +316,7 @@ $$ language 'plpgsql';
 -- =====================================================
 
 -- Insert genesis memory
-INSERT INTO system_memory (
+INSERT INTO cns_system_memory (
     memory_type,
     category,
     title,
@@ -333,7 +333,7 @@ INSERT INTO system_memory (
 ) ON CONFLICT DO NOTHING;
 
 -- Create initial automation rules
-INSERT INTO automation_rules (
+INSERT INTO cns_automation_rules (
     rule_name,
     description,
     trigger_type,

@@ -153,7 +153,7 @@ class RealAIVisionAnalyzer:
         # Convert to PIL Image
         image = Image.open(io.BytesIO(image_data))
         
-        model = genai.GenerativeModel('gemini-pro-vision')
+        model = genai.GenerativeModel('gemini-1.5-pro-vision-002')
         response = model.generate_content([
             "Analyze this roof image and provide detailed assessment in JSON format including: condition_score (1-10), material_type, age, damage, recommendations, cost_estimate",
             image
@@ -163,12 +163,12 @@ class RealAIVisionAnalyzer:
         
         try:
             data = json.loads(result)
-            data['ai_provider'] = 'Gemini Pro Vision'
+            data['ai_provider'] = 'Gemini 1.5 Pro Vision'
             data['confidence'] = 0.91
             data['timestamp'] = datetime.now().isoformat()
             return data
         except:
-            return self._parse_text_response(result, 'Gemini Pro Vision')
+            return self._parse_text_response(result, 'Gemini 1.5 Pro Vision')
     
     def _parse_text_response(self, text: str, provider: str) -> Dict:
         """Parse non-JSON AI responses intelligently"""

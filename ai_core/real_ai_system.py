@@ -135,7 +135,7 @@ class RealAISystem:
             logger.warning("Gemini API key not configured")
             raise Exception("Gemini not available")
         try:
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel('gemini-1.5-pro-002')
             
             full_prompt = prompt
             if context:

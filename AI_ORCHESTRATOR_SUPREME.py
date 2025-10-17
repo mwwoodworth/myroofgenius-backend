@@ -48,7 +48,7 @@ class AIOrchestrator:
             'claude_key': os.getenv('ANTHROPIC_API_KEY'),
             'monitoring_interval': 60,  # seconds
             'auto_healing': True,
-            'ai_models': ['gpt-4', 'claude-3', 'gemini-pro'],
+            'ai_models': ['gpt-4', 'claude-3', 'gemini-1.5-pro-002'],
             'mcp_servers': [
                 'database-mcp',
                 'crm-mcp', 
