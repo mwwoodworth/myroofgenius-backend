@@ -97,7 +97,7 @@ class GoogleProvider(AIProvider):
         super().__init__("Google Gemini", priority=3)
         if settings.GOOGLE_API_KEY:
             genai.configure(api_key=settings.GOOGLE_API_KEY)
-            self.model = genai.GenerativeModel('gemini-pro')
+            self.model = genai.GenerativeModel('gemini-1.5-pro-002')
         else:
             self.model = None
             

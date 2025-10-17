@@ -5,7 +5,6 @@ Complete auth implementation that actually works
 
 import os
 import jwt
-import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -14,6 +13,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import uuid
+from passlib.context import CryptContext
+import os
+import jwt
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +26,15 @@ JWT_EXPIRATION_HOURS = 24
 
 # Security
 security = HTTPBearer(auto_error=False)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def simple_hash_password(password: str) -> str:
-    """Simple but working password hash using SHA256"""
-    salt = "weathercraft-salt-2025"
-    return hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies a password against a hash."""
+    return pwd_context.verify(plain_password, hashed_password)
 
-def verify_password_simple(plain_password: str, hashed_password: str) -> bool:
-    """Verify password using simple hash"""
-    expected_hash = simple_hash_password(plain_password)
-    # Also check if it matches directly (for testing)
-    return expected_hash == hashed_password or plain_password == hashed_password
+def get_password_hash(password: str) -> str:
+    """Hashes a password."""
+    return pwd_context.hash(password)
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""
@@ -107,72 +107,43 @@ def get_db():
         db.close()
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[Dict]:
-    """Authenticate user with email and password"""
+    """Authenticate user with email and password securely."""
     try:
-        # Check app_users table (uses hashed_password column)
         query = text("""
             SELECT id, email, hashed_password, full_name as name
             FROM app_users
             WHERE email = :email
             LIMIT 1
         """)
-
         result = db.execute(query, {"email": email}).first()
 
         if not result:
-            # Try users table
-            query = text("""
-                SELECT id, email, password_hash, username as name
-                FROM users
-                WHERE email = :email
-                LIMIT 1
-            """)
-            result = db.execute(query, {"email": email}).first()
-
-        if not result:
-            logger.info(f"User not found: {email}")
+            logger.warning(f"Authentication attempt for non-existent user: {email}")
             return None
 
-        # Check password
-        stored_hash = result.hashed_password if result.hashed_password else ""
+        if not result.hashed_password or not verify_password(password, result.hashed_password):
+            logger.warning(f"Invalid password for user: {email}")
+            return None
 
-        # Try multiple verification methods
-        password_valid = (
-            verify_password_simple(password, stored_hash) or
-            password == stored_hash or  # Plain text match for dev
-            simple_hash_password(password) == stored_hash or
-            password == "TestPassword123!" or  # Default test password
-            (email == "admin@weathercraft.com" and password == "admin123")  # Admin bypass
-        )
-
-        if password_valid:
-            return {
-                "id": str(result.id),
-                "email": result.email,
-                "name": result.name if result.name else email
-            }
-
-        logger.info(f"Invalid password for: {email}")
-        return None
+        return {
+            "id": str(result.id),
+            "email": result.email,
+            "name": result.name if result.name else email
+        }
 
     except Exception as e:
-        logger.error(f"Auth error: {e}")
-        # Return test user for development
-        if email in ["test@test.com", "admin@weathercraft.com", "demo@myroofgenius.com"]:
-            return {
-                "id": str(uuid.uuid4()),
-                "email": email,
-                "name": "Test User"
-            }
-        return None
+        logger.error(f"Database error during authentication for {email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during authentication.",
+        )
 
 def create_user(db: Session, email: str, password: str, name: str = None) -> Dict:
-    """Create new user"""
+    """Create new user with a securely hashed password."""
     try:
         user_id = str(uuid.uuid4())
-        hashed = simple_hash_password(password)
+        hashed_password = get_password_hash(password)
 
-        # Try app_users table first (uses hashed_password column)
         query = text("""
             INSERT INTO app_users (id, email, hashed_password, full_name, created_at, is_active)
             VALUES (:id, :email, :hashed_password, :name, :created_at, :is_active)
@@ -182,7 +153,7 @@ def create_user(db: Session, email: str, password: str, name: str = None) -> Dic
         result = db.execute(query, {
             "id": user_id,
             "email": email,
-            "hashed_password": hashed,
+            "hashed_password": hashed_password,
             "name": name or email,
             "created_at": datetime.utcnow(),
             "is_active": True
@@ -200,12 +171,10 @@ def create_user(db: Session, email: str, password: str, name: str = None) -> Dic
     except Exception as e:
         logger.error(f"Create user error: {e}")
         db.rollback()
-        # Return mock user for development
-        return {
-            "id": user_id,
-            "email": email,
-            "name": name or email
-        }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create user.",
+        )
 
 def init_default_users(db: Session):
     """Initialize default users for testing"""

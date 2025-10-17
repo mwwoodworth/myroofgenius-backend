@@ -220,7 +220,7 @@ class RealAIService:
         }
         
         response = await self.client.post(
-            f"{self.gemini_url}/models/gemini-pro-vision:generateContent?key={self.gemini_key}",
+            f"{self.gemini_url}/models/gemini-1.5-pro-vision-002:generateContent?key={self.gemini_key}",
             headers=headers,
             json=payload
         )
@@ -527,7 +527,7 @@ class RealAIService:
         }
         
         response = await self.client.post(
-            f"{self.gemini_url}/models/gemini-pro:generateContent?key={self.gemini_key}",
+            f"{self.gemini_url}/models/gemini-1.5-pro-002:generateContent?key={self.gemini_key}",
             headers=headers,
             json=payload
         )

@@ -158,7 +158,8 @@ async def analyze_with_gemini(request: AIRequest):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
 
-        model = genai.GenerativeModel(request.model or 'gemini-1.5-flash')
+        const_model = request.model or 'gemini-1.5-flash-002'
+        model = genai.GenerativeModel(const_model)
 
         prompt = f"""Analyze this text and respond with ONLY a JSON object:
         {{
@@ -185,7 +186,7 @@ async def analyze_with_gemini(request: AIRequest):
         return {
             "status": "success",
             "provider": "gemini",
-            "model": request.model or "gemini-1.5-flash",
+            "model": const_model,
             "analysis": analysis,
             "timestamp": datetime.now().isoformat()
         }
@@ -211,8 +212,8 @@ async def list_providers():
             },
             "gemini": {
                 "configured": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
-                "models": ["gemini-1.5-flash", "gemini-1.5-pro"],
-                "default": "gemini-1.5-flash"
+                "models": ["gemini-1.5-flash-002", "gemini-1.5-pro-002"],
+                "default": "gemini-1.5-flash-002"
             }
         },
         "timestamp": datetime.now().isoformat()

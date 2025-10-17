@@ -257,7 +257,7 @@ class ContentPipeline:
     async def optimize_seo_with_gemini(self, content: ContentPiece) -> SEOOptimization:
         """Use Gemini to optimize content for SEO"""
         try:
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel('gemini-1.5-pro-002')
             
             prompt = f"""
             Optimize this content for SEO:

@@ -7,8 +7,26 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from core.relationship_awareness import RelationshipAwareness
 import asyncpg
+import os
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 router = APIRouter(prefix="/api/v1/aware", tags=["Relationship Awareness"])
+security = HTTPBearer(auto_error=False)
+ALLOWED_ENTITY_TYPES = {"customers", "jobs", "employees", "estimates", "invoices"}
+
+
+def require_api_key(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> None:
+    """Require BrainOps API key for all relationship-aware operations."""
+    expected_key = os.getenv("BRAINOPS_API_KEY")
+    if not expected_key:
+        raise HTTPException(
+            status_code=500,
+            detail="BrainOps API key is not configured on the backend.",
+        )
+    if not credentials or credentials.credentials != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid BrainOps API key.")
 
 # Pydantic models for request validation
 class CustomerCreateRequest(BaseModel):
@@ -56,7 +74,8 @@ async def get_relationship_awareness() -> RelationshipAwareness:
 @router.post("/customers")
 async def create_customer_with_awareness(
     request: CustomerCreateRequest,
-    ra: RelationshipAwareness = Depends(get_relationship_awareness)
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
 ):
     """
     Create customer with full relationship awareness
@@ -83,7 +102,8 @@ async def create_customer_with_awareness(
 @router.post("/jobs")
 async def create_job_with_awareness(
     request: JobCreateRequest,
-    ra: RelationshipAwareness = Depends(get_relationship_awareness)
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
 ):
     """
     Create job with automatic relationship linking
@@ -128,7 +148,8 @@ async def create_job_with_awareness(
 @router.get("/customers/{customer_id}/complete")
 async def get_complete_customer_view(
     customer_id: str,
-    ra: RelationshipAwareness = Depends(get_relationship_awareness)
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
 ):
     """
     Get complete 360° view of customer with ALL relationships
@@ -165,7 +186,8 @@ async def get_complete_customer_view(
 @router.get("/jobs/{job_id}/complete")
 async def get_complete_job_view(
     job_id: str,
-    ra: RelationshipAwareness = Depends(get_relationship_awareness)
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
 ):
     """
     Get complete view of job with ALL relationships
@@ -203,7 +225,8 @@ async def get_complete_job_view(
 @router.get("/employees/{employee_id}/complete")
 async def get_complete_employee_view(
     employee_id: str,
-    ra: RelationshipAwareness = Depends(get_relationship_awareness)
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
 ):
     """
     Get complete view of employee with ALL relationships
@@ -238,7 +261,7 @@ async def get_complete_employee_view(
 
 
 @router.get("/health")
-async def health_check():
+async def health_check(_: None = Depends(require_api_key)):
     """Check if relationship awareness system is operational"""
     return {
         "status": "operational",
@@ -251,3 +274,34 @@ async def health_check():
             "Computed field materialization"
         ]
     }
+
+
+@router.post("/{entity_type}/{entity_id}/refresh")
+async def refresh_entity_relationships(
+    entity_type: str,
+    entity_id: str,
+    ra: RelationshipAwareness = Depends(get_relationship_awareness),
+    _: None = Depends(require_api_key),
+):
+    """Recompute relationships and graph for an entity."""
+    if entity_type not in ALLOWED_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported entity type.")
+
+    try:
+        result = await ra.refresh_entity_relationships(entity_type, entity_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Entity not found")
+
+        return {
+            "success": True,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "data": result,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error refreshing relationships: {str(exc)}",
+        )

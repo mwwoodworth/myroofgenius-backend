@@ -152,7 +152,7 @@ async def analyze_roof_photo(
             }
         
         # Use Gemini Vision for analysis
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-002')
         
         # Create image for Gemini
         import PIL.Image
