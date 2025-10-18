@@ -1,0 +1,303 @@
+name: BrainOps CI/CD Pipeline
+# Complete testing and deployment - Uses GitHub Free Tier (2000 min/month)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:  # Manual trigger
+
+env:
+  DOCKER_USERNAME: mwwoodworth
+  BACKEND_IMAGE: mwwoodworth/brainops-backend
+
+jobs:
+  # ============================================================================
+  # BACKEND TESTS
+  # ============================================================================
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd myroofgenius-backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio pytest-xdist pytest-timeout
+
+      - name: Run unit tests
+        run: |
+          cd myroofgenius-backend
+          pytest tests/unit -v --cov --cov-report=xml --ci
+
+      - name: Run integration tests
+        if: github.ref == 'refs/heads/main'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd myroofgenius-backend
+          pytest tests/integration -v --ci
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./myroofgenius-backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  # ============================================================================
+  # FRONTEND TESTS
+  # ============================================================================
+  frontend-tests-weathercraft:
+    name: WeatherCraft Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: weathercraft-erp/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd weathercraft-erp
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd weathercraft-erp
+          npm test -- --coverage --watchAll=false
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./weathercraft-erp/coverage/coverage-final.json
+          flags: weathercraft
+          name: weathercraft-coverage
+
+  frontend-tests-myroofgenius:
+    name: MyRoofGenius Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: myroofgenius-app/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd myroofgenius-app
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd myroofgenius-app
+          npm test -- --coverage --watchAll=false
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./myroofgenius-app/coverage/coverage-final.json
+          flags: myroofgenius
+          name: myroofgenius-coverage
+
+  # ============================================================================
+  # SECURITY SCAN
+  # ============================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================================================
+  # BUILD & PUSH DOCKER
+  # ============================================================================
+  build-backend:
+    name: Build Backend Docker Image
+    needs: [backend-tests, security-scan]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PAT }}
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep -oP 'VERSION = "\K[^"]+' myroofgenius-backend/main.py || echo "latest")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: ./myroofgenius-backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:latest
+          cache-to: type=inline
+
+      - name: Image digest
+        run: echo "Image pushed: ${{ env.BACKEND_IMAGE }}:${{ steps.version.outputs.version }}"
+
+  # ============================================================================
+  # DEPLOY TO PRODUCTION
+  # ============================================================================
+  deploy-backend:
+    name: Deploy Backend to Render
+    needs: [build-backend]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render deployment
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+
+      - name: Wait for deployment
+        run: sleep 60
+
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if curl -f https://brainops-backend-prod.onrender.com/health; then
+              echo "✅ Backend is healthy!"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/10)"
+            sleep 10
+          done
+          echo "❌ Backend health check failed"
+          exit 1
+
+  deploy-frontend:
+    name: Deploy Frontends (Vercel Auto-Deploy)
+    needs: [frontend-tests-weathercraft, frontend-tests-myroofgenius]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify Vercel deployments
+        run: |
+          echo "✅ Frontend tests passed"
+          echo "Vercel will auto-deploy from GitHub"
+          echo "  - WeatherCraft ERP: weathercraft-erp.vercel.app"
+          echo "  - MyRoofGenius: myroofgenius.com"
+
+  # ============================================================================
+  # SMOKE TESTS
+  # ============================================================================
+  smoke-tests:
+    name: Production Smoke Tests
+    needs: [deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test backend health
+        run: |
+          curl -f https://brainops-backend-prod.onrender.com/health
+
+      - name: Test AI agents
+        run: |
+          curl -f https://brainops-ai-agents.onrender.com/agents
+
+      - name: Test WeatherCraft
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://weathercraft-erp.vercel.app)
+          if [ "$STATUS" -eq 200 ]; then
+            echo "✅ WeatherCraft is live"
+          else
+            echo "❌ WeatherCraft returned $STATUS"
+            exit 1
+          fi
+
+      - name: Test MyRoofGenius
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://myroofgenius.com)
+          if [ "$STATUS" -eq 200 ]; then
+            echo "✅ MyRoofGenius is live"
+          else
+            echo "❌ MyRoofGenius returned $STATUS"
+            exit 1
+          fi
+
+  # ============================================================================
+  # NOTIFY
+  # ============================================================================
+  notify-success:
+    name: Notify Success
+    needs: [smoke-tests]
+    if: success()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send success notification
+        run: |
+          echo "✅ Full CI/CD Pipeline Successful"
+          echo "All tests passed, deployed to production, smoke tests passing"
+          # Add Slack webhook if desired
+
+  notify-failure:
+    name: Notify Failure
+    needs: [backend-tests, frontend-tests-weathercraft, frontend-tests-myroofgenius, security-scan, build-backend, deploy-backend, smoke-tests]
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "❌ CI/CD Pipeline Failed"
+          echo "Check logs for details"
+          # Add Slack webhook if desired
