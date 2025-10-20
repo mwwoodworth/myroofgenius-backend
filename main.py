@@ -249,7 +249,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
-    version="163.0.1",
+    version="163.0.2",
     description="AI-Powered Business Operations Platform with Elena Roofing AI + 23 AI Agents + Deep Relationship Awareness",
     lifespan=lifespan
 )
