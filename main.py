@@ -42,6 +42,7 @@ credential_manager = None
 agent_orchestrator = None
 weathercraft_integration = None
 relationship_awareness = None
+elena_instance = None
 
 # Check if CNS is available
 CNS_AVAILABLE = False
@@ -72,6 +73,15 @@ try:
     logger.info("✅ Agent Orchestrator V2 module is available")
 except ImportError as e:
     logger.warning(f"Agent Orchestrator V2 not available: {e}")
+
+# Check if Elena Roofing AI is available
+ELENA_AVAILABLE = False
+try:
+    from services.elena_roofing_ai import ElenaRoofingAI, initialize_elena
+    ELENA_AVAILABLE = True
+    logger.info("✅ Elena Roofing AI module is available")
+except ImportError as e:
+    logger.warning(f"Elena Roofing AI not available: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -197,8 +207,26 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️  Relationship Awareness initialization failed: {e}")
 
+        # Initialize Elena Roofing AI
+        if ELENA_AVAILABLE:
+            try:
+                print("\n🏗️ Initializing Elena Roofing AI...")
+                elena_instance = await initialize_elena(
+                    db_pool,
+                    backend_url="http://localhost:8000"  # Will use localhost for same-server calls
+                )
+                print("✅ Elena Roofing AI initialized!")
+                print("  🎯 Roofing estimation capabilities active")
+                print("  🏗️ Integrated with roofing backend")
+                print("  📊 50+ manufacturer products available")
+                print("  🤖 AI-powered assembly recommendations")
+                print("🏗️ ELENA IS READY FOR ROOFING PROJECTS!")
+                app.state.elena = elena_instance
+            except Exception as e:
+                print(f"⚠️  Elena initialization failed: {e}")
+
         print("\n" + "=" * 80)
-        print("✅ BrainOps Backend v161.0.1 FULLY OPERATIONAL")
+        print("✅ BrainOps Backend v163.0.0 FULLY OPERATIONAL")
         print("  🤖 23 AI agent endpoints active")
         print("  🔗 Complete relationship awareness")
         print("  ✅ All frontend linkages verified")
@@ -219,8 +247,8 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
-    version="162.0.0",
-    description="AI-Powered Business Operations Platform with 23 AI Agents + Deep Relationship Awareness",
+    version="163.0.0",
+    description="AI-Powered Business Operations Platform with Elena Roofing AI + 23 AI Agents + Deep Relationship Awareness",
     lifespan=lifespan
 )
 
@@ -264,6 +292,15 @@ try:
     logger.info("✅ Relationship Awareness routes loaded at /api/v1/aware")
 except Exception as e:
     logger.error(f"⚠️  Failed to load Relationship Awareness routes: {e}")
+
+# Load Elena Roofing AI routes
+if ELENA_AVAILABLE:
+    try:
+        from routes.elena_roofing_agent import router as elena_router
+        app.include_router(elena_router)
+        logger.info("✅ Elena Roofing AI routes loaded at /api/v1/elena")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load Elena routes: {e}")
 
 # Health check endpoint
 @app.get("/health")
