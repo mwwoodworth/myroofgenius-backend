@@ -211,9 +211,11 @@ async def lifespan(app: FastAPI):
         if ELENA_AVAILABLE:
             try:
                 print("\n🏗️ Initializing Elena Roofing AI...")
+                # Use production URL in deployment, localhost for local dev
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                 elena_instance = await initialize_elena(
                     db_pool,
-                    backend_url="http://localhost:8000"  # Will use localhost for same-server calls
+                    backend_url=backend_url
                 )
                 print("✅ Elena Roofing AI initialized!")
                 print("  🎯 Roofing estimation capabilities active")
@@ -247,7 +249,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
-    version="163.0.0",
+    version="163.0.1",
     description="AI-Powered Business Operations Platform with Elena Roofing AI + 23 AI Agents + Deep Relationship Awareness",
     lifespan=lifespan
 )
