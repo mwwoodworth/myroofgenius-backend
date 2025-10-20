@@ -322,10 +322,10 @@ class AgentOrchestratorV2:
                     if agent:
                         await conn.execute("""
                             INSERT INTO ai_autonomous_tasks (
-                                agent_id, task_type, schedule, description, is_active
-                            ) VALUES ($1, $2, $3, $4, true)
+                                agent_id, task_type, scheduled_at, description, is_active
+                            ) VALUES ($1, $2, NOW(), $3, true)
                             ON CONFLICT DO NOTHING
-                        """, agent['id'], 'scheduled', frequency, task_description)
+                        """, agent['id'], 'scheduled', task_description)
 
                 logger.info(f"🤖 Enabled autonomous operation for {len(autonomous_agents)} agents")
 
