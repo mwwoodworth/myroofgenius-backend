@@ -119,7 +119,7 @@ async def get_customer(
                        address, city, state,
                        status, created_at
                 FROM customers
-                WHERE id = $1::uuid
+                WHERE id = $1
             """, customer_id)
 
             if not customer:
@@ -127,16 +127,16 @@ async def get_customer(
 
             # Get related counts
             job_count = await conn.fetchval("""
-                SELECT COUNT(*) FROM jobs WHERE customer_id = $1::uuid
+                SELECT COUNT(*) FROM jobs WHERE customer_id = $1
             """, customer_id)
 
             invoice_count = await conn.fetchval("""
-                SELECT COUNT(*) FROM invoices WHERE customer_id = $1::uuid
+                SELECT COUNT(*) FROM invoices WHERE customer_id = $1
             """, customer_id)
 
             total_revenue = await conn.fetchval("""
                 SELECT COALESCE(SUM(total_amount), 0) FROM invoices
-                WHERE customer_id = $1::uuid AND status = 'paid'
+                WHERE customer_id = $1 AND status = 'paid'
             """, customer_id)
 
         customer_dict = dict(customer)

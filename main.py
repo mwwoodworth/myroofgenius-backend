@@ -275,7 +275,7 @@ except Exception as e:
 # Load critical routes explicitly
 try:
     from routes.products_api import router as products_router
-    app.include_router(products_router)
+    app.include_router(products_router, prefix="/api/v1/products")
     logger.info("✅ Products routes loaded")
 except Exception as e:
     logger.error(f"⚠️ Failed to load products routes: {e}")
