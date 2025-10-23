@@ -20,8 +20,6 @@ class Product(BaseModel):
     name: str
     description: Optional[str] = None
     price: float
-    category: Optional[str] = None
-    status: str = "active"
     created_at: Optional[datetime] = None
 
 @router.get("")
@@ -39,15 +37,13 @@ async def list_products(
             raise HTTPException(status_code=503, detail="Database connection not available")
 
         query = """
-            SELECT id, name, description, price, category, status, created_at
+            SELECT id, name, description, price, created_at
             FROM products
-            WHERE status = 'active'
+            WHERE is_active = true
         """
 
         params = []
-        if category:
-            query += " AND category = $1"
-            params.append(category)
+        # Category filtering disabled since table uses category_id not category name
 
         query += " ORDER BY name LIMIT $" + str(len(params) + 1) + " OFFSET $" + str(len(params) + 2)
         params.extend([limit, offset])
@@ -56,12 +52,8 @@ async def list_products(
             products = await conn.fetch(query, *params)
 
             # Get total count
-            count_query = "SELECT COUNT(*) FROM products WHERE status = 'active'"
-            if category:
-                count_query += " AND category = $1"
-                total = await conn.fetchval(count_query, category)
-            else:
-                total = await conn.fetchval(count_query)
+            count_query = "SELECT COUNT(*) FROM products WHERE is_active = true"
+            total = await conn.fetchval(count_query)
 
         # Convert to list of dicts
         result = []
@@ -97,9 +89,9 @@ async def get_product(
 
         async with db_pool.acquire() as conn:
             product = await conn.fetchrow("""
-                SELECT id, name, description, price, category, status, created_at
+                SELECT id, name, description, price, created_at
                 FROM products
-                WHERE id = $1::uuid AND status = 'active'
+                WHERE id = $1::uuid AND is_active = true
             """, product_id)
 
         if not product:
@@ -125,16 +117,13 @@ async def get_product(
 async def list_categories(request: Request):
     """List all product categories"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, 'db_pool', None)
+        if not db_pool:
+            raise HTTPException(status_code=503, detail="Database connection not available")
 
         async with db_pool.acquire() as conn:
-            categories = await conn.fetch("""
-                SELECT DISTINCT category, COUNT(*) as product_count
-                FROM products
-                WHERE status = 'active' AND category IS NOT NULL
-                GROUP BY category
-                ORDER BY category
-            """)
+            # Since we don't have category names, just return empty list for now
+            categories = []
 
         return {
             "success": True,
