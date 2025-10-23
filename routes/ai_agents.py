@@ -58,10 +58,10 @@ async def execute_agent(agent_id: str, data: Dict[str, Any], db_pool) -> Dict[st
     TODO: Integrate with actual AI agent service at brainops-ai-agents.onrender.com
     """
 
-    # Check if agent exists
+    # Check if agent exists (using name as agent_id)
     async with db_pool.acquire() as conn:
         agent = await conn.fetchrow(
-            "SELECT * FROM ai_agents WHERE agent_id = $1",
+            "SELECT * FROM ai_agents WHERE name = $1",
             agent_id
         )
 
@@ -185,15 +185,38 @@ async def list_agents(request: Request):
 
         async with db_pool.acquire() as conn:
             agents = await conn.fetch("""
-                SELECT agent_id, name, description, category, status
+                SELECT id, name, type, status, metadata
                 FROM ai_agents
                 WHERE status = 'active'
-                ORDER BY category, name
+                ORDER BY name
             """)
 
+        # Extract category from metadata and format response
+        result_agents = []
+        for agent in agents:
+            agent_dict = dict(agent)
+            # Parse metadata to get category
+            if agent_dict.get('metadata'):
+                if isinstance(agent_dict['metadata'], str):
+                    try:
+                        metadata = json.loads(agent_dict['metadata'])
+                    except:
+                        metadata = {}
+                else:
+                    metadata = agent_dict['metadata']
+                agent_dict['category'] = metadata.get('category', 'Uncategorized')
+                agent_dict['description'] = metadata.get('description', '')
+            else:
+                agent_dict['category'] = 'Uncategorized'
+                agent_dict['description'] = ''
+
+            # Remove metadata from response (keep it clean)
+            agent_dict.pop('metadata', None)
+            result_agents.append(agent_dict)
+
         return {
-            'agents': [dict(agent) for agent in agents],
-            'total': len(agents)
+            'agents': result_agents,
+            'total': len(result_agents)
         }
     except Exception as e:
         logger.error(f"Error listing agents: {e}")

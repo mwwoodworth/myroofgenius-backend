@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
     global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness
 
-    print("🚀 Starting BrainOps Backend v161.0.1 - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
+    print("🚀 Starting BrainOps Backend v163.0.2 - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
     print("=" * 80)
 
     # Initialize database pool
@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
-    print("👋 Shutting down BrainOps Backend v161.0.1")
+    print("👋 Shutting down BrainOps Backend v163.0.2")
     if db_pool:
         await db_pool.close()
     print("✅ Shutdown complete")
