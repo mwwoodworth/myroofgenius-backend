@@ -33,7 +33,9 @@ async def list_products(
 ):
     """List all products"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, 'db_pool', None)
+        if not db_pool:
+            raise HTTPException(status_code=503, detail="Database connection not available")
 
         query = """
             SELECT id, name, description, price, category, status, created_at
