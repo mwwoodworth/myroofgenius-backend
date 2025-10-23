@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 
 # Define route mappings (file_name -> prefix)
 ROUTE_MAPPINGS = {
+    # Core business routes
+    "products_api": "/api/v1/products",
+
     # Tasks 61-70: Sales & CRM
     "lead_management": "/api/v1/leads",
     "opportunity_tracking": "/api/v1/opportunities",

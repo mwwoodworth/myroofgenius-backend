@@ -272,13 +272,8 @@ try:
 except Exception as e:
     logger.error(f"⚠️  Failed to load routes: {e}")
 
-# Load critical routes explicitly
-try:
-    from routes.products_api import router as products_router
-    app.include_router(products_router, prefix="/api/v1/products")
-    logger.info("✅ Products routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load products routes: {e}")
+# Products routes now loaded by load_all_routes with correct mapping
+# No need to load explicitly anymore
 
 try:
     from routes.invoices import router as invoices_router
