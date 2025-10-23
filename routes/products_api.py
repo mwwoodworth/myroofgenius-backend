@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/products", tags=["Products"])
+router = APIRouter(tags=["Products"])
 
 class Product(BaseModel):
     """Product model"""
@@ -25,6 +25,7 @@ class Product(BaseModel):
     created_at: Optional[datetime] = None
 
 @router.get("")
+@router.get("/")
 async def list_products(
     request: Request,
     limit: int = Query(default=20, le=100),
@@ -90,7 +91,9 @@ async def get_product(
 ):
     """Get product details"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, 'db_pool', None)
+        if not db_pool:
+            raise HTTPException(status_code=503, detail="Database connection not available")
 
         async with db_pool.acquire() as conn:
             product = await conn.fetchrow("""
