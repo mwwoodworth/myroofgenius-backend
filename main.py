@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 import logging
+from version import __version__
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
@@ -88,7 +89,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
     global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness
 
-    print("🚀 Starting BrainOps Backend v163.0.2 - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
+    print(f"🚀 Starting BrainOps Backend v{__version__} - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
     print("=" * 80)
 
     # Initialize database pool
@@ -241,7 +242,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
-    print("👋 Shutting down BrainOps Backend v163.0.2")
+    print(f"👋 Shutting down BrainOps Backend v{__version__}")
     if db_pool:
         await db_pool.close()
     print("✅ Shutdown complete")
@@ -249,7 +250,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
-    version="163.0.2",
+    version=__version__,
     description="AI-Powered Business Operations Platform with Elena Roofing AI + 23 AI Agents + Deep Relationship Awareness",
     lifespan=lifespan
 )
@@ -270,6 +271,42 @@ try:
     logger.info("✅ All routes loaded successfully")
 except Exception as e:
     logger.error(f"⚠️  Failed to load routes: {e}")
+
+# Load critical routes explicitly
+try:
+    from routes.products_api import router as products_router
+    app.include_router(products_router)
+    logger.info("✅ Products routes loaded")
+except Exception as e:
+    logger.error(f"⚠️ Failed to load products routes: {e}")
+
+try:
+    from routes.invoices import router as invoices_router
+    app.include_router(invoices_router)
+    logger.info("✅ Invoices routes loaded")
+except Exception as e:
+    logger.error(f"⚠️ Failed to load invoices routes: {e}")
+
+try:
+    from routes.jobs import router as jobs_router
+    app.include_router(jobs_router)
+    logger.info("✅ Jobs routes loaded")
+except Exception as e:
+    logger.error(f"⚠️ Failed to load jobs routes: {e}")
+
+try:
+    from routes.relationships import router as relationships_router
+    app.include_router(relationships_router)
+    logger.info("✅ Relationships routes loaded")
+except Exception as e:
+    logger.error(f"⚠️ Failed to load relationships routes: {e}")
+
+try:
+    from routes.customers import router as customers_router
+    app.include_router(customers_router)
+    logger.info("✅ Customers routes loaded")
+except Exception as e:
+    logger.error(f"⚠️ Failed to load customers routes: {e}")
 
 # Load LangGraph workflow routes
 try:

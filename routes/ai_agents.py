@@ -222,6 +222,53 @@ async def list_agents(request: Request):
         logger.error(f"Error listing agents: {e}")
         raise HTTPException(status_code=500, detail="Failed to list agents")
 
+@router.get("/{agent_id}")
+async def get_agent_details(
+    agent_id: str,
+    request: Request
+):
+    """Get details of a specific AI agent"""
+    try:
+        db_pool = await get_db_pool(request)
+
+        async with db_pool.acquire() as conn:
+            agent = await conn.fetchrow("""
+                SELECT id, name, type, status, metadata
+                FROM ai_agents
+                WHERE id = $1::uuid AND status = 'active'
+            """, agent_id)
+
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        agent_dict = dict(agent)
+
+        # Extract category and description from metadata
+        if agent_dict.get('metadata'):
+            if isinstance(agent_dict['metadata'], str):
+                try:
+                    metadata = json.loads(agent_dict['metadata'])
+                except:
+                    metadata = {}
+            else:
+                metadata = agent_dict['metadata']
+            agent_dict['category'] = metadata.get('category', 'Uncategorized')
+            agent_dict['description'] = metadata.get('description', '')
+        else:
+            agent_dict['category'] = 'Uncategorized'
+            agent_dict['description'] = ''
+
+        # Remove metadata from response
+        agent_dict.pop('metadata', None)
+
+        return agent_dict
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting agent details: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get agent details")
+
 @router.post("/{agent_id}/execute", response_model=AgentExecutionResponse)
 async def execute_agent_endpoint(
     agent_id: str,
