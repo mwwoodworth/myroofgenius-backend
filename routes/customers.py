@@ -115,8 +115,9 @@ async def get_customer(
 
         async with db_pool.acquire() as conn:
             customer = await conn.fetchrow("""
-                SELECT id, name, email, phone, company, address, city, state,
-                       zip_code, status, created_at
+                SELECT id, name, email, phone,
+                       address, city, state,
+                       status, created_at
                 FROM customers
                 WHERE id = $1::uuid
             """, customer_id)
