@@ -129,8 +129,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         api_key = self._extract_api_key(request)
         
         if api_key:
-            # Validate API key
-            if await self._validate_api_key(api_key):
+            db_pool = getattr(request.app.state, 'db_pool', None)
+
+            if await self._validate_api_key(api_key, db_pool):
                 # Add API key info to request state
                 request.state.api_key = api_key
                 request.state.authenticated = True
@@ -149,11 +150,47 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # Check X-API-Key header
         return request.headers.get("X-API-Key")
     
-    async def _validate_api_key(self, api_key: str) -> bool:
+    async def _validate_api_key(self, api_key: str, db_pool) -> bool:
         """Validate API key against database"""
-        # TODO: Implement actual API key validation against database
-        # For now, just check format
-        return len(api_key) > 20
+        if not api_key or len(api_key) < 16:
+            return False
+
+        if not db_pool:
+            logger.error('Database pool unavailable for API key validation')
+            return False
+
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+        try:
+            async with db_pool.acquire() as conn:
+                record = await conn.fetchrow(
+                    """
+                    SELECT id
+                    FROM api_keys
+                    WHERE key_hash = $1
+                      AND (is_active IS NULL OR is_active = TRUE)
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                    """,
+                    key_hash
+                )
+
+                if not record:
+                    return False
+
+                await conn.execute(
+                    """
+                    UPDATE api_keys
+                    SET last_used_at = NOW(),
+                        usage_count = COALESCE(usage_count, 0) + 1
+                    WHERE id = $1
+                    """,
+                    record['id']
+                )
+
+                return True
+        except Exception as error:
+            logger.error('API key validation error: %s', error)
+            return False
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """

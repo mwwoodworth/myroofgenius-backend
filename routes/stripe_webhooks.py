@@ -21,10 +21,9 @@ except ImportError:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    DATABASE_URL = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-    )
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL must be configured for Stripe webhook handling.")
 
     engine = create_engine(DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -33,7 +32,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_REDACTED")
+if not stripe.api_key:
+    logger.warning("STRIPE_SECRET_KEY is not configured; Stripe operations may fail.")
+
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 router = APIRouter(tags=["stripe-webhooks"])
 
@@ -48,7 +50,7 @@ async def handle_stripe_webhook(
         payload = await request.body()
 
         # Verify webhook signature if secret is configured
-        if STRIPE_WEBHOOK_SECRET and STRIPE_WEBHOOK_SECRET != "whsec_REDACTED":
+        if STRIPE_WEBHOOK_SECRET:
             try:
                 event = stripe.Webhook.construct_event(
                     payload, stripe_signature, STRIPE_WEBHOOK_SECRET
@@ -60,7 +62,7 @@ async def handle_stripe_webhook(
                 logger.error("Invalid signature")
                 raise HTTPException(status_code=400, detail="Invalid signature")
         else:
-            # Parse without verification (for testing)
+            logger.warning("Stripe webhook secret not configured; skipping signature verification.")
             event = json.loads(payload)
 
         # Handle the event

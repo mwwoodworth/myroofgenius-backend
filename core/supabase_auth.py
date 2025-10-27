@@ -9,7 +9,7 @@ This is the CORRECT way to handle authentication:
 """
 
 from supabase import create_client, Client
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException, Depends, Request
 from typing import Dict, Any, Optional
 import os
 import logging
@@ -18,16 +18,18 @@ from jwt import PyJWTError
 
 logger = logging.getLogger(__name__)
 
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is not configured. Set {name} in the environment.")
+    return value
+
+
 # Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yomagoqdmxszqtdwuhab.supabase.co")
-SUPABASE_ANON_KEY = os.getenv(
-    "SUPABASE_ANON_KEY",
-    "JWT_REDACTED"
-)
-SUPABASE_SERVICE_ROLE_KEY = os.getenv(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "JWT_REDACTED"
-)
+SUPABASE_URL = _require_env("SUPABASE_URL")
+SUPABASE_ANON_KEY = _require_env("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = _require_env("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_JWT_SECRET = _require_env("SUPABASE_JWT_SECRET")
 
 # Create Supabase clients
 supabase_anon: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -76,13 +78,15 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
         try:
             payload = jwt.decode(
                 token,
-                options={"verify_signature": False}  # Trust Supabase-issued tokens
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                options={"verify_aud": False}
             )
         except PyJWTError as jwt_error:
-            logger.error(f"JWT decode error: {jwt_error}")
+            logger.error(f"JWT verification error: {jwt_error}")
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token format"
+                detail="Invalid or expired token"
             )
 
         # Extract user information from JWT payload
@@ -103,8 +107,6 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
 
         if not tenant_id:
             logger.warning(f"User {user_id} has no tenant_id in metadata")
-            # Some users might not have tenant_id yet
-            # Don't fail, but log it
 
         # Return user info in standardized format
         return {
@@ -139,6 +141,26 @@ async def get_supabase_client() -> Client:
         Client: Supabase client with service role privileges
     """
     return supabase_service
+
+
+async def get_authenticated_user(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    Retrieve the authenticated user, leveraging request state when available.
+
+    Args:
+        request: Current HTTP request.
+        authorization: Authorization header (fallback when middleware not applied).
+
+    Returns:
+        dict: Authenticated user context.
+    """
+    user = getattr(request.state, "user", None)
+    if user:
+        return user
+    return await get_current_user(authorization=authorization)
 
 
 async def verify_tenant_access(

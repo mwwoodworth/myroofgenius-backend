@@ -12,10 +12,14 @@ import asyncpg
 import logging
 import json
 
+from core.agent_execution_manager import AgentExecutionManager
+
 logger = logging.getLogger(__name__)
 
 # Router with explicit prefix
 router = APIRouter(prefix="/api/v1/agents", tags=["AI Agents"])
+
+agent_executor = AgentExecutionManager()
 
 # ============================================================================
 # MODELS
@@ -50,128 +54,46 @@ async def get_db_pool(request: Request):
     """Get database pool from app state"""
     return request.app.state.db_pool
 
-async def execute_agent(agent_id: str, data: Dict[str, Any], db_pool) -> Dict[str, Any]:
-    """
-    Execute an AI agent with given data
+async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) -> Dict[str, Any]:
+    """Execute an AI agent with production service or raise if unavailable."""
 
-    For now, uses intelligent fallback logic.
-    TODO: Integrate with actual AI agent service at brainops-ai-agents.onrender.com
-    """
-
-    # Check if agent exists (using name as agent_id)
     async with db_pool.acquire() as conn:
         agent = await conn.fetchrow(
-            "SELECT * FROM ai_agents WHERE name = $1",
-            agent_id
+            """
+            SELECT id, name
+            FROM ai_agents
+            WHERE id::text = $1 OR name = $1
+            """,
+            agent_identifier
         )
 
-        if not agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_identifier}' not found")
 
-    # For now, use intelligent fallback
-    # TODO: Replace with actual AI service call
-    result = await intelligent_fallback(agent_id, data)
+    try:
+        execution = await agent_executor.execute_agent(
+            agent['name'],
+            'execute',
+            data,
+            retry_on_failure=False
+        )
+    except Exception as exc:
+        logger.error("AI agent execution failed: %s", exc)
+        raise HTTPException(status_code=502, detail="AI agent execution failed") from exc
+
+    result = execution.get('result') or {}
+    method_descriptor = str(result.get('method', '')).lower()
+    if 'fallback' in method_descriptor:
+        raise HTTPException(status_code=503, detail='AI agent service unavailable')
 
     return {
         'success': True,
-        'agent_id': agent_id,
+        'agent_id': str(agent['id']),
         'result': result,
-        'confidence': result.get('confidence', 0.85),
-        'execution_time_ms': 150,
-        'note': 'Using intelligent fallback - integrate AI service for production'
+        'confidence': result.get('confidence'),
+        'execution_time_ms': result.get('execution_time_ms'),
+        'recommendations': result.get('recommendations')
     }
-
-async def intelligent_fallback(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """Intelligent rule-based fallback for AI agents"""
-
-    # Lead Scorer
-    if 'lead-scorer' in agent_id:
-        score = 50  # Base score
-        factors = []
-
-        if data.get('urgency') == 'immediate':
-            score += 30
-            factors.append('Immediate urgency (+30)')
-        if data.get('estimated_value', 0) > 50000:
-            score += 20
-            factors.append('High value (+20)')
-        if data.get('source') in ['referral', 'repeat-customer']:
-            score += 15
-            factors.append('Quality source (+15)')
-
-        grade = 'A' if score >= 85 else 'B' if score >= 70 else 'C'
-
-        return {
-            'score': score,
-            'grade': grade,
-            'confidence': 0.85,
-            'factors': factors,
-            'priority': 'high' if score >= 75 else 'medium'
-        }
-
-    # Customer Health Analyzer
-    elif 'customer-health' in agent_id:
-        health_score = 75  # Base health
-
-        if data.get('last_contact_days', 0) > 90:
-            health_score -= 20
-        if data.get('payment_issues', False):
-            health_score -= 15
-        if data.get('positive_feedback', False):
-            health_score += 10
-
-        status = 'healthy' if health_score >= 70 else 'at-risk' if health_score >= 50 else 'critical'
-
-        return {
-            'health_score': health_score,
-            'status': status,
-            'confidence': 0.80,
-            'recommendations': [
-                'Schedule follow-up call' if health_score < 70 else 'Continue regular engagement',
-                'Review payment terms' if data.get('payment_issues') else 'Payment status good'
-            ]
-        }
-
-    # Predictive Analyzer
-    elif 'predictive-analyzer' in agent_id:
-        base_value = data.get('current_revenue', 100000)
-        growth_rate = 0.15  # 15% growth assumption
-        forecast = base_value * (1 + growth_rate)
-
-        return {
-            'forecast_value': forecast,
-            'confidence': 0.75,
-            'time_period': data.get('period', 'next_quarter'),
-            'assumptions': [
-                f'{growth_rate*100}% growth rate',
-                'Based on historical trends',
-                'Market conditions stable'
-            ]
-        }
-
-    # HR Analytics Analyzer
-    elif 'hr-analytics' in agent_id:
-        return {
-            'team_health': 82,
-            'productivity_score': 88,
-            'engagement_level': 'high',
-            'recommendations': [
-                'Team performing well',
-                'Continue current management practices',
-                'Monitor workload distribution'
-            ],
-            'confidence': 0.80
-        }
-
-    # Default response for other agents
-    else:
-        return {
-            'status': 'executed',
-            'agent': agent_id,
-            'message': f'Agent {agent_id} executed with provided data',
-            'confidence': 0.70,
-            'note': 'Using generic fallback - implement specific logic for production'
-        }
 
 # ============================================================================
 # ENDPOINTS
