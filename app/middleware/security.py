@@ -5,7 +5,9 @@ Security middleware for rate limiting, API key validation, and request protectio
 import time
 import hashlib
 import hmac
-from typing import Optional, Dict, Any, Callable
+from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 import redis
 from fastapi import Request, HTTPException, status
@@ -15,10 +17,57 @@ from starlette.responses import Response
 import logging
 import json
 
-from app.core.config import settings
+try:
+    from app.core.config import settings  # type: ignore
+    _settings_import_error: Optional[Exception] = None
+except Exception as exc:  # pragma: no cover - fallback for misconfigured environments
+    settings = None  # type: ignore[assignment]
+    _settings_import_error = exc
+
 from app.core.exceptions import RateLimitError, AuthenticationError
 
 logger = logging.getLogger(__name__)
+
+if settings is None:  # pragma: no cover - exercised when config import fails
+    logger.warning(
+        "Falling back to default security settings because app.core.config failed to load: %s",
+        _settings_import_error,
+    )
+
+    class _FallbackSettings:
+        RATE_LIMIT_REQUESTS = 100
+        RATE_LIMIT_PERIOD = 60
+        is_production = False
+        redis_url = None
+
+    settings = _FallbackSettings()  # type: ignore[assignment]
+
+
+@dataclass
+class _CachedAPIKey:
+    """Cached API key metadata to avoid repeated database lookups."""
+
+    key_id: str
+    expires_at_ts: Optional[float]
+    cache_expiry_ts: float
+    last_touch_ts: float
+
+
+# Keep aligned with middleware.authentication.DEFAULT_EXEMPT_PATHS.
+DEFAULT_PUBLIC_PATHS: Sequence[str] = (
+    "/",
+    "/health",
+    "/api/v1/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/api/v1/stripe/webhook",
+    "/api/v1/stripe/webhook/test",
+    "/api/v1/webhooks/stripe",
+    "/api/v1/webhooks/render",
+    "/api/v1/revenue/webhook",
+    "/webhook/stripe",
+)
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -106,91 +155,186 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """
-    API key validation middleware
+    API key validation middleware with in-memory caching to minimize database lookups.
     """
-    
-    def __init__(self, app):
+
+    def __init__(
+        self,
+        app,
+        *,
+        cache_ttl_seconds: int = 300,
+        usage_touch_interval_seconds: int = 30,
+        max_cache_entries: int = 512,
+        public_paths: Optional[Iterable[str]] = None,
+    ):
         super().__init__(app)
-        self.public_paths = [
-            "/",
-            "/health",
-            "/api/v1/health",
-            "/docs",
-            "/redoc",
-            "/openapi.json"
-        ]
-        
+        self.public_paths: Sequence[str] = (
+            tuple(public_paths) if public_paths is not None else DEFAULT_PUBLIC_PATHS
+        )
+        self.cache_ttl = max(cache_ttl_seconds, 1)
+        self.usage_touch_interval = max(usage_touch_interval_seconds, 1)
+        self.max_cache_entries = max_cache_entries if max_cache_entries > 0 else 512
+        self._cache: "OrderedDict[str, _CachedAPIKey]" = OrderedDict()
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip validation for public paths
         if any(request.url.path.startswith(path) for path in self.public_paths):
+            logger.debug("Skipping API key validation for public path %s", request.url.path)
             return await call_next(request)
-        
+
         # Check for API key
         api_key = self._extract_api_key(request)
-        
-        if api_key:
-            db_pool = getattr(request.app.state, 'db_pool', None)
 
-            if await self._validate_api_key(api_key, db_pool):
-                # Add API key info to request state
+        if api_key:
+            db_pool = getattr(request.app.state, "db_pool", None)
+
+            cache_entry = await self._validate_api_key(api_key, db_pool)
+            if cache_entry:
+                # Attach context to the request for downstream processing
                 request.state.api_key = api_key
+                request.state.api_key_id = cache_entry.key_id
                 request.state.authenticated = True
             else:
                 raise AuthenticationError("Invalid API key")
-        
+
         return await call_next(request)
-    
+
     def _extract_api_key(self, request: Request) -> Optional[str]:
-        """Extract API key from request"""
+        """Extract API key from request headers."""
         # Check Authorization header
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             return auth_header[7:]
-        
+
         # Check X-API-Key header
         return request.headers.get("X-API-Key")
-    
-    async def _validate_api_key(self, api_key: str, db_pool) -> bool:
-        """Validate API key against database"""
+
+    async def _validate_api_key(self, api_key: str, db_pool) -> Optional[_CachedAPIKey]:
+        """Validate API key against database with caching."""
         if not api_key or len(api_key) < 16:
-            return False
+            return None
 
         if not db_pool:
-            logger.error('Database pool unavailable for API key validation')
-            return False
+            logger.error("Database pool unavailable for API key validation")
+            return None
 
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        now = time.time()
 
+        cache_entry = self._cache.get(key_hash)
+        if cache_entry:
+            if cache_entry.expires_at_ts and cache_entry.expires_at_ts <= now:
+                logger.info("Cached API key has expired; removing from cache")
+                self._cache.pop(key_hash, None)
+            elif cache_entry.cache_expiry_ts <= now:
+                logger.debug("API key cache entry exceeded TTL; refreshing from database")
+                self._cache.pop(key_hash, None)
+            else:
+                if now - cache_entry.last_touch_ts < self.usage_touch_interval:
+                    # Entry still fresh; extend TTL and return
+                    cache_entry.cache_expiry_ts = now + self.cache_ttl
+                    self._cache.move_to_end(key_hash)
+                    return cache_entry
+
+                # Refresh usage metadata in the database
+                if await self._touch_cached_entry(cache_entry, db_pool, now):
+                    self._cache.move_to_end(key_hash)
+                    return cache_entry
+
+                # Touch failed (key revoked/expired)
+                self._cache.pop(key_hash, None)
+
+        # Cache miss or expired entry; fetch from database
+        refreshed_entry = await self._fetch_and_cache_key(key_hash, db_pool, now)
+        if refreshed_entry:
+            self._cache[key_hash] = refreshed_entry
+            self._cache.move_to_end(key_hash)
+            self._prune_cache()
+            return refreshed_entry
+
+        return None
+
+    async def _touch_cached_entry(
+        self,
+        cache_entry: _CachedAPIKey,
+        db_pool,
+        now: float,
+    ) -> bool:
+        """Update usage telemetry for a cached API key and ensure it is still valid."""
         try:
             async with db_pool.acquire() as conn:
                 record = await conn.fetchrow(
-                    """
-                    SELECT id
-                    FROM api_keys
-                    WHERE key_hash = $1
-                      AND (is_active IS NULL OR is_active = TRUE)
-                      AND (expires_at IS NULL OR expires_at > NOW())
-                    """,
-                    key_hash
-                )
-
-                if not record:
-                    return False
-
-                await conn.execute(
                     """
                     UPDATE api_keys
                     SET last_used_at = NOW(),
                         usage_count = COALESCE(usage_count, 0) + 1
                     WHERE id = $1
+                      AND (is_active IS NULL OR is_active = TRUE)
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                    RETURNING expires_at
                     """,
-                    record['id']
+                    cache_entry.key_id,
                 )
-
-                return True
         except Exception as error:
-            logger.error('API key validation error: %s', error)
+            logger.error("API key usage update error: %s", error)
             return False
+
+        if not record:
+            return False
+
+        cache_entry.last_touch_ts = now
+        cache_entry.cache_expiry_ts = now + self.cache_ttl
+        expires_at = record.get("expires_at")
+        cache_entry.expires_at_ts = (
+            expires_at.timestamp() if isinstance(expires_at, datetime) else None
+        )
+        return True
+
+    async def _fetch_and_cache_key(
+        self,
+        key_hash: str,
+        db_pool,
+        now: float,
+    ) -> Optional[_CachedAPIKey]:
+        """Fetch API key information from the database and return a cache entry."""
+        try:
+            async with db_pool.acquire() as conn:
+                record = await conn.fetchrow(
+                    """
+                    UPDATE api_keys
+                    SET last_used_at = NOW(),
+                        usage_count = COALESCE(usage_count, 0) + 1
+                    WHERE key_hash = $1
+                      AND (is_active IS NULL OR is_active = TRUE)
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                    RETURNING id, expires_at
+                    """,
+                    key_hash,
+                )
+        except Exception as error:
+            logger.error("API key validation error: %s", error)
+            return None
+
+        if not record:
+            return None
+
+        expires_at = record.get("expires_at")
+        expires_at_ts = (
+            expires_at.timestamp() if isinstance(expires_at, datetime) else None
+        )
+
+        return _CachedAPIKey(
+            key_id=str(record["id"]),
+            expires_at_ts=expires_at_ts,
+            cache_expiry_ts=now + self.cache_ttl,
+            last_touch_ts=now,
+        )
+
+    def _prune_cache(self) -> None:
+        """Ensure the cache does not exceed the configured size."""
+        while len(self._cache) > self.max_cache_entries:
+            evicted_key, _ = self._cache.popitem(last=False)
+            logger.debug("Evicted API key hash from cache: %s", evicted_key)
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """

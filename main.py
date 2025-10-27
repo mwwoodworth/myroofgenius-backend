@@ -29,6 +29,7 @@ import random
 from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
+from app.middleware.security import APIKeyMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -275,6 +276,9 @@ app.add_middleware(
 
 # Enforce authentication on all non-exempt routes
 app.add_middleware(AuthenticationMiddleware)
+
+# Validate API keys for machine-to-machine traffic with caching.
+app.add_middleware(APIKeyMiddleware)
 
 # Apply rate limiting to protect public APIs
 app.add_middleware(
