@@ -11,6 +11,7 @@ from core.supabase_auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
+# Only health checks and explicitly reviewed webhook endpoints are exempt.
 DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/health",
     "/api/v1/health",
@@ -19,6 +20,11 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/openapi.json",
     "/favicon.ico",
     "/api/v1/stripe/webhook",
+    "/api/v1/stripe/webhook/test",
+    "/api/v1/webhooks/stripe",
+    "/api/v1/webhooks/render",
+    "/api/v1/revenue/webhook",
+    "/webhook/stripe",
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
