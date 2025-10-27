@@ -3,13 +3,14 @@ Jobs API Routes
 Manages job tracking and operations
 """
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query, Depends
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime
 import logging
-import json
+
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,16 @@ async def list_jobs(
     offset: int = Query(default=0, ge=0),
     status: Optional[str] = None,
     customer_id: Optional[str] = None,
-    assigned_to: Optional[str] = None
+    assigned_to: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all jobs"""
+    """List all jobs for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         query = """
             SELECT j.id, j.job_number, j.customer_id, j.title, j.description,
@@ -52,42 +58,37 @@ async def list_jobs(
                    c.name as customer_name
             FROM jobs j
             LEFT JOIN customers c ON j.customer_id = c.id
-            WHERE 1=1
+            WHERE j.tenant_id = $1
         """
 
-        params = []
+        params = [tenant_id]
         param_count = 0
 
         if status:
             param_count += 1
-            query += f" AND j.status = ${param_count}"
+            query += f" AND j.status = ${param_count + 1}"
             params.append(status)
 
         if customer_id:
             param_count += 1
-            query += f" AND j.customer_id = ${param_count}"
+            query += f" AND j.customer_id = ${param_count + 1}"
             params.append(customer_id)
 
         if assigned_to:
             param_count += 1
-            query += f" AND j.assigned_to = ${param_count}"
+            query += f" AND j.assigned_to = ${param_count + 1}"
             params.append(assigned_to)
 
-        param_count += 1
-        query += f" ORDER BY j.created_at DESC LIMIT ${param_count}"
-        params.append(limit)
-
-        param_count += 1
-        query += f" OFFSET ${param_count}"
-        params.append(offset)
+        query += " ORDER BY j.created_at DESC LIMIT ${} OFFSET ${}".format(param_count + 2, param_count + 3)
+        params.extend([limit, offset])
 
         async with db_pool.acquire() as conn:
             jobs = await conn.fetch(query, *params)
 
             # Get total count
-            count_query = "SELECT COUNT(*) FROM jobs WHERE 1=1"
-            count_params = []
-            cp = 0
+            count_query = "SELECT COUNT(*) FROM jobs WHERE tenant_id = $1"
+            count_params = [tenant_id]
+            cp = 1
 
             if status:
                 cp += 1
@@ -132,11 +133,16 @@ async def list_jobs(
 @router.get("/{job_id}")
 async def get_job(
     job_id: str,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get job details"""
+    """Get job details for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         async with db_pool.acquire() as conn:
             job = await conn.fetchrow("""
@@ -146,8 +152,8 @@ async def get_job(
                        c.name as customer_name, c.email as customer_email
                 FROM jobs j
                 LEFT JOIN customers c ON j.customer_id = c.id
-                WHERE j.id = $1::uuid
-            """, job_id)
+                WHERE j.id = $1::uuid AND j.tenant_id = $2
+            """, job_id, tenant_id)
 
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -172,11 +178,16 @@ async def get_job(
 
 @router.get("/stats/summary")
 async def get_job_stats(
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get job statistics"""
+    """Get job statistics for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -190,14 +201,15 @@ async def get_job_stats(
                     COUNT(*) FILTER (WHERE priority = 'medium') as medium_priority,
                     COUNT(*) FILTER (WHERE priority = 'low') as low_priority
                 FROM jobs
-            """)
+                WHERE tenant_id = $1
+            """, tenant_id)
 
             # Get average completion time
             avg_completion = await conn.fetchval("""
                 SELECT AVG(EXTRACT(epoch FROM (completed_date - created_at))/86400) as avg_days
                 FROM jobs
-                WHERE completed_date IS NOT NULL
-            """)
+                WHERE completed_date IS NOT NULL AND tenant_id = $1
+            """, tenant_id)
 
         return {
             "success": True,

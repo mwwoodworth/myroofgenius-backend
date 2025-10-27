@@ -26,16 +26,25 @@ import asyncpg
 import uuid
 import json
 import random
+from config import get_database_url, settings
+from middleware.authentication import AuthenticationMiddleware
+from middleware.rate_limiter import RateLimitMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+try:
+    DATABASE_URL = get_database_url()
+except RuntimeError as exc:
+    raise RuntimeError(
+        "DATABASE_URL must be set to start the BrainOps backend."
+    ) from exc
+
+cors_origins = settings.cors_origins
+if isinstance(cors_origins, str):
+    cors_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 
 # Global instances
 db_pool = None
@@ -258,10 +267,22 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
+)
+
+# Enforce authentication on all non-exempt routes
+app.add_middleware(AuthenticationMiddleware)
+
+# Apply rate limiting to protect public APIs
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=settings.rate_limit_per_minute,
+    requests_per_hour=settings.rate_limit_per_hour,
+    use_redis=bool(settings.redis_url),
+    redis_url=settings.redis_url,
 )
 
 # Load all route modules dynamically

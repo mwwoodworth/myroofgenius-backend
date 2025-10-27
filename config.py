@@ -3,7 +3,6 @@ WeatherCraft ERP Backend Configuration
 Centralized configuration management with environment variables
 """
 
-import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import Field
@@ -14,10 +13,7 @@ class Settings(BaseSettings):
     # ============================================================================
     # DATABASE
     # ============================================================================
-    database_url: str = Field(
-        default="postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres",
-        env="DATABASE_URL"
-    )
+    database_url: Optional[str] = Field(default=None, env="DATABASE_URL")
     database_pool_size: int = Field(default=50, env="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=100, env="DATABASE_MAX_OVERFLOW")
     database_pool_recycle: int = Field(default=3600, env="DATABASE_POOL_RECYCLE")
@@ -38,7 +34,7 @@ class Settings(BaseSettings):
     # ============================================================================
     # AUTHENTICATION
     # ============================================================================
-    jwt_secret_key: str = Field(default="your-secret-key-min-32-chars-long", env="JWT_SECRET_KEY")
+    jwt_secret_key: Optional[str] = Field(default=None, env="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expiration_hours: int = Field(default=24, env="JWT_EXPIRATION_HOURS")
 
@@ -143,17 +139,12 @@ settings = Settings()
 
 # Helper functions
 def get_database_url() -> str:
-    """Get database URL with fallback logic"""
-    if settings.database_url:
-        return settings.database_url
-
-    # Fallback to constructing from parts
-    if settings.supabase_project_ref:
-        password = os.getenv("SUPABASE_DB_PASSWORD", "Brain0ps2O2S")
-        return f"postgresql://postgres:{password}@db.{settings.supabase_project_ref}.supabase.co:5432/postgres"
-
-    # Last resort fallback
-    return "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+    """Get database URL from environment configuration"""
+    if not settings.database_url:
+        raise RuntimeError(
+            "DATABASE_URL is not configured. Set DATABASE_URL in the environment or .env file."
+        )
+    return settings.database_url
 
 def get_ai_provider_key(provider: str) -> Optional[str]:
     """Get API key for specified AI provider"""

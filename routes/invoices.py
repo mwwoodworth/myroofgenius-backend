@@ -3,13 +3,15 @@ Invoices API Routes
 Manages invoices and billing
 """
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query, Depends
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime, date
 import logging
 import json
+
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +34,16 @@ async def list_invoices(
     limit: int = Query(default=20, le=100),
     offset: int = Query(default=0, ge=0),
     status: Optional[str] = None,
-    customer_id: Optional[str] = None
+    customer_id: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all invoices"""
+    """List all invoices for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         query = """
             SELECT i.id, i.invoice_number, i.customer_id, i.total_amount,
@@ -44,45 +51,41 @@ async def list_invoices(
                    c.name as customer_name
             FROM invoices i
             LEFT JOIN customers c ON i.customer_id = c.id
-            WHERE 1=1
+            WHERE i.tenant_id = $1
         """
 
-        params = []
+        params = [tenant_id]
         param_count = 0
 
         if status:
             param_count += 1
-            query += f" AND i.status = ${param_count}"
+            query += f" AND i.status = ${param_count + 1}"
             params.append(status)
 
         if customer_id:
             param_count += 1
-            query += f" AND i.customer_id = ${param_count}"
+            query += f" AND i.customer_id = ${param_count + 1}"
             params.append(customer_id)
 
-        param_count += 1
-        query += f" ORDER BY i.created_at DESC LIMIT ${param_count}"
-        params.append(limit)
-
-        param_count += 1
-        query += f" OFFSET ${param_count}"
-        params.append(offset)
+        query += " ORDER BY i.created_at DESC LIMIT ${} OFFSET ${}".format(param_count + 2, param_count + 3)
+        params.extend([limit, offset])
 
         async with db_pool.acquire() as conn:
             invoices = await conn.fetch(query, *params)
 
             # Get total count
-            count_query = "SELECT COUNT(*) FROM invoices WHERE 1=1"
-            count_params = []
+            count_query = "SELECT COUNT(*) FROM invoices WHERE tenant_id = $1"
+            count_params = [tenant_id]
+            cp = 1
 
             if status:
-                count_query += " AND status = $1"
+                cp += 1
+                count_query += f" AND status = ${cp}"
                 count_params.append(status)
-                if customer_id:
-                    count_query += " AND customer_id = $2"
-                    count_params.append(customer_id)
-            elif customer_id:
-                count_query += " AND customer_id = $1"
+
+            if customer_id:
+                cp += 1
+                count_query += f" AND customer_id = ${cp}"
                 count_params.append(customer_id)
 
             total = await conn.fetchval(count_query, *count_params)
@@ -117,11 +120,16 @@ async def list_invoices(
 @router.get("/{invoice_id}")
 async def get_invoice(
     invoice_id: str,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get invoice details"""
+    """Get invoice details for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         async with db_pool.acquire() as conn:
             invoice = await conn.fetchrow("""
@@ -130,8 +138,8 @@ async def get_invoice(
                        c.name as customer_name, c.email as customer_email
                 FROM invoices i
                 LEFT JOIN customers c ON i.customer_id = c.id
-                WHERE i.id = $1::uuid
-            """, invoice_id)
+                WHERE i.id = $1::uuid AND i.tenant_id = $2
+            """, invoice_id, tenant_id)
 
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
@@ -160,11 +168,16 @@ async def get_invoice(
 
 @router.get("/stats/summary")
 async def get_invoice_stats(
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get invoice statistics"""
+    """Get invoice statistics for the authenticated tenant"""
     try:
         db_pool = request.app.state.db_pool
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -178,7 +191,8 @@ async def get_invoice_stats(
                     COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0) as paid_amount,
                     COALESCE(SUM(total_amount) FILTER (WHERE status = 'overdue'), 0) as overdue_amount
                 FROM invoices
-            """)
+                WHERE tenant_id = $1
+            """, tenant_id)
 
         return {
             "success": True,
