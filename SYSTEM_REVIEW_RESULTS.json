@@ -1,0 +1,48 @@
+{
+  "timestamp": "2025-08-21T21:17:25.018703",
+  "overall_percentage": 99.99999999999999,
+  "results": {
+    "local_services": {
+      "MCP Database": true,
+      "MCP CRM": true,
+      "MCP ERP": true,
+      "MCP AI Orchestrator": true,
+      "MCP Monitoring": true,
+      "MCP Automation": true,
+      "Agent Orchestrator": true,
+      "Agent Analyst": true,
+      "Agent Automation": true,
+      "Agent Customer": true,
+      "Agent Monitoring": true,
+      "Agent Revenue": true
+    },
+    "backend_api": {
+      "/api/v1/health": true,
+      "/api/v1/erp/jobs": true,
+      "/api/v1/erp/estimates": true,
+      "/api/v1/erp/invoices": true,
+      "/api/v1/crm/customers": true,
+      "/api/v1/integration/mcp/health": true,
+      "/api/v1/integration/agents/health": true
+    },
+    "database": {
+      "customers": 1862,
+      "jobs": 5151,
+      "invoices": 0,
+      "estimates": 0,
+      "ai_agents": 34,
+      "connected": true
+    },
+    "frontends": {
+      "MyRoofGenius": true,
+      "WeatherCraft ERP": true,
+      "BrainOps Task OS": true
+    },
+    "persistence": {
+      "cron_5min": true,
+      "cron_reboot": true,
+      "bashrc": true
+    },
+    "summary": {}
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "timestamp": "2025-08-01T15:53:39.498628",
+  "platform": "MyRoofGenius",
+  "tests": {
+    "landing_page": {
+      "status": "passed",
+      "checks": {
+        "title_present": true,
+        "ai_features": true,
+        "marketplace": true,
+        "login_available": true
+      }
+    },
+    "auth_flow": {
+      "login": {
+        "accessible": true,
+        "final_url": "https://www.myroofgenius.com/login"
+      },
+      "register": {
+        "accessible": true,
+        "final_url": "https://www.myroofgenius.com/register"
+      }
+    },
+    "key_pages": {
+      "accessible": "3/5",
+      "details": {
+        "/features": {
+          "status": 404,
+          "accessible": false
+        },
+        "/pricing": {
+          "status": 404,
+          "accessible": false
+        },
+        "/marketplace": {
+          "status": 200,
+          "accessible": true
+        },
+        "/about": {
+          "status": 200,
+          "accessible": true
+        },
+        "/contact": {
+          "status": 200,
+          "accessible": true
+        }
+      }
+    },
+    "api_integration": {
+      "health_check": {
+        "status": 200,
+        "success": true
+      },
+      "roofing_materials": {
+        "status": 405,
+        "success": false
+      }
+    },
+    "mobile_responsiveness": {
+      "status": "passed",
+      "code": 200
+    },
+    "performance": {
+      "load_time": "0.25s",
+      "acceptable": true
+    }
+  },
+  "field_ready": true,
+  "pass_rate": "100.0%"
+}

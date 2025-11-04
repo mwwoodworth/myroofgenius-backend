@@ -1,0 +1,24 @@
+# CRITICAL
+DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_ANON_KEY=<supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+SUPABASE_JWT_SECRET=<supabase-jwt-secret>
+ANTHROPIC_API_KEY=sk-ant-api03-...
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=AIza...
+ELEVENLABS_API_KEY=sk_...
+
+# PAYMENTS
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# INTEGRATIONS
+
+# MONITORING
+
+# FEATURE_FLAGS
+ENABLE_LLM_RESILIENCE=true
+ENABLE_AGENT_EVOLUTION=true
+ENABLE_REAL_TIME_DOCS=true
+ENABLE_MONITORING=true

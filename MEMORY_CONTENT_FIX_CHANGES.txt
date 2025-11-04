@@ -1,0 +1,239 @@
+COMPREHENSIVE LIST OF CHANGES FOR MEMORY CONTENT FIX
+====================================================
+
+FILE: /apps/backend/db/memory_models.py
+LINE: 47
+CHANGE: Added new column definition
+FROM: (nothing - new line)
+TO: content = Column(JSON, nullable=False, default=dict)  # CRITICAL: Required field with default empty dict
+
+---
+
+FILE: /apps/backend/services/memory_service.py
+LINE: 180
+CHANGE: Added content field to MemoryEntry creation
+FROM: 
+    memory = MemoryEntry(
+        owner_type=owner_type,
+        owner_id=owner_id,
+        key=key,
+        context_json=sanitize_for_json(value),
+        memory_type=memory_type,
+        category=category or "general",
+        tags=tags or [],
+        version=version
+    )
+TO:
+    memory = MemoryEntry(
+        owner_type=owner_type,
+        owner_id=owner_id,
+        key=key,
+        context_json=sanitize_for_json(value),
+        content=sanitize_for_json(value) if value else {},  # CRITICAL: Always set content to non-null
+        memory_type=memory_type,
+        category=category or "general",
+        tags=tags or [],
+        version=version
+    )
+
+LINE: 158
+CHANGE: Added content update for merge case
+FROM:
+    existing.context_json = sanitize_for_json(merged_value)
+TO:
+    existing.context_json = sanitize_for_json(merged_value)
+    existing.content = sanitize_for_json(merged_value)  # CRITICAL: Update content too
+
+LINE: 162
+CHANGE: Added content update for regular update
+FROM:
+    existing.context_json = sanitize_for_json(value)
+TO:
+    existing.context_json = sanitize_for_json(value)
+    existing.content = sanitize_for_json(value) if value else {}  # CRITICAL: Update content too
+
+---
+
+FILE: /apps/backend/services/cross_ai_memory.py
+LINE: 171
+CHANGE: Added content update for existing memory
+FROM:
+    existing.value = value
+TO:
+    existing.value = value
+    existing.content = {"value": value} if value else {}  # Ensure content is never null
+
+LINE: 189
+CHANGE: Added content field to new memory creation
+FROM:
+    memory_entry = MemoryEntry(
+        memory_id=memory_id,
+        owner_type=OwnerType.AGENT,
+        owner_id=agent_id,
+        key=key,
+        value=value,
+        context_json={...},
+        tags=tags or [],
+        category=category,
+        version="1.0",
+        is_active="true"
+    )
+TO:
+    memory_entry = MemoryEntry(
+        memory_id=memory_id,
+        owner_type=OwnerType.AGENT,
+        owner_id=agent_id,
+        key=key,
+        value=value,
+        content={"value": value} if value else {},  # Ensure content is never null
+        context_json={...},
+        tags=tags or [],
+        category=category,
+        version="1.0",
+        is_active="true"
+    )
+
+---
+
+FILE: /apps/backend/services/cross_ai_memory_fixed.py
+LINE: 97-100
+CHANGE: Added content to UPDATE statement
+FROM:
+    UPDATE memory_entries
+    SET value = :value,
+        context_json = :context_json,
+        tags = :tags,
+        category = :category,
+        updated_at = :updated_at
+TO:
+    UPDATE memory_entries
+    SET value = :value,
+        content = :content,
+        context_json = :context_json,
+        tags = :tags,
+        category = :category,
+        updated_at = :updated_at
+
+LINE: 113
+CHANGE: Added content parameter
+ADDED: "content": prepare_context_json({"value": value}) if value else '{}',  # CRITICAL: Always provide content
+
+LINE: 120-121
+CHANGE: Added content to INSERT columns
+FROM:
+    INSERT INTO memory_entries 
+    (memory_id, owner_type, owner_id, key, value, context_json, 
+     tags, category, version, is_active, created_at, updated_at)
+TO:
+    INSERT INTO memory_entries 
+    (memory_id, owner_type, owner_id, key, value, content, context_json, 
+     tags, category, version, is_active, created_at, updated_at)
+
+LINE: 123
+CHANGE: Added content to INSERT values
+FROM:
+    VALUES 
+    (:memory_id, :owner_type, :owner_id, :key, :value, :context_json,
+     :tags, :category, :version, :is_active, :created_at, :updated_at)
+TO:
+    VALUES 
+    (:memory_id, :owner_type, :owner_id, :key, :value, :content, :context_json,
+     :tags, :category, :version, :is_active, :created_at, :updated_at)
+
+LINE: 135
+CHANGE: Added content parameter value
+ADDED: "content": prepare_context_json({"value": value}) if value else '{}',  # CRITICAL: Always provide content
+
+---
+
+FILE: /apps/backend/sync_database_schema.py
+LINE: 224
+CHANGE: Added content to INSERT columns
+FROM:
+    INSERT INTO memory_entries 
+    (owner_type, owner_id, key, context_json, category, is_active)
+TO:
+    INSERT INTO memory_entries 
+    (owner_type, owner_id, key, content, context_json, category, is_active)
+
+LINE: 227
+CHANGE: Added content value
+FROM:
+    VALUES 
+    ('global', 'system', 'database_sync_test', 
+     '{"synced_at": "%s", "version": "1.0.21"}'::jsonb, 
+     'system', 'true')
+TO:
+    VALUES 
+    ('global', 'system', 'database_sync_test', 
+     '{}'::jsonb,
+     '{"synced_at": "%s", "version": "1.0.21"}'::jsonb, 
+     'system', 'true')
+
+LINE: 235
+CHANGE: Added content to UPDATE
+FROM:
+    UPDATE memory_entries 
+    SET context_json = '{"synced_at": "%s", "version": "1.0.21"}'::jsonb,
+        updated_at = CURRENT_TIMESTAMP
+TO:
+    UPDATE memory_entries 
+    SET content = '{}'::jsonb,
+        context_json = '{"synced_at": "%s", "version": "1.0.21"}'::jsonb,
+        updated_at = CURRENT_TIMESTAMP
+
+---
+
+FILE: /apps/backend/fix_memory_schema_now.py
+LINE: 155
+CHANGE: Added content to INSERT
+FROM:
+    INSERT INTO memory_entries 
+    (owner_type, owner_id, key, context_json, category)
+TO:
+    INSERT INTO memory_entries 
+    (owner_type, owner_id, key, content, context_json, category)
+
+LINE: 157
+CHANGE: Added content value
+FROM:
+    VALUES 
+    ('global', 'system', 'schema_fix_test', '{"fixed": true}'::jsonb, 'system')
+TO:
+    VALUES 
+    ('global', 'system', 'schema_fix_test', '{}'::jsonb, '{"fixed": true}'::jsonb, 'system')
+
+LINE: 159
+CHANGE: Added content to ON CONFLICT UPDATE
+FROM:
+    ON CONFLICT (owner_type, owner_id, key) DO UPDATE
+    SET context_json = '{"fixed": true, "updated": true}'::jsonb,
+        updated_at = CURRENT_TIMESTAMP
+TO:
+    ON CONFLICT (owner_type, owner_id, key) DO UPDATE
+    SET content = '{}'::jsonb,
+        context_json = '{"fixed": true, "updated": true}'::jsonb,
+        updated_at = CURRENT_TIMESTAMP
+
+---
+
+VERSION UPDATES:
+FILE: /apps/backend/main.py
+LINE: 578
+FROM: version="1.3.4"
+TO: version="1.3.5"
+
+FILE: /apps/backend/routes/api_health.py
+LINE: 15
+FROM: "version": "1.3.4"
+TO: "version": "1.3.5"
+
+FILE: Dockerfile
+LINE: 1
+FROM: # Production Dockerfile for BrainOps Backend v1.3.4
+TO: # Production Dockerfile for BrainOps Backend v1.3.5
+
+====================================================
+TOTAL FILES MODIFIED: 9
+TOTAL CHANGES: 20
+====================================================

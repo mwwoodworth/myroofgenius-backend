@@ -1,0 +1,23 @@
+{
+  "passed": 3,
+  "failed": 17,
+  "errors": [
+    "POST /leads: Expected 200, got 500",
+    "GET /leads: Expected 200, got 500",
+    "GET /leads/analytics: Expected 200, got 500",
+    "POST /estimates: Expected 200, got 500",
+    "GET /estimates: Expected 200, got 500",
+    "GET /jobs: Expected 200, got 500",
+    "GET /jobs/profitability: Expected 200, got 500",
+    "POST /schedules: Expected 200, got 422",
+    "GET /schedules/calendar?date=2025-09-11: Expected 200, got 500",
+    "GET /inventory/levels: Expected 200, got 500",
+    "GET /inventory/reorder: Expected 200, got 500",
+    "POST /invoices: Expected 200, got 500",
+    "GET /invoices: Expected 200, got 500",
+    "POST /payments: Expected 200, got 500",
+    "POST /service-tickets: Expected 200, got 500",
+    "POST /warranties: Expected 200, got 500",
+    "GET /service-dashboard: Expected 200, got 500"
+  ]
+}

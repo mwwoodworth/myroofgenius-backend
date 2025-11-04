@@ -1,0 +1,72 @@
+2025-09-02 10:57:03,339 - __main__ - INFO - ============================================================
+2025-09-02 10:57:03,339 - __main__ - INFO - 🚀 AI ORCHESTRATION SYSTEM INITIALIZATION
+2025-09-02 10:57:03,339 - __main__ - INFO - ============================================================
+2025-09-02 10:57:03,339 - __main__ - INFO - Creating orchestration tables...
+2025-09-02 10:57:04,374 - __main__ - ERROR - Error executing statement: column "processed" does not exist
+2025-09-02 10:57:04,374 - __main__ - ERROR - Statement: 
+CREATE INDEX IF NOT EXISTS idx_system_events_type ON system_events(event_type, processed)...
+2025-09-02 10:57:04,517 - __main__ - ERROR - Error executing statement: column "event_data" does not exist
+2025-09-02 10:57:04,517 - __main__ - ERROR - Statement: 
+CREATE INDEX IF NOT EXISTS idx_system_events_data ON system_events USING gin(event_data)...
+2025-09-02 10:57:04,562 - __main__ - ERROR - Error executing statement: unterminated dollar-quoted string at or near "$$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP"
+2025-09-02 10:57:04,562 - __main__ - ERROR - Statement: 
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+R...
+2025-09-02 10:57:04,602 - __main__ - ERROR - Error executing statement: syntax error at or near "RETURN"
+2025-09-02 10:57:04,602 - __main__ - ERROR - Statement: 
+    RETURN NEW...
+2025-09-02 10:57:04,705 - __main__ - ERROR - Error executing statement: unterminated dollar-quoted string at or near "$$ language 'plpgsql'"
+2025-09-02 10:57:04,705 - __main__ - ERROR - Statement: 
+$$ language 'plpgsql'...
+2025-09-02 10:57:04,885 - __main__ - ERROR - Error executing statement: column "workflow_id" of relation "orchestration_workflows" does not exist
+2025-09-02 10:57:04,885 - __main__ - ERROR - Statement: 
+
+-- Insert default workflows
+INSERT INTO orchestration_workflows (workflow_id, workflow_name, descr...
+2025-09-02 10:57:05,038 - __main__ - INFO - ✅ Tables created successfully
+2025-09-02 10:57:05,125 - __main__ - INFO - ✅ Verified 9 orchestration tables exist
+2025-09-02 10:57:05,181 - __main__ - INFO - Starting AI agents...
+2025-09-02 10:57:05,238 - __main__ - INFO - Starting SystemArchitect agent...
+2025-09-02 10:57:05,238 - __main__ - INFO - Starting DatabaseAgent...
+2025-09-02 10:57:05,238 - __main__ - INFO - ✅ All agents started
+Traceback (most recent call last):
+  File "/home/matt-woodworth/fastapi-operator-env/ai_orchestration/initialize.py", line 179, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/matt-woodworth/fastapi-operator-env/ai_orchestration/initialize.py", line 167, in main
+    await start_agents()
+  File "/home/matt-woodworth/fastapi-operator-env/ai_orchestration/initialize.py", line 87, in start_agents
+    await asyncio.gather(*tasks)
+  File "/home/matt-woodworth/fastapi-operator-env/ai_orchestration/agents/database_agent.py", line 887, in run
+    await self.initialize()
+  File "/home/matt-woodworth/fastapi-operator-env/ai_orchestration/core.py", line 212, in initialize
+    await conn.execute("""
+  File "/home/matt-woodworth/fastapi-operator-env/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 352, in execute
+    _, status, _ = await self._execute(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/matt-woodworth/fastapi-operator-env/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 1864, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/matt-woodworth/fastapi-operator-env/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 1961, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/matt-woodworth/fastapi-operator-env/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 2004, in _do_execute
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/matt-woodworth/fastapi-operator-env/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 432, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
+asyncpg.exceptions.UndefinedColumnError: column "specialization" of relation "agent_registry" does not exist

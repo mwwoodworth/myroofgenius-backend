@@ -1,0 +1,37 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn[standard] \
+    sqlalchemy \
+    psycopg2-binary \
+    pydantic \
+    python-jose[cryptography] \
+    passlib[bcrypt] \
+    python-multipart \
+    httpx \
+    python-dotenv \
+    stripe \
+    google-generativeai \
+    redis
+
+# Copy application
+COPY main_v504.py main.py
+COPY . .
+
+# Environment
+ENV PYTHONUNBUFFERED=1
+ENV API_VERSION=5.04
+
+# Run
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}

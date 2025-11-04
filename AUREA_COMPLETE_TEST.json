@@ -1,0 +1,102 @@
+{
+  "timestamp": "2025-08-01T15:55:01.352882",
+  "system": "AUREA",
+  "tests": {
+    "aurea_core": {
+      "status": {
+        "status": 200,
+        "success": true,
+        "response": {
+          "status": "operational",
+          "version": "3.1.147",
+          "message": "AUREA Ultimate AI Assistant",
+          "features": {
+            "chat": "enabled",
+            "voice": "ready",
+            "memory": "active",
+            "automation": "operational"
+          },
+          "timestamp": "2025-08-01T21:55:02.163804"
+        }
+      },
+      "health": {
+        "status": 200,
+        "success": true,
+        "response": {
+          "status": "healthy",
+          "service": "aurea-main",
+          "timestamp": "2025-08-01T21:55:02.306831",
+          "subsystems": {
+            "chat": "operational",
+            "memory": "operational",
+            "voice": "ready",
+            "automation": "operational"
+          }
+        }
+      },
+      "chat": {
+        "status": 200,
+        "success": true,
+        "response": {
+          "response": "Hello! I'm AUREA, your AI assistant. How can I help you today?",
+          "timestamp": "2025-08-01T18:50:32.035561",
+          "context": {
+            "user_id": "e0468cd3-a45f-4f13-abd0-8a98c5708028",
+            "processed_at": "2025-08-01T21:55:02.790316"
+          }
+        }
+      }
+    },
+    "voice_capabilities": {
+      "voice_status": "ready",
+      "voice_session": "ready",
+      "synthesis": "ready"
+    },
+    "fallback_orchestration": {
+      "fallback_configured": true,
+      "providers_available": [
+        "claude",
+        "openai",
+        "gemini"
+      ],
+      "fallback_test": {
+        "success": true,
+        "provider_used": null,
+        "fallback_triggered": false
+      }
+    },
+    "persistent_memory": {
+      "memory_created": true,
+      "memory_retrieved": true,
+      "memory_persistent": true
+    },
+    "founder_controls": {
+      "kill_switch": true,
+      "rollback": true,
+      "escalation": true,
+      "audit_log": true
+    },
+    "integrations": {
+      "knowledge_hub": {
+        "status": 404,
+        "integrated": false
+      },
+      "event_logger": {
+        "status": 404,
+        "integrated": false
+      },
+      "qc_system": {
+        "status": 404,
+        "integrated": false
+      },
+      "automation": {
+        "status": 200,
+        "integrated": true
+      }
+    }
+  },
+  "voice_ready": true,
+  "fallback_ready": true,
+  "memory_persistent": true,
+  "founder_controls": true
+}

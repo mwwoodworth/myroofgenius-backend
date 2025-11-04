@@ -1,0 +1,286 @@
+# Add these imports to main.py:
+
+
+# Tasks 111-120
+from routes.task_111_api_gateway import router as task_111_router
+from routes.task_112_microservices_orchestration import router as task_112_router
+from routes.task_113_event_streaming import router as task_113_router
+from routes.task_114_graphql_api import router as task_114_router
+from routes.task_115_webhook_management import router as task_115_router
+from routes.task_116_message_queue import router as task_116_router
+from routes.task_117_service_discovery import router as task_117_router
+from routes.task_118_load_balancing import router as task_118_router
+from routes.task_119_circuit_breaker import router as task_119_router
+from routes.task_120_api_versioning import router as task_120_router
+
+# Tasks 121-130
+from routes.task_121_identity_management import router as task_121_router
+from routes.task_122_single_sign_on import router as task_122_router
+from routes.task_123_multi_factor_auth import router as task_123_router
+from routes.task_124_oauth_provider import router as task_124_router
+from routes.task_125_api_key_management import router as task_125_router
+from routes.task_126_encryption_service import router as task_126_router
+from routes.task_127_security_monitoring import router as task_127_router
+from routes.task_128_access_control_lists import router as task_128_router
+from routes.task_129_session_management import router as task_129_router
+from routes.task_130_password_policy import router as task_130_router
+
+# Tasks 131-140
+from routes.task_131_ci_cd_pipeline import router as task_131_router
+from routes.task_132_container_registry import router as task_132_router
+from routes.task_133_infrastructure_as_code import router as task_133_router
+from routes.task_134_monitoring_stack import router as task_134_router
+from routes.task_135_log_aggregation import router as task_135_router
+from routes.task_136_backup_management import router as task_136_router
+from routes.task_137_disaster_recovery import router as task_137_router
+from routes.task_138_performance_tuning import router as task_138_router
+from routes.task_139_capacity_planning import router as task_139_router
+from routes.task_140_cost_optimization import router as task_140_router
+
+# Tasks 141-150
+from routes.task_141_team_collaboration import router as task_141_router
+from routes.task_142_video_conferencing import router as task_142_router
+from routes.task_143_screen_sharing import router as task_143_router
+from routes.task_144_whiteboard import router as task_144_router
+from routes.task_145_document_collaboration import router as task_145_router
+from routes.task_146_project_wiki import router as task_146_router
+from routes.task_147_team_calendar import router as task_147_router
+from routes.task_148_task_assignment import router as task_148_router
+from routes.task_149_time_tracking import router as task_149_router
+from routes.task_150_resource_planning import router as task_150_router
+
+# Tasks 151-160
+from routes.task_151_customer_journey import router as task_151_router
+from routes.task_152_personalization_engine import router as task_152_router
+from routes.task_153_recommendation_system import router as task_153_router
+from routes.task_154_loyalty_program import router as task_154_router
+from routes.task_155_referral_system import router as task_155_router
+from routes.task_156_survey_platform import router as task_156_router
+from routes.task_157_nps_tracking import router as task_157_router
+from routes.task_158_customer_analytics import router as task_158_router
+from routes.task_159_sentiment_analysis import router as task_159_router
+from routes.task_160_voice_of_customer import router as task_160_router
+
+# Tasks 161-170
+from routes.task_161_general_ledger import router as task_161_router
+from routes.task_162_accounts_payable import router as task_162_router
+from routes.task_163_accounts_receivable import router as task_163_router
+from routes.task_164_expense_management import router as task_164_router
+from routes.task_165_budget_planning import router as task_165_router
+from routes.task_166_cash_flow import router as task_166_router
+from routes.task_167_financial_reporting import router as task_167_router
+from routes.task_168_tax_management import router as task_168_router
+from routes.task_169_audit_trail import router as task_169_router
+from routes.task_170_revenue_recognition import router as task_170_router
+
+# Tasks 171-180
+from routes.task_171_supply_chain_visibility import router as task_171_router
+from routes.task_172_demand_planning import router as task_172_router
+from routes.task_173_supplier_portal import router as task_173_router
+from routes.task_174_transportation_management import router as task_174_router
+from routes.task_175_warehouse_optimization import router as task_175_router
+from routes.task_176_order_fulfillment import router as task_176_router
+from routes.task_177_returns_management import router as task_177_router
+from routes.task_178_quality_assurance import router as task_178_router
+from routes.task_179_supplier_scorecard import router as task_179_router
+from routes.task_180_supply_chain_analytics import router as task_180_router
+
+# Tasks 181-190
+from routes.task_181_production_planning import router as task_181_router
+from routes.task_182_shop_floor_control import router as task_182_router
+from routes.task_183_quality_control import router as task_183_router
+from routes.task_184_maintenance_management import router as task_184_router
+from routes.task_185_bill_of_materials import router as task_185_router
+from routes.task_186_work_order_management import router as task_186_router
+from routes.task_187_capacity_management import router as task_187_router
+from routes.task_188_yield_management import router as task_188_router
+from routes.task_189_defect_tracking import router as task_189_router
+from routes.task_190_mrp_system import router as task_190_router
+
+# Tasks 191-200
+from routes.task_191_customer_lifetime_value import router as task_191_router
+from routes.task_192_cohort_analysis import router as task_192_router
+from routes.task_193_funnel_analysis import router as task_193_router
+from routes.task_194_attribution_modeling import router as task_194_router
+from routes.task_195_anomaly_detection import router as task_195_router
+from routes.task_196_time_series_analysis import router as task_196_router
+from routes.task_197_segmentation_engine import router as task_197_router
+from routes.task_198_a_b_test_platform import router as task_198_router
+from routes.task_199_monte_carlo_simulation import router as task_199_router
+from routes.task_200_machine_learning_platform import router as task_200_router
+
+# Tasks 201-205
+from routes.task_201_salesforce_integration import router as task_201_router
+from routes.task_202_slack_integration import router as task_202_router
+from routes.task_203_microsoft_365_integration import router as task_203_router
+from routes.task_204_google_workspace import router as task_204_router
+from routes.task_205_plugin_marketplace import router as task_205_router
+
+
+# Add these route registrations:
+
+
+# Tasks 111-120
+try:
+    app.include_router(task_111_router, prefix="/api/v1/task111", tags=["Task 111: API Gateway"])
+    app.include_router(task_112_router, prefix="/api/v1/task112", tags=["Task 112: Microservices Orchestration"])
+    app.include_router(task_113_router, prefix="/api/v1/task113", tags=["Task 113: Event Streaming"])
+    app.include_router(task_114_router, prefix="/api/v1/task114", tags=["Task 114: GraphQL API"])
+    app.include_router(task_115_router, prefix="/api/v1/task115", tags=["Task 115: Webhook Management"])
+    app.include_router(task_116_router, prefix="/api/v1/task116", tags=["Task 116: Message Queue"])
+    app.include_router(task_117_router, prefix="/api/v1/task117", tags=["Task 117: Service Discovery"])
+    app.include_router(task_118_router, prefix="/api/v1/task118", tags=["Task 118: Load Balancing"])
+    app.include_router(task_119_router, prefix="/api/v1/task119", tags=["Task 119: Circuit Breaker"])
+    app.include_router(task_120_router, prefix="/api/v1/task120", tags=["Task 120: API Versioning"])
+    logger.info("Tasks 111-120 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 111-120: {e}")
+
+
+# Tasks 121-130
+try:
+    app.include_router(task_121_router, prefix="/api/v1/task121", tags=["Task 121: Identity Management"])
+    app.include_router(task_122_router, prefix="/api/v1/task122", tags=["Task 122: Single Sign-On"])
+    app.include_router(task_123_router, prefix="/api/v1/task123", tags=["Task 123: Multi-Factor Auth"])
+    app.include_router(task_124_router, prefix="/api/v1/task124", tags=["Task 124: OAuth Provider"])
+    app.include_router(task_125_router, prefix="/api/v1/task125", tags=["Task 125: API Key Management"])
+    app.include_router(task_126_router, prefix="/api/v1/task126", tags=["Task 126: Encryption Service"])
+    app.include_router(task_127_router, prefix="/api/v1/task127", tags=["Task 127: Security Monitoring"])
+    app.include_router(task_128_router, prefix="/api/v1/task128", tags=["Task 128: Access Control Lists"])
+    app.include_router(task_129_router, prefix="/api/v1/task129", tags=["Task 129: Session Management"])
+    app.include_router(task_130_router, prefix="/api/v1/task130", tags=["Task 130: Password Policy"])
+    logger.info("Tasks 121-130 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 121-130: {e}")
+
+
+# Tasks 131-140
+try:
+    app.include_router(task_131_router, prefix="/api/v1/task131", tags=["Task 131: CI/CD Pipeline"])
+    app.include_router(task_132_router, prefix="/api/v1/task132", tags=["Task 132: Container Registry"])
+    app.include_router(task_133_router, prefix="/api/v1/task133", tags=["Task 133: Infrastructure as Code"])
+    app.include_router(task_134_router, prefix="/api/v1/task134", tags=["Task 134: Monitoring Stack"])
+    app.include_router(task_135_router, prefix="/api/v1/task135", tags=["Task 135: Log Aggregation"])
+    app.include_router(task_136_router, prefix="/api/v1/task136", tags=["Task 136: Backup Management"])
+    app.include_router(task_137_router, prefix="/api/v1/task137", tags=["Task 137: Disaster Recovery"])
+    app.include_router(task_138_router, prefix="/api/v1/task138", tags=["Task 138: Performance Tuning"])
+    app.include_router(task_139_router, prefix="/api/v1/task139", tags=["Task 139: Capacity Planning"])
+    app.include_router(task_140_router, prefix="/api/v1/task140", tags=["Task 140: Cost Optimization"])
+    logger.info("Tasks 131-140 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 131-140: {e}")
+
+
+# Tasks 141-150
+try:
+    app.include_router(task_141_router, prefix="/api/v1/task141", tags=["Task 141: Team Collaboration"])
+    app.include_router(task_142_router, prefix="/api/v1/task142", tags=["Task 142: Video Conferencing"])
+    app.include_router(task_143_router, prefix="/api/v1/task143", tags=["Task 143: Screen Sharing"])
+    app.include_router(task_144_router, prefix="/api/v1/task144", tags=["Task 144: Whiteboard"])
+    app.include_router(task_145_router, prefix="/api/v1/task145", tags=["Task 145: Document Collaboration"])
+    app.include_router(task_146_router, prefix="/api/v1/task146", tags=["Task 146: Project Wiki"])
+    app.include_router(task_147_router, prefix="/api/v1/task147", tags=["Task 147: Team Calendar"])
+    app.include_router(task_148_router, prefix="/api/v1/task148", tags=["Task 148: Task Assignment"])
+    app.include_router(task_149_router, prefix="/api/v1/task149", tags=["Task 149: Time Tracking"])
+    app.include_router(task_150_router, prefix="/api/v1/task150", tags=["Task 150: Resource Planning"])
+    logger.info("Tasks 141-150 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 141-150: {e}")
+
+
+# Tasks 151-160
+try:
+    app.include_router(task_151_router, prefix="/api/v1/task151", tags=["Task 151: Customer Journey"])
+    app.include_router(task_152_router, prefix="/api/v1/task152", tags=["Task 152: Personalization Engine"])
+    app.include_router(task_153_router, prefix="/api/v1/task153", tags=["Task 153: Recommendation System"])
+    app.include_router(task_154_router, prefix="/api/v1/task154", tags=["Task 154: Loyalty Program"])
+    app.include_router(task_155_router, prefix="/api/v1/task155", tags=["Task 155: Referral System"])
+    app.include_router(task_156_router, prefix="/api/v1/task156", tags=["Task 156: Survey Platform"])
+    app.include_router(task_157_router, prefix="/api/v1/task157", tags=["Task 157: NPS Tracking"])
+    app.include_router(task_158_router, prefix="/api/v1/task158", tags=["Task 158: Customer Analytics"])
+    app.include_router(task_159_router, prefix="/api/v1/task159", tags=["Task 159: Sentiment Analysis"])
+    app.include_router(task_160_router, prefix="/api/v1/task160", tags=["Task 160: Voice of Customer"])
+    logger.info("Tasks 151-160 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 151-160: {e}")
+
+
+# Tasks 161-170
+try:
+    app.include_router(task_161_router, prefix="/api/v1/task161", tags=["Task 161: General Ledger"])
+    app.include_router(task_162_router, prefix="/api/v1/task162", tags=["Task 162: Accounts Payable"])
+    app.include_router(task_163_router, prefix="/api/v1/task163", tags=["Task 163: Accounts Receivable"])
+    app.include_router(task_164_router, prefix="/api/v1/task164", tags=["Task 164: Expense Management"])
+    app.include_router(task_165_router, prefix="/api/v1/task165", tags=["Task 165: Budget Planning"])
+    app.include_router(task_166_router, prefix="/api/v1/task166", tags=["Task 166: Cash Flow"])
+    app.include_router(task_167_router, prefix="/api/v1/task167", tags=["Task 167: Financial Reporting"])
+    app.include_router(task_168_router, prefix="/api/v1/task168", tags=["Task 168: Tax Management"])
+    app.include_router(task_169_router, prefix="/api/v1/task169", tags=["Task 169: Audit Trail"])
+    app.include_router(task_170_router, prefix="/api/v1/task170", tags=["Task 170: Revenue Recognition"])
+    logger.info("Tasks 161-170 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 161-170: {e}")
+
+
+# Tasks 171-180
+try:
+    app.include_router(task_171_router, prefix="/api/v1/task171", tags=["Task 171: Supply Chain Visibility"])
+    app.include_router(task_172_router, prefix="/api/v1/task172", tags=["Task 172: Demand Planning"])
+    app.include_router(task_173_router, prefix="/api/v1/task173", tags=["Task 173: Supplier Portal"])
+    app.include_router(task_174_router, prefix="/api/v1/task174", tags=["Task 174: Transportation Management"])
+    app.include_router(task_175_router, prefix="/api/v1/task175", tags=["Task 175: Warehouse Optimization"])
+    app.include_router(task_176_router, prefix="/api/v1/task176", tags=["Task 176: Order Fulfillment"])
+    app.include_router(task_177_router, prefix="/api/v1/task177", tags=["Task 177: Returns Management"])
+    app.include_router(task_178_router, prefix="/api/v1/task178", tags=["Task 178: Quality Assurance"])
+    app.include_router(task_179_router, prefix="/api/v1/task179", tags=["Task 179: Supplier Scorecard"])
+    app.include_router(task_180_router, prefix="/api/v1/task180", tags=["Task 180: Supply Chain Analytics"])
+    logger.info("Tasks 171-180 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 171-180: {e}")
+
+
+# Tasks 181-190
+try:
+    app.include_router(task_181_router, prefix="/api/v1/task181", tags=["Task 181: Production Planning"])
+    app.include_router(task_182_router, prefix="/api/v1/task182", tags=["Task 182: Shop Floor Control"])
+    app.include_router(task_183_router, prefix="/api/v1/task183", tags=["Task 183: Quality Control"])
+    app.include_router(task_184_router, prefix="/api/v1/task184", tags=["Task 184: Maintenance Management"])
+    app.include_router(task_185_router, prefix="/api/v1/task185", tags=["Task 185: Bill of Materials"])
+    app.include_router(task_186_router, prefix="/api/v1/task186", tags=["Task 186: Work Order Management"])
+    app.include_router(task_187_router, prefix="/api/v1/task187", tags=["Task 187: Capacity Management"])
+    app.include_router(task_188_router, prefix="/api/v1/task188", tags=["Task 188: Yield Management"])
+    app.include_router(task_189_router, prefix="/api/v1/task189", tags=["Task 189: Defect Tracking"])
+    app.include_router(task_190_router, prefix="/api/v1/task190", tags=["Task 190: MRP System"])
+    logger.info("Tasks 181-190 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 181-190: {e}")
+
+
+# Tasks 191-200
+try:
+    app.include_router(task_191_router, prefix="/api/v1/task191", tags=["Task 191: Customer Lifetime Value"])
+    app.include_router(task_192_router, prefix="/api/v1/task192", tags=["Task 192: Cohort Analysis"])
+    app.include_router(task_193_router, prefix="/api/v1/task193", tags=["Task 193: Funnel Analysis"])
+    app.include_router(task_194_router, prefix="/api/v1/task194", tags=["Task 194: Attribution Modeling"])
+    app.include_router(task_195_router, prefix="/api/v1/task195", tags=["Task 195: Anomaly Detection"])
+    app.include_router(task_196_router, prefix="/api/v1/task196", tags=["Task 196: Time Series Analysis"])
+    app.include_router(task_197_router, prefix="/api/v1/task197", tags=["Task 197: Segmentation Engine"])
+    app.include_router(task_198_router, prefix="/api/v1/task198", tags=["Task 198: A/B Test Platform"])
+    app.include_router(task_199_router, prefix="/api/v1/task199", tags=["Task 199: Monte Carlo Simulation"])
+    app.include_router(task_200_router, prefix="/api/v1/task200", tags=["Task 200: Machine Learning Platform"])
+    logger.info("Tasks 191-200 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 191-200: {e}")
+
+
+# Tasks 201-205
+try:
+    app.include_router(task_201_router, prefix="/api/v1/task201", tags=["Task 201: Salesforce Integration"])
+    app.include_router(task_202_router, prefix="/api/v1/task202", tags=["Task 202: Slack Integration"])
+    app.include_router(task_203_router, prefix="/api/v1/task203", tags=["Task 203: Microsoft 365 Integration"])
+    app.include_router(task_204_router, prefix="/api/v1/task204", tags=["Task 204: Google Workspace"])
+    app.include_router(task_205_router, prefix="/api/v1/task205", tags=["Task 205: Plugin Marketplace"])
+    logger.info("Tasks 201-205 routes loaded successfully")
+except Exception as e:
+    logger.error(f"Error loading Tasks 201-205: {e}")
+

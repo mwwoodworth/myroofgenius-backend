@@ -1,0 +1,243 @@
+{
+  "timestamp": "2025-08-17T20:03:45.628378",
+  "summary": {
+    "total": 33,
+    "passed": 30,
+    "failed": 0,
+    "warnings": 3,
+    "health_score": 90.9090909090909
+  },
+  "results": [
+    {
+      "category": "DATABASE",
+      "test": "Connection",
+      "status": "PASS",
+      "details": "PostgreSQL PostgreSQL 15.8 on a...",
+      "timestamp": "2025-08-17T20:03:42.426118"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema task_os",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467068"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema core",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467207"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema ops",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467233"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema memory",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467248"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema docs",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467260"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema data",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467271"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema email",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467282"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Schema revenue",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:42.467293"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Table task_os.epics",
+      "status": "PASS",
+      "details": "13 records",
+      "timestamp": "2025-08-17T20:03:42.544548"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Table task_os.tasks",
+      "status": "PASS",
+      "details": "0 records",
+      "timestamp": "2025-08-17T20:03:42.623005"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Table core.env_registry",
+      "status": "PASS",
+      "details": "464 records",
+      "timestamp": "2025-08-17T20:03:42.699349"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Table ops.run_logs",
+      "status": "PASS",
+      "details": "0 records",
+      "timestamp": "2025-08-17T20:03:42.781498"
+    },
+    {
+      "category": "DATABASE",
+      "test": "Table memory.agent_memories",
+      "status": "PASS",
+      "details": "0 records",
+      "timestamp": "2025-08-17T20:03:42.858462"
+    },
+    {
+      "category": "BACKEND_API",
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Status: healthy",
+      "timestamp": "2025-08-17T20:03:43.062839"
+    },
+    {
+      "category": "BACKEND_API",
+      "test": "Version",
+      "status": "PASS",
+      "details": "Version: 4.30",
+      "timestamp": "2025-08-17T20:03:43.156409"
+    },
+    {
+      "category": "BACKEND_API",
+      "test": "Public /api/v1/products/public",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:43.258278"
+    },
+    {
+      "category": "BACKEND_API",
+      "test": "Public /api/v1/aurea/public/chat",
+      "status": "WARNING",
+      "details": "Endpoint not found",
+      "timestamp": "2025-08-17T20:03:43.339964"
+    },
+    {
+      "category": "BACKEND_API",
+      "test": "Public /api/v1/marketplace/products",
+      "status": "PASS",
+      "details": "",
+      "timestamp": "2025-08-17T20:03:43.858651"
+    },
+    {
+      "category": "TASK_OS",
+      "test": "Service Status",
+      "status": "PASS",
+      "details": "Version: 1.0.0",
+      "timestamp": "2025-08-17T20:03:43.881594"
+    },
+    {
+      "category": "TASK_OS",
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Task count: 0",
+      "timestamp": "2025-08-17T20:03:43.927724"
+    },
+    {
+      "category": "ENV_REGISTRY",
+      "test": "Total Variables",
+      "status": "PASS",
+      "details": "464 variables registered",
+      "timestamp": "2025-08-17T20:03:44.305017"
+    },
+    {
+      "category": "ENV_REGISTRY",
+      "test": "Scope service",
+      "status": "PASS",
+      "details": "404 variables",
+      "timestamp": "2025-08-17T20:03:44.348648"
+    },
+    {
+      "category": "ENV_REGISTRY",
+      "test": "Scope env",
+      "status": "PASS",
+      "details": "37 variables",
+      "timestamp": "2025-08-17T20:03:44.348928"
+    },
+    {
+      "category": "ENV_REGISTRY",
+      "test": "Scope global",
+      "status": "PASS",
+      "details": "23 variables",
+      "timestamp": "2025-08-17T20:03:44.348989"
+    },
+    {
+      "category": "ENV_REGISTRY",
+      "test": "Encrypted Variables",
+      "status": "PASS",
+      "details": "127 encrypted values",
+      "timestamp": "2025-08-17T20:03:44.391209"
+    },
+    {
+      "category": "MEMORY_SYSTEM",
+      "test": "Agent Memories",
+      "status": "PASS",
+      "details": "0 memories stored",
+      "timestamp": "2025-08-17T20:03:44.741442"
+    },
+    {
+      "category": "MEMORY_SYSTEM",
+      "test": "Memory Usage",
+      "status": "PASS",
+      "details": "0 usage records",
+      "timestamp": "2025-08-17T20:03:44.780945"
+    },
+    {
+      "category": "DATA_PIPELINE",
+      "test": "Data Sources",
+      "status": "PASS",
+      "details": "0 sources configured",
+      "timestamp": "2025-08-17T20:03:45.138190"
+    },
+    {
+      "category": "DATA_PIPELINE",
+      "test": "Ingestions",
+      "status": "WARNING",
+      "details": "No ingestions run yet",
+      "timestamp": "2025-08-17T20:03:45.177369"
+    },
+    {
+      "category": "DATA_PIPELINE",
+      "test": "Reconciliations",
+      "status": "PASS",
+      "details": "0 reconciliations",
+      "timestamp": "2025-08-17T20:03:45.216587"
+    },
+    {
+      "category": "REVENUE",
+      "test": "Payments",
+      "status": "WARNING",
+      "details": "No payments recorded",
+      "timestamp": "2025-08-17T20:03:45.579853"
+    },
+    {
+      "category": "REVENUE",
+      "test": "Webhooks",
+      "status": "PASS",
+      "details": "0 webhook events",
+      "timestamp": "2025-08-17T20:03:45.627712"
+    }
+  ]
+}

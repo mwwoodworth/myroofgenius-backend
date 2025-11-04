@@ -1,0 +1,87 @@
+[
+  {
+    "id": "ai-roof-inspector",
+    "name": "AI Roof Inspector Pro",
+    "description": "Advanced AI analysis of roof photos with instant detailed reports",
+    "price": 4900,
+    "currency": "usd",
+    "features": [
+      "Instant damage detection",
+      "Material identification",
+      "Cost estimates",
+      "PDF report generation",
+      "30-day history"
+    ],
+    "delivery": "instant",
+    "category": "software",
+    "stripe_price_id": "price_1PxxxxxxxxxxxxAI"
+  },
+  {
+    "id": "smart-cost-calculator",
+    "name": "Smart Cost Calculator",
+    "description": "AI-powered roofing cost estimation tool with market data",
+    "price": 2900,
+    "currency": "usd",
+    "features": [
+      "Real-time material pricing",
+      "Labor cost calculations",
+      "Regional adjustments",
+      "Export to Excel",
+      "Unlimited estimates"
+    ],
+    "delivery": "instant",
+    "category": "software",
+    "stripe_price_id": "price_1PxxxxxxxxxxxxSC"
+  },
+  {
+    "id": "field-genius-mobile",
+    "name": "Field Genius Mobile",
+    "description": "Complete mobile app for roofing crews with offline support",
+    "price": 9900,
+    "currency": "usd",
+    "features": [
+      "Offline photo capture",
+      "Voice notes",
+      "GPS tracking",
+      "Team collaboration",
+      "Cloud sync"
+    ],
+    "delivery": "instant",
+    "category": "software",
+    "stripe_price_id": "price_1PxxxxxxxxxxxxFG"
+  },
+  {
+    "id": "ai-document-shop",
+    "name": "AI Document Shop",
+    "description": "Generate professional roofing documents with AI",
+    "price": 3900,
+    "currency": "usd",
+    "features": [
+      "Contracts & agreements",
+      "Proposals & estimates",
+      "Safety documents",
+      "Insurance forms",
+      "Custom branding"
+    ],
+    "delivery": "instant",
+    "category": "software",
+    "stripe_price_id": "price_1PxxxxxxxxxxxxDS"
+  },
+  {
+    "id": "weather-shield-analytics",
+    "name": "Weather Shield Analytics",
+    "description": "Real-time weather monitoring for roofing projects",
+    "price": 1900,
+    "currency": "usd",
+    "features": [
+      "7-day forecasts",
+      "Storm alerts",
+      "Job scheduling AI",
+      "Historical data",
+      "SMS notifications"
+    ],
+    "delivery": "instant",
+    "category": "subscription",
+    "stripe_price_id": "price_1PxxxxxxxxxxxxWS"
+  }
+]
