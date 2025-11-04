@@ -76,6 +76,11 @@ ROUTE_MAPPINGS = {
     "strategic_planning": "/api/v1/strategic-planning",
 }
 
+EXCLUDED_MODULES = {
+    # Replaced by routes.erp_core_runtime which provides resilient implementations
+    "complete_erp",
+}
+
 def load_all_routes(app: FastAPI):
     """
     Dynamically load all route files from the routes directory
@@ -96,6 +101,9 @@ def load_all_routes(app: FastAPI):
 
     # Load each route file
     for module_name in sorted(route_files):
+        if module_name in EXCLUDED_MODULES:
+            logger.info(f"Skipping route module {module_name} (handled elsewhere)")
+            continue
         try:
             # Import the module
             module = importlib.import_module(f"routes.{module_name}")

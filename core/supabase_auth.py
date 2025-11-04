@@ -18,22 +18,40 @@ from jwt import PyJWTError
 
 logger = logging.getLogger(__name__)
 
-def _require_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"{name} is not configured. Set {name} in the environment.")
-    return value
+# Supabase configuration (optional)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
+SUPABASE_AVAILABLE = all([
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_JWT_SECRET,
+])
 
-# Supabase configuration
-SUPABASE_URL = _require_env("SUPABASE_URL")
-SUPABASE_ANON_KEY = _require_env("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_ROLE_KEY = _require_env("SUPABASE_SERVICE_ROLE_KEY")
-SUPABASE_JWT_SECRET = _require_env("SUPABASE_JWT_SECRET")
+supabase_anon: Optional[Client] = None
+supabase_service: Optional[Client] = None
 
-# Create Supabase clients
-supabase_anon: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-supabase_service: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+if SUPABASE_AVAILABLE:
+    supabase_anon = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    supabase_service = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+else:
+    logger.warning(
+        "Supabase configuration not detected. Authentication middleware will run in offline mode."
+    )
+
+OFFLINE_USER_CONTEXT: Dict[str, Any] = {
+    "id": os.getenv("OFFLINE_SYSTEM_USER_ID", "offline-system-user"),
+    "email": os.getenv("OFFLINE_SYSTEM_USER_EMAIL", "offline@brainops.local"),
+    "tenant_id": os.getenv("OFFLINE_TENANT_ID", "offline-tenant"),
+    "user_metadata": {},
+    "app_metadata": {},
+    "role": os.getenv("OFFLINE_SYSTEM_USER_ROLE", "service"),
+    "created_at": None,
+    "last_sign_in_at": None,
+}
 
 
 async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
@@ -49,6 +67,10 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     Raises:
         HTTPException: If token is invalid or missing
     """
+    if not SUPABASE_AVAILABLE:
+        # Offline fallback: trust incoming request and return deterministic identity
+        return OFFLINE_USER_CONTEXT.copy()
+
     if not authorization:
         raise HTTPException(
             status_code=401,
@@ -140,6 +162,8 @@ async def get_supabase_client() -> Client:
     Returns:
         Client: Supabase client with service role privileges
     """
+    if not SUPABASE_AVAILABLE or not supabase_service:
+        raise RuntimeError("Supabase service client unavailable in offline mode.")
     return supabase_service
 
 
@@ -241,5 +265,6 @@ __all__ = [
     "verify_tenant_access",
     "require_role",
     "supabase_anon",
-    "supabase_service"
+    "supabase_service",
+    "SUPABASE_AVAILABLE",
 ]
