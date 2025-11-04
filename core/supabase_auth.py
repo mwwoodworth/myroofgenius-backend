@@ -42,12 +42,23 @@ else:
         "Supabase configuration not detected. Authentication middleware will run in offline mode."
     )
 
+DEFAULT_OFFLINE_TENANT = os.getenv(
+    "OFFLINE_TENANT_ID",
+    "51e728c5-94e8-4ae0-8a0a-6a08d1fb3457"
+)
+
 OFFLINE_USER_CONTEXT: Dict[str, Any] = {
     "id": os.getenv("OFFLINE_SYSTEM_USER_ID", "offline-system-user"),
     "email": os.getenv("OFFLINE_SYSTEM_USER_EMAIL", "offline@brainops.local"),
-    "tenant_id": os.getenv("OFFLINE_TENANT_ID", "offline-tenant"),
-    "user_metadata": {},
-    "app_metadata": {},
+    "tenant_id": DEFAULT_OFFLINE_TENANT,
+    "user_metadata": {
+        "tenant_id": DEFAULT_OFFLINE_TENANT,
+        "role": os.getenv("OFFLINE_SYSTEM_USER_ROLE", "service"),
+    },
+    "app_metadata": {
+        "tenant_id": DEFAULT_OFFLINE_TENANT,
+        "role": os.getenv("OFFLINE_SYSTEM_USER_ROLE", "service"),
+    },
     "role": os.getenv("OFFLINE_SYSTEM_USER_ROLE", "service"),
     "created_at": None,
     "last_sign_in_at": None,

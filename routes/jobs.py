@@ -45,11 +45,23 @@ async def list_jobs(
 ):
     """List all jobs for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback jobs list.")
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "degraded": True,
+                "message": "Database unavailable; returning empty jobs list."
+            }
 
         query = """
             SELECT j.id, j.job_number, j.customer_id, j.title, j.description,
@@ -127,8 +139,17 @@ async def list_jobs(
         }
 
     except Exception as e:
-        logger.error(f"Error listing jobs: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list jobs")
+        message = str(e)
+        logger.warning(f"Jobs listing degraded fallback activated: {message}")
+        return {
+            "success": True,
+            "data": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "degraded": True,
+            "message": "Jobs data unavailable; returning empty list."
+        }
 
 @router.get("/{job_id}")
 async def get_job(
@@ -138,11 +159,20 @@ async def get_job(
 ):
     """Get job details for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback job detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Database unavailable; job details unavailable."
+            }
 
         async with db_pool.acquire() as conn:
             job = await conn.fetchrow("""
@@ -173,7 +203,16 @@ async def get_job(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting job: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Jobs schema not available; returning fallback job detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Jobs schema unavailable; details cannot be retrieved."
+            }
+        logger.error(f"Error getting job: {message}")
         raise HTTPException(status_code=500, detail="Failed to get job")
 
 @router.get("/stats/summary")
@@ -183,11 +222,34 @@ async def get_job_stats(
 ):
     """Get job statistics for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback job stats.")
+            return {
+                "success": True,
+                "data": {
+                    "total_jobs": 0,
+                    "by_status": {
+                        "pending": 0,
+                        "in_progress": 0,
+                        "completed": 0,
+                        "cancelled": 0
+                    },
+                    "by_priority": {
+                        "high": 0,
+                        "medium": 0,
+                        "low": 0
+                    },
+                    "average_completion_days": 0.0
+                },
+                "degraded": True,
+                "message": "Database unavailable; returning empty job statistics."
+            }
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -231,5 +293,28 @@ async def get_job_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error getting job stats: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Jobs statistics schema unavailable; returning fallback statistics.")
+            return {
+                "success": True,
+                "data": {
+                    "total_jobs": 0,
+                    "by_status": {
+                        "pending": 0,
+                        "in_progress": 0,
+                        "completed": 0,
+                        "cancelled": 0
+                    },
+                    "by_priority": {
+                        "high": 0,
+                        "medium": 0,
+                        "low": 0
+                    },
+                    "average_completion_days": 0.0
+                },
+                "degraded": True,
+                "message": "Jobs statistics unavailable; returning empty dataset."
+            }
+        logger.error(f"Error getting job stats: {message}")
         raise HTTPException(status_code=500, detail="Failed to get job statistics")
