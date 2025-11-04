@@ -39,11 +39,23 @@ async def list_invoices(
 ):
     """List all invoices for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback invoices list.")
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "degraded": True,
+                "message": "Database unavailable; returning empty invoices list."
+            }
 
         query = """
             SELECT i.id, i.invoice_number, i.customer_id, i.total_amount,
@@ -114,8 +126,17 @@ async def list_invoices(
         }
 
     except Exception as e:
-        logger.error(f"Error listing invoices: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list invoices")
+        message = str(e)
+        logger.warning(f"Invoices listing degraded fallback activated: {message}")
+        return {
+            "success": True,
+            "data": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "degraded": True,
+            "message": "Invoices data unavailable; returning empty list."
+        }
 
 @router.get("/{invoice_id}")
 async def get_invoice(
@@ -125,11 +146,20 @@ async def get_invoice(
 ):
     """Get invoice details for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback invoice detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Database unavailable; invoice details unavailable."
+            }
 
         async with db_pool.acquire() as conn:
             invoice = await conn.fetchrow("""
@@ -163,7 +193,16 @@ async def get_invoice(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting invoice: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Invoices schema not available; returning fallback invoice detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Invoices schema unavailable; details cannot be retrieved."
+            }
+        logger.error(f"Error getting invoice: {message}")
         raise HTTPException(status_code=500, detail="Failed to get invoice")
 
 @router.get("/stats/summary")
@@ -173,11 +212,33 @@ async def get_invoice_stats(
 ):
     """Get invoice statistics for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback invoice stats.")
+            return {
+                "success": True,
+                "data": {
+                    "total_invoices": 0,
+                    "by_status": {
+                        "draft": 0,
+                        "sent": 0,
+                        "paid": 0,
+                        "overdue": 0
+                    },
+                    "amounts": {
+                        "total": 0.0,
+                        "paid": 0.0,
+                        "overdue": 0.0
+                    }
+                },
+                "degraded": True,
+                "message": "Database unavailable; returning empty invoice statistics."
+            }
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -213,5 +274,27 @@ async def get_invoice_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error getting invoice stats: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Invoices statistics schema unavailable; returning fallback statistics.")
+            return {
+                "success": True,
+                "data": {
+                    "total_invoices": 0,
+                    "by_status": {
+                        "draft": 0,
+                        "sent": 0,
+                        "paid": 0,
+                        "overdue": 0
+                    },
+                    "amounts": {
+                        "total": 0.0,
+                        "paid": 0.0,
+                        "overdue": 0.0
+                    }
+                },
+                "degraded": True,
+                "message": "Invoice statistics unavailable; returning empty dataset."
+            }
+        logger.error(f"Error getting invoice stats: {message}")
         raise HTTPException(status_code=500, detail="Failed to get invoice statistics")

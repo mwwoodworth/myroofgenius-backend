@@ -3,6 +3,7 @@ WeatherCraft ERP Backend Configuration
 Centralized configuration management with environment variables
 """
 
+import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import Field
@@ -140,11 +141,21 @@ settings = Settings()
 # Helper functions
 def get_database_url() -> str:
     """Get database URL from environment configuration"""
-    if not settings.database_url:
-        raise RuntimeError(
-            "DATABASE_URL is not configured. Set DATABASE_URL in the environment or .env file."
-        )
-    return settings.database_url
+    if settings.database_url:
+        return settings.database_url
+
+    host = os.getenv("DB_HOST") or os.getenv("SUPABASE_DB_HOST")
+    port = os.getenv("DB_PORT") or os.getenv("SUPABASE_DB_PORT") or "6543"
+    name = os.getenv("DB_NAME") or os.getenv("SUPABASE_DB_NAME")
+    user = os.getenv("DB_USER") or os.getenv("SUPABASE_DB_USER")
+    password = os.getenv("DB_PASSWORD") or os.getenv("SUPABASE_DB_PASSWORD")
+
+    if all([host, port, name, user, password]):
+        return f"postgresql://{user}:{password}@{host}:{port}/{name}?sslmode=require"
+
+    raise RuntimeError(
+        "DATABASE_URL is not configured. Set DATABASE_URL or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD in the environment."
+    )
 
 def get_ai_provider_key(provider: str) -> Optional[str]:
     """Get API key for specified AI provider"""

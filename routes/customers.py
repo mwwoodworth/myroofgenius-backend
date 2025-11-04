@@ -41,11 +41,23 @@ async def list_customers(
 ):
     """List all customers for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback customers list.")
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "degraded": True,
+                "message": "Database unavailable; returning empty customer list."
+            }
 
         query = """
             SELECT id, name, email, phone, company, address, city, state,
@@ -105,8 +117,17 @@ async def list_customers(
         }
 
     except Exception as e:
-        logger.error(f"Error listing customers: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list customers")
+        message = str(e)
+        logger.warning(f"Customers listing degraded fallback activated: {message}")
+        return {
+            "success": True,
+            "data": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "degraded": True,
+            "message": "Customers data unavailable; returning empty list."
+        }
 
 @router.get("/{customer_id}")
 async def get_customer(
@@ -116,11 +137,20 @@ async def get_customer(
 ):
     """Get customer details for the authenticated tenant"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback customer detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Database unavailable; customer details unavailable."
+            }
 
         async with db_pool.acquire() as conn:
             customer = await conn.fetchrow("""
@@ -161,7 +191,16 @@ async def get_customer(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting customer: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Customers schema not available; returning fallback customer detail.")
+            return {
+                "success": True,
+                "data": None,
+                "degraded": True,
+                "message": "Customers schema unavailable; details cannot be retrieved."
+            }
+        logger.error(f"Error getting customer: {message}")
         raise HTTPException(status_code=500, detail="Failed to get customer")
 
 @router.get("/stats/summary")
@@ -171,11 +210,31 @@ async def get_customer_stats(
 ):
     """Get customer statistics"""
     try:
-        db_pool = request.app.state.db_pool
+        db_pool = getattr(request.app.state, "db_pool", None)
         tenant_id = current_user.get("tenant_id")
 
         if not tenant_id:
             raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            logger.warning("Database pool unavailable; returning fallback customer stats.")
+            return {
+                "success": True,
+                "data": {
+                    "total_customers": 0,
+                    "by_status": {
+                        "active": 0,
+                        "inactive": 0
+                    },
+                    "growth": {
+                        "new_this_month": 0,
+                        "new_this_week": 0
+                    },
+                    "top_customers": []
+                },
+                "degraded": True,
+                "message": "Database unavailable; returning empty statistics."
+            }
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -224,5 +283,25 @@ async def get_customer_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error getting customer stats: {e}")
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Customer stats schema unavailable; returning fallback statistics.")
+            return {
+                "success": True,
+                "data": {
+                    "total_customers": 0,
+                    "by_status": {
+                        "active": 0,
+                        "inactive": 0
+                    },
+                    "growth": {
+                        "new_this_month": 0,
+                        "new_this_week": 0
+                    },
+                    "top_customers": []
+                },
+                "degraded": True,
+                "message": "Customer statistics unavailable; returning empty dataset."
+            }
+        logger.error(f"Error getting customer stats: {message}")
         raise HTTPException(status_code=500, detail="Failed to get customer statistics")

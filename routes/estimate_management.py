@@ -11,12 +11,15 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 from enum import Enum
+import logging
 
 from database import get_db
 from core.supabase_auth import get_current_user  # SUPABASE AUTH
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/estimates")
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1/estimates", tags=["Estimates"])
 
 # ============================================================================
 # ESTIMATE MODELS
@@ -261,6 +264,7 @@ async def create_estimate(
             detail=f"Failed to create estimate: {str(e)}"
         )
 
+@router.get("", response_model=Dict[str, Any])
 @router.get("/", response_model=Dict[str, Any])
 async def list_estimates(
     customer_id: Optional[str] = None,
@@ -356,16 +360,34 @@ async def list_estimates(
             })
 
         return {
-            "total": total,
-            "estimates": estimates,
-            "limit": limit,
-            "offset": offset
+            "success": True,
+            "data": {
+                "total": total,
+                "estimates": estimates,
+                "limit": limit,
+                "offset": offset
+            }
         }
 
     except Exception as e:
+        message = str(e)
+        if "does not exist" in message or "UndefinedTable" in message:
+            logger.warning("Estimates schema unavailable; returning fallback dataset.")
+            return {
+                "success": True,
+                "data": {
+                    "total": 0,
+                    "estimates": [],
+                    "limit": limit,
+                    "offset": offset
+                },
+                "degraded": True,
+                "message": "Estimates schema unavailable; returning empty list."
+            }
+        logger.error(f"Failed to list estimates: {message}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list estimates: {str(e)}"
+            detail="Failed to list estimates"
         )
 
 @router.get("/{estimate_id}", response_model=Dict[str, Any])

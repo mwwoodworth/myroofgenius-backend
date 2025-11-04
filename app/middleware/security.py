@@ -201,10 +201,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
     def _extract_api_key(self, request: Request) -> Optional[str]:
         """Extract API key from request headers."""
-        # Check Authorization header
+        # Check Authorization header for explicit ApiKey scheme
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            return auth_header[7:]
+        if auth_header.startswith("ApiKey "):
+            return auth_header[len("ApiKey "):].strip()
 
         # Check X-API-Key header
         return request.headers.get("X-API-Key")
