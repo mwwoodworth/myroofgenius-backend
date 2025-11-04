@@ -1,0 +1,212 @@
+{
+  "timestamp": "2025-08-23T21:14:22.927085",
+  "pricing": {
+    "starter": {
+      "name": "Starter",
+      "price": 29,
+      "features": [
+        "5 AI roof analyses/month",
+        "Basic estimation tools",
+        "Email support",
+        "Mobile app access"
+      ]
+    },
+    "professional": {
+      "name": "Professional",
+      "price": 97,
+      "features": [
+        "50 AI roof analyses/month",
+        "Advanced estimation suite",
+        "Priority support",
+        "Team collaboration (3 users)",
+        "API access"
+      ]
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "price": 297,
+      "features": [
+        "Unlimited AI analyses",
+        "Custom AI training",
+        "Dedicated account manager",
+        "Unlimited users",
+        "White-label options",
+        "SLA guarantee"
+      ]
+    }
+  },
+  "lead_magnets": [
+    {
+      "title": "Free AI Roof Analysis",
+      "description": "Get instant AI-powered roof assessment from a photo",
+      "value": "$99",
+      "cta": "Get Your Free Analysis",
+      "conversion_rate": 0.35
+    },
+    {
+      "title": "2025 Roofing Cost Calculator",
+      "description": "Interactive calculator with local pricing data",
+      "value": "$49",
+      "cta": "Calculate Your Costs",
+      "conversion_rate": 0.28
+    },
+    {
+      "title": "Insurance Claim Guide",
+      "description": "Step-by-step guide to maximize your claim",
+      "value": "$197",
+      "cta": "Download Free Guide",
+      "conversion_rate": 0.42
+    }
+  ],
+  "email_campaigns": {
+    "welcome": {
+      "sequence": [
+        {
+          "delay": 0,
+          "subject": "Welcome! Here's your free AI roof analysis"
+        },
+        {
+          "delay": 1,
+          "subject": "\u26a1 48-hour special: 50% off Professional plan"
+        },
+        {
+          "delay": 3,
+          "subject": "Case study: How Bob saved $5,000 on his roof"
+        },
+        {
+          "delay": 7,
+          "subject": "Last chance: Your discount expires tonight"
+        }
+      ]
+    },
+    "abandoned_cart": {
+      "sequence": [
+        {
+          "delay": 1,
+          "subject": "You left something behind..."
+        },
+        {
+          "delay": 2,
+          "subject": "\ud83c\udf81 Here's 20% off to complete your order"
+        },
+        {
+          "delay": 5,
+          "subject": "Final reminder: Your cart expires soon"
+        }
+      ]
+    },
+    "win_back": {
+      "sequence": [
+        {
+          "delay": 30,
+          "subject": "We miss you! Here's 40% off"
+        },
+        {
+          "delay": 45,
+          "subject": "New features you'll love"
+        },
+        {
+          "delay": 60,
+          "subject": "Come back for 50% off - final offer"
+        }
+      ]
+    }
+  },
+  "seo": [
+    {
+      "keyword": "AI roof inspection",
+      "type": "blog_post",
+      "frequency": "weekly",
+      "ai_provider": "claude"
+    },
+    {
+      "keyword": "roof replacement cost calculator",
+      "type": "blog_post",
+      "frequency": "weekly",
+      "ai_provider": "claude"
+    },
+    {
+      "keyword": "storm damage roof repair",
+      "type": "blog_post",
+      "frequency": "weekly",
+      "ai_provider": "claude"
+    },
+    {
+      "keyword": "insurance claim roofing",
+      "type": "blog_post",
+      "frequency": "weekly",
+      "ai_provider": "claude"
+    },
+    {
+      "keyword": "commercial roofing software",
+      "type": "blog_post",
+      "frequency": "weekly",
+      "ai_provider": "claude"
+    }
+  ],
+  "affiliate": {
+    "bronze": {
+      "commission": 0.2,
+      "threshold": 0
+    },
+    "silver": {
+      "commission": 0.3,
+      "threshold": 5
+    },
+    "gold": {
+      "commission": 0.4,
+      "threshold": 20
+    }
+  },
+  "retargeting": [
+    {
+      "platform": "Google Ads",
+      "budget": 500,
+      "audience": "cart_abandoners"
+    },
+    {
+      "platform": "Facebook",
+      "budget": 300,
+      "audience": "free_trial_expired"
+    },
+    {
+      "platform": "LinkedIn",
+      "budget": 200,
+      "audience": "enterprise_visitors"
+    }
+  ],
+  "urgency": [
+    {
+      "name": "Flash Sale",
+      "discount": 0.4,
+      "duration_hours": 48,
+      "trigger": "weekend"
+    },
+    {
+      "name": "Limited Spots",
+      "message": "Only 3 Professional plans left at this price",
+      "trigger": "always"
+    },
+    {
+      "name": "Price Increase",
+      "message": "Prices increase Monday - lock in current rates",
+      "trigger": "thursday"
+    }
+  ],
+  "ai_status": [
+    {
+      "service": "photo_analysis",
+      "status": "ready"
+    },
+    {
+      "service": "content_gen",
+      "status": "ready"
+    }
+  ],
+  "monitoring": {
+    "mrr_target": 10000,
+    "conversion_target": 0.02,
+    "churn_target": 0.05,
+    "ltv_target": 1200
+  }
+}

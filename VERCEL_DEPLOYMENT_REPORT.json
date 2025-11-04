@@ -1,0 +1,117 @@
+{
+  "timestamp": "2025-08-01T16:09:30.659133",
+  "deployment_status": {
+    "vercel_home": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 57308
+    },
+    "vercel_login": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/login",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 51142
+    },
+    "vercel_register": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/register",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 40308
+    },
+    "vercel_dashboard": {
+      "url": "https://myroofgenius-live-git-main-matts-projects-fe7d7976.vercel.app/dashboard",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 42398
+    },
+    "production_home": {
+      "url": "https://www.myroofgenius.com",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 57308
+    },
+    "production_login": {
+      "url": "https://www.myroofgenius.com/login",
+      "status_code": 200,
+      "healthy": false,
+      "issues": [
+        "Found error pattern: error"
+      ],
+      "content_length": 51142
+    }
+  },
+  "ui_issues": [
+    {
+      "page": "vercel_home",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    },
+    {
+      "page": "vercel_login",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    },
+    {
+      "page": "vercel_register",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    },
+    {
+      "page": "vercel_dashboard",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    },
+    {
+      "page": "production_home",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    },
+    {
+      "page": "production_login",
+      "issue": "Found error pattern: error",
+      "severity": "high"
+    }
+  ],
+  "api_tests": {
+    "health": {
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/health",
+      "status": 200,
+      "success": true
+    },
+    "aurea_status": {
+      "url": "https://brainops-backend-prod.onrender.com/api/v1/aurea/status",
+      "status": 200,
+      "success": true
+    }
+  },
+  "recommendations": [
+    {
+      "priority": "HIGH",
+      "action": "Address JavaScript and UI errors",
+      "details": [
+        "Found error pattern: error",
+        "Found error pattern: error",
+        "Found error pattern: error",
+        "Found error pattern: error",
+        "Found error pattern: error",
+        "Found error pattern: error"
+      ]
+    }
+  ]
+}

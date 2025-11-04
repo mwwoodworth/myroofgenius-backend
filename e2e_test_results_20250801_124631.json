@@ -1,0 +1,1562 @@
+{
+  "timestamp": "2025-08-01T18:46:19.451624",
+  "tests": [
+    {
+      "name": "Basic Health Check",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/health",
+        "status": 200,
+        "response": {
+          "status": "healthy",
+          "version": "3.1.194",
+          "build_timestamp": "2025-08-01T18:44:21.732678",
+          "environment": "production",
+          "timestamp": "2025-08-01T18:46:19.318127",
+          "routes_loaded": 154,
+          "total_endpoints": 998,
+          "deployment": "v3.1.122-ultra-powerful",
+          "langgraphos": "operational"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:19.767600"
+    },
+    {
+      "name": "API Health Check",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/health",
+        "status": 200,
+        "response": {
+          "status": "healthy",
+          "version": "3.1.194",
+          "build_timestamp": "2025-08-01T18:44:21.732678",
+          "api": "operational",
+          "database": "connected",
+          "cache": "ready",
+          "timestamp": "2025-08-01T18:46:19.656580",
+          "routes_loaded": 154,
+          "total_endpoints": 998,
+          "route_loading": "ultra-powerful-v3.1.122",
+          "langgraphos": "operational"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:20.161830"
+    },
+    {
+      "name": "Version Check",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/version",
+        "status": 200,
+        "response": {
+          "version": "3.1.194",
+          "build_timestamp": "2025-08-01T18:44:21.732678",
+          "api_version": "v1",
+          "features": {
+            "authentication": true,
+            "ai_services": true,
+            "memory_system": true,
+            "automations": true,
+            "marketplace": true,
+            "roofing": true,
+            "admin": true,
+            "langgraphos": true
+          },
+          "deployment": "v3.1.122-ultra-powerful"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:20.377240"
+    },
+    {
+      "name": "Routes Loaded",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/routes",
+        "status": 200,
+        "response": {
+          "total_routes": 154,
+          "total_endpoints": 998,
+          "loaded_routes": [
+            "admin",
+            "admin_automation",
+            "admin_automation_simple",
+            "admin_dashboard_simple",
+            "admin_enhanced",
+            "admin_fix_schema",
+            "admin_simple",
+            "admin_simple_v3116",
+            "admin_temp",
+            "admin_v3106",
+            "admin_v3108",
+            "agents",
+            "agents_simple",
+            "agents_v2",
+            "ai_executive",
+            "ai_insights",
+            "ai_integration",
+            "ai_operations",
+            "ai_services",
+            "ai_services_extended_v3106",
+            "ai_services_memory_aware",
+            "ai_services_minimal",
+            "ai_services_simple",
+            "ai_services_v2",
+            "ai_services_v3103",
+            "ai_services_v3108",
+            "alerts",
+            "analytics",
+            "api_health",
+            "api_keys",
+            "aurea",
+            "aurea_enhanced",
+            "aurea_enhanced_loader",
+            "aurea_health_dashboard",
+            "aurea_loader",
+            "aurea_natural",
+            "aurea_simple",
+            "aurea_ultimate",
+            "aurea_v2",
+            "aurea_web",
+            "auth",
+            "auth",
+            "auth_debug",
+            "auth_emergency",
+            "auth_enhanced",
+            "auth_extended",
+            "auth_extended",
+            "auth_hotfix",
+            "auth_refresh_fix",
+            "auth_v3127",
+            "automation",
+            "automation_complete",
+            "automations",
+            "automations_public",
+            "automations_simple_v3138",
+            "automations_v3106",
+            "automations_v3108",
+            "batch_operations",
+            "billing",
+            "blog",
+            "blog_posts",
+            "claude_agent",
+            "claude_agent_v3103",
+            "claude_agents_simple",
+            "claude_agents_status",
+            "compliance_status",
+            "content",
+            "cross_ai_memory",
+            "cross_ai_memory_simple",
+            "cross_ai_memory_v2",
+            "db_status",
+            "db_sync",
+            "debug_auth",
+            "debug_database",
+            "debug_routes",
+            "deployment",
+            "drive_content",
+            "e2e_dashboard",
+            "env_check",
+            "env_dashboard",
+            "env_vault",
+            "erp_compliance",
+            "erp_crm",
+            "erp_estimating",
+            "erp_field_capture",
+            "erp_financial",
+            "erp_job_management",
+            "erp_task_management",
+            "executive_v3185",
+            "field_service",
+            "fix_database_schema",
+            "frontend_status",
+            "health_autopilot",
+            "health_autopilot",
+            "integrations",
+            "knowledge_docs",
+            "landing_pages_simple",
+            "langgraph",
+            "llm_resilience",
+            "llm_resilience",
+            "manual_routes",
+            "marketplace_simple",
+            "memory",
+            "memory_complete",
+            "memory_dashboard",
+            "memory_feedback",
+            "memory_fix",
+            "memory_graph",
+            "memory_health_fix",
+            "memory_health_public",
+            "memory_multimodal",
+            "memory_summarization",
+            "memory_webhooks",
+            "metrics_v3185",
+            "monitoring",
+            "newsletter",
+            "notifications",
+            "notifications_v3106",
+            "openapi",
+            "organizations",
+            "persistent_memory",
+            "production_memory",
+            "production_memory_geospatial",
+            "products",
+            "projects",
+            "projects_v2",
+            "render_logs",
+            "render_webhooks",
+            "roofing",
+            "roofing_complete",
+            "roofing_v3106",
+            "roofing_v3108",
+            "routes",
+            "security_v3106",
+            "simple_memory",
+            "system_admin",
+            "system_status_simple",
+            "system_v3106",
+            "tasks",
+            "tasks_complete",
+            "tasks_v3103",
+            "tasks_v3108",
+            "users",
+            "users_simple",
+            "users_v40",
+            "vector_memory",
+            "vector_memory_admin",
+            "vercel_webhooks",
+            "version",
+            "weathercraft",
+            "weathercraft_features",
+            "webhooks",
+            "webhooks_crud",
+            "webhooks_extended"
+          ],
+          "failed_routes": [
+            "admin_extended",
+            "agent_evolution",
+            "agent_evolution",
+            "agent_insights",
+            "agent_orchestration",
+            "agent_performance_tracker",
+            "ai_assistant",
+            "ai_roof_analysis",
+            "alert_feed",
+            "anticipatory_actions",
+            "aurea_complete",
+            "aurea_control",
+            "aurea_enhanced_v2",
+            "aurea_executive",
+            "aurea_founder",
+            "aurea_onboarding",
+            "aurea_production",
+            "aurea_ultimate_v2",
+            "aurea_voice",
+            "aurea_voice_control",
+            "aurea_websocket",
+            "automation_cron",
+            "automations_complete",
+            "automations_complete_v3137",
+            "automations_v3107",
+            "autopilot",
+            "autopilot",
+            "blog_complete",
+            "brainops_os_status",
+            "claude_agents",
+            "claude_context",
+            "claude_context",
+            "claudeos_slack",
+            "collaborative_intelligence",
+            "compliance_suite",
+            "compliance_suite",
+            "content_automation",
+            "copilot_enhanced",
+            "crm_complete",
+            "cross_ai_memory_complex",
+            "cross_device",
+            "daily_reporting",
+            "dev_loop",
+            "document_rag",
+            "documentation_system",
+            "e2e_test",
+            "feedback_loop",
+            "field_ops",
+            "founder_escalation",
+            "founder_escalation",
+            "general_analyze",
+            "health",
+            "integration_template",
+            "journal_routes",
+            "knowledge",
+            "landing_pages",
+            "langgraphos",
+            "market_intelligence",
+            "market_monitoring",
+            "marketplace",
+            "marketplace_ai_recommendations",
+            "marketplace_enhanced",
+            "multi_ai_audit",
+            "multi_ai_audit",
+            "newsletter_complete",
+            "products_autonomous",
+            "security_enhanced",
+            "seo_automation",
+            "shadow_learning",
+            "stripe_integration",
+            "test_gemini"
+          ],
+          "route_details": {
+            "auth_hotfix": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "auth_enhanced": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "auth_debug": {
+              "prefix": "/api/v1/api/v1/auth-debug",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "auth": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "auth_extended": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 15,
+              "status": "loaded"
+            },
+            "ai_services_v3108": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "tasks_v3108": {
+              "prefix": "/api/v1/tasks",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "roofing_v3108": {
+              "prefix": "/api/v1/roofing",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "admin_v3108": {
+              "prefix": "/api/v1/admin",
+              "endpoints": 10,
+              "status": "loaded"
+            },
+            "automations_simple_v3138": {
+              "prefix": "/api/v1/automations",
+              "endpoints": 16,
+              "status": "loaded"
+            },
+            "auth_refresh_fix": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "alerts": {
+              "prefix": "/api/v1/alerts",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "llm_resilience": {
+              "prefix": "/api/v1/llm-resilience",
+              "endpoints": 11,
+              "status": "loaded"
+            },
+            "claude_agents_status": {
+              "prefix": "/api/v1/claude-agents",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "memory_health_fix": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "marketplace_simple": {
+              "prefix": "/api/v1/marketplace",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "blog_posts": {
+              "prefix": "/api/v1/blog",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "landing_pages_simple": {
+              "prefix": "/api/v1/landing-pages",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "admin_dashboard_simple": {
+              "prefix": "/api/v1/admin",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "system_status_simple": {
+              "prefix": "/api/v1/system",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "compliance_status": {
+              "prefix": "/api/v1/compliance",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "health_autopilot": {
+              "prefix": "/api/v1/health-autopilot",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "e2e_dashboard": {
+              "prefix": "/api/v1/e2e-dashboard",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "users": {
+              "prefix": "/api/v1/users",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "users_v40": {
+              "prefix": "/api/v1/users",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "memory": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "memory_complete": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "memory_health_public": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "persistent_memory": {
+              "prefix": "/api/v1/memory/persistent",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "production_memory": {
+              "prefix": "/api/v1/memory/production",
+              "endpoints": 28,
+              "status": "loaded"
+            },
+            "ai_operations": {
+              "prefix": "/api/v1/ai/operations",
+              "endpoints": 22,
+              "status": "loaded"
+            },
+            "billing": {
+              "prefix": "/api/v1/billing",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "products": {
+              "prefix": "/api/v1/products",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "projects": {
+              "prefix": "/api/v1/projects",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "organizations": {
+              "prefix": "/api/v1/organizations",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "notifications": {
+              "prefix": "/api/v1/notifications",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "db_sync": {
+              "prefix": "/api/v1/db-sync",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "deployment": {
+              "prefix": "/api/v1/deployment",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "field_service": {
+              "prefix": "/api/v1/field-service",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "automation_complete": {
+              "prefix": "/api/v1/automation",
+              "endpoints": 29,
+              "status": "loaded"
+            },
+            "automations_public": {
+              "prefix": "/api/v1/automations",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "analytics": {
+              "prefix": "/api/v1/analytics",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "integrations": {
+              "prefix": "/api/v1/integrations",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "webhooks": {
+              "prefix": "/api/v1/webhooks",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "system_admin": {
+              "prefix": "/api/v1/system",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "ai_insights": {
+              "prefix": "/api/v1/ai-insights",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "ai_services_memory_aware": {
+              "prefix": "/api/v1/ai",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "memory_dashboard": {
+              "prefix": "/api/v1/memory/dashboard",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "aurea_loader": {
+              "prefix": "/api/v1/aurea",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "batch_operations": {
+              "prefix": "/api/v1/batch",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "vector_memory": {
+              "prefix": "/api/v1/memory/vector",
+              "endpoints": 16,
+              "status": "loaded"
+            },
+            "env_check": {
+              "prefix": "/api/v1/env",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "env_vault": {
+              "prefix": "/api/v1/env",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "env_dashboard": {
+              "prefix": "/api/v1/env-dashboard",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "metrics_v3185": {
+              "prefix": "/api/v1/metrics",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "executive_v3185": {
+              "prefix": "/api/v1/executive",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "vercel_webhooks": {
+              "prefix": "/api/v1/webhooks/vercel",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "render_webhooks": {
+              "prefix": "/api/v1/webhooks/render",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "admin": {
+              "prefix": "/api/v1/admin",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "admin_automation": {
+              "prefix": "/api/v1/admin-automation",
+              "endpoints": 16,
+              "status": "loaded"
+            },
+            "admin_automation_simple": {
+              "prefix": "/api/v1/admin-automation-simple",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "admin_enhanced": {
+              "prefix": "/api/v1/admin-enhanced",
+              "endpoints": 13,
+              "status": "loaded"
+            },
+            "admin_fix_schema": {
+              "prefix": "/api/v1/admin-fix-schema",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "admin_simple": {
+              "prefix": "/api/v1/admin-simple",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "admin_simple_v3116": {
+              "prefix": "/api/v1/admin-simple-v3116",
+              "endpoints": 10,
+              "status": "loaded"
+            },
+            "admin_temp": {
+              "prefix": "/api/v1/admin-temp",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "admin_v3106": {
+              "prefix": "/api/v1/admin-v3106",
+              "endpoints": 15,
+              "status": "loaded"
+            },
+            "agents": {
+              "prefix": "/api/v1/agents",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "agents_simple": {
+              "prefix": "/api/v1/agents-simple",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "agents_v2": {
+              "prefix": "/api/v1/agents-v2",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "ai_executive": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "ai_integration": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "ai_services": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "ai_services_extended_v3106": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "ai_services_minimal": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "ai_services_simple": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "ai_services_v2": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "ai_services_v3103": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "api_health": {
+              "prefix": "/api/v1/api-health",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "api_keys": {
+              "prefix": "/api/v1/api-keys",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "aurea": {
+              "prefix": "/api/v1/aurea",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "aurea_enhanced": {
+              "prefix": "/api/v1/aurea-enhanced",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "aurea_enhanced_loader": {
+              "prefix": "/api/v1/aurea-enhanced-loader",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "aurea_health_dashboard": {
+              "prefix": "/api/v1/aurea-health-dashboard",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "aurea_natural": {
+              "prefix": "/api/v1/aurea-natural",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "aurea_simple": {
+              "prefix": "/api/v1/aurea-simple",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "aurea_ultimate": {
+              "prefix": "/api/v1/aurea-ultimate",
+              "endpoints": 11,
+              "status": "loaded"
+            },
+            "aurea_v2": {
+              "prefix": "/api/v1/aurea-v2",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "aurea_web": {
+              "prefix": "/api/v1/aurea-web",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "auth_emergency": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "auth_v3127": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "automation": {
+              "prefix": "/api/v1/automation",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "automations": {
+              "prefix": "/api/v1/automations",
+              "endpoints": 20,
+              "status": "loaded"
+            },
+            "automations_v3106": {
+              "prefix": "/api/v1/automations-v3106",
+              "endpoints": 11,
+              "status": "loaded"
+            },
+            "automations_v3108": {
+              "prefix": "/api/v1/automations-v3108",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "blog": {
+              "prefix": "/api/v1/blog",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "claude_agent": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "claude_agent_v3103": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "claude_agents_simple": {
+              "prefix": "/api/v1/ai-services",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "content": {
+              "prefix": "/api/v1/content",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "cross_ai_memory": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "cross_ai_memory_simple": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "cross_ai_memory_v2": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 14,
+              "status": "loaded"
+            },
+            "db_status": {
+              "prefix": "/api/v1/db-status",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "debug_auth": {
+              "prefix": "/api/v1/auth",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "debug_database": {
+              "prefix": "/api/v1/debug-database",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "debug_routes": {
+              "prefix": "/api/v1/debug-routes",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "drive_content": {
+              "prefix": "/api/v1/drive-content",
+              "endpoints": 8,
+              "status": "loaded"
+            },
+            "erp_compliance": {
+              "prefix": "/api/v1/erp-compliance",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_crm": {
+              "prefix": "/api/v1/erp-crm",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_estimating": {
+              "prefix": "/api/v1/erp-estimating",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_field_capture": {
+              "prefix": "/api/v1/erp-field-capture",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_financial": {
+              "prefix": "/api/v1/erp-financial",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_job_management": {
+              "prefix": "/api/v1/erp-job-management",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "erp_task_management": {
+              "prefix": "/api/v1/erp-task-management",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "fix_database_schema": {
+              "prefix": "/api/v1/fix-database-schema",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "frontend_status": {
+              "prefix": "/api/v1/frontend-status",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "knowledge_docs": {
+              "prefix": "/api/v1/knowledge-docs",
+              "endpoints": 31,
+              "status": "loaded"
+            },
+            "langgraph": {
+              "prefix": "/api/v1/langgraph",
+              "endpoints": 12,
+              "status": "loaded"
+            },
+            "manual_routes": {
+              "prefix": "/api/v1/manual-routes",
+              "endpoints": 10,
+              "status": "loaded"
+            },
+            "memory_feedback": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 12,
+              "status": "loaded"
+            },
+            "memory_fix": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "memory_graph": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 12,
+              "status": "loaded"
+            },
+            "memory_multimodal": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 15,
+              "status": "loaded"
+            },
+            "memory_summarization": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "memory_webhooks": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 12,
+              "status": "loaded"
+            },
+            "monitoring": {
+              "prefix": "/api/v1/monitoring",
+              "endpoints": 3,
+              "status": "loaded"
+            },
+            "newsletter": {
+              "prefix": "/api/v1/newsletter",
+              "endpoints": 2,
+              "status": "loaded"
+            },
+            "notifications_v3106": {
+              "prefix": "/api/v1/notifications-v3106",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "openapi": {
+              "prefix": "/api/v1/openapi",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "production_memory_geospatial": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "projects_v2": {
+              "prefix": "/api/v1/projects-v2",
+              "endpoints": 13,
+              "status": "loaded"
+            },
+            "render_logs": {
+              "prefix": "/api/v1/render-logs",
+              "endpoints": 10,
+              "status": "loaded"
+            },
+            "roofing": {
+              "prefix": "/api/v1/roofing",
+              "endpoints": 11,
+              "status": "loaded"
+            },
+            "roofing_complete": {
+              "prefix": "/api/v1/roofing-complete",
+              "endpoints": 10,
+              "status": "loaded"
+            },
+            "roofing_v3106": {
+              "prefix": "/api/v1/roofing-v3106",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "routes": {
+              "prefix": "/api/v1/routes",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "security_v3106": {
+              "prefix": "/api/v1/security-v3106",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "simple_memory": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "system_v3106": {
+              "prefix": "/api/v1/system-v3106",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "tasks": {
+              "prefix": "/api/v1/tasks",
+              "endpoints": 7,
+              "status": "loaded"
+            },
+            "tasks_complete": {
+              "prefix": "/api/v1/tasks-complete",
+              "endpoints": 5,
+              "status": "loaded"
+            },
+            "tasks_v3103": {
+              "prefix": "/api/v1/tasks-v3103",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "users_simple": {
+              "prefix": "/api/v1/users",
+              "endpoints": 4,
+              "status": "loaded"
+            },
+            "vector_memory_admin": {
+              "prefix": "/api/v1/memory",
+              "endpoints": 12,
+              "status": "loaded"
+            },
+            "version": {
+              "prefix": "/api/v1/version",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "weathercraft": {
+              "prefix": "/api/v1/weathercraft",
+              "endpoints": 6,
+              "status": "loaded"
+            },
+            "weathercraft_features": {
+              "prefix": "/api/v1/weathercraft-features",
+              "endpoints": 9,
+              "status": "loaded"
+            },
+            "webhooks_crud": {
+              "prefix": "/api/v1/webhooks-crud",
+              "endpoints": 1,
+              "status": "loaded"
+            },
+            "webhooks_extended": {
+              "prefix": "/api/v1/webhooks-extended",
+              "endpoints": 1,
+              "status": "loaded"
+            }
+          },
+          "langgraphos": "operational"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:20.595696"
+    },
+    {
+      "name": "Admin Login",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/auth/login",
+        "status": 200,
+        "response": {
+          "access_token": "JWT_REDACTED",
+          "token_type": "bearer",
+          "refresh_token": "JWT_REDACTED",
+          "expires_in": 1800,
+          "user": {
+            "id": "758487f8-7d99-4924-9fd2-a5735a1e07b1",
+            "email": "admin@brainops.com",
+            "username": "admin",
+            "role": "admin",
+            "is_verified": true
+          }
+        }
+      },
+      "timestamp": "2025-08-01T18:46:22.011320"
+    },
+    {
+      "name": "Get Current User",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/users/me",
+        "status": 200,
+        "response": {
+          "id": "758487f8-7d99-4924-9fd2-a5735a1e07b1",
+          "email": "admin@brainops.com",
+          "full_name": "Test User",
+          "username": "admin",
+          "is_active": true
+        }
+      },
+      "timestamp": "2025-08-01T18:46:22.947158"
+    },
+    {
+      "name": "Token Refresh",
+      "success": false,
+      "error": "Status: 422",
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/auth/refresh",
+        "status": 422,
+        "response": {
+          "detail": [
+            {
+              "type": "missing",
+              "loc": [
+                "body"
+              ],
+              "msg": "Field required",
+              "input": null,
+              "url": "https://errors.pydantic.dev/2.7/v/missing"
+            }
+          ]
+        }
+      },
+      "timestamp": "2025-08-01T18:46:23.245165"
+    },
+    {
+      "name": "Create Memory",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/memory/create",
+        "status": 200,
+        "response": {
+          "id": "12018235-eec2-46f5-8dfa-25619ba59e35",
+          "content": "E2E test memory entry",
+          "type": "general",
+          "meta_data": {},
+          "created_at": "2025-08-01T18:46:23.403769",
+          "user_id": "758487f8-7d99-4924-9fd2-a5735a1e07b1"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:23.905334"
+    },
+    {
+      "name": "Get Recent Memories",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/memory/recent",
+        "status": 200,
+        "response": {
+          "memories": [
+            {
+              "id": "12018235-eec2-46f5-8dfa-25619ba59e35",
+              "content": "E2E test memory entry",
+              "type": "general",
+              "meta_data": {},
+              "created_at": "2025-08-01T18:46:23.403769",
+              "user_id": "758487f8-7d99-4924-9fd2-a5735a1e07b1"
+            }
+          ],
+          "total": 1
+        }
+      },
+      "timestamp": "2025-08-01T18:46:24.514587"
+    },
+    {
+      "name": "Search Memories",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/memory/search",
+        "status": 200,
+        "response": {
+          "results": [
+            {
+              "id": "12018235-eec2-46f5-8dfa-25619ba59e35",
+              "content": "E2E test memory entry",
+              "type": "general",
+              "meta_data": {},
+              "created_at": "2025-08-01T18:46:23.403769",
+              "user_id": "758487f8-7d99-4924-9fd2-a5735a1e07b1"
+            }
+          ],
+          "total": 1,
+          "query": "test",
+          "offset": 0,
+          "limit": 10
+        }
+      },
+      "timestamp": "2025-08-01T18:46:25.102213"
+    },
+    {
+      "name": "Memory Insights",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/memory/insights",
+        "status": 200,
+        "response": {
+          "total_memories": 1,
+          "memory_types": {
+            "general": 1
+          },
+          "recent_activity": "active",
+          "storage_used": "255 bytes",
+          "recommendations": [
+            "Consider adding more context to memories",
+            "Use specific memory types for better organization"
+          ]
+        }
+      },
+      "timestamp": "2025-08-01T18:46:25.687780"
+    },
+    {
+      "name": "Claude Agent",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/ai-services/claude/agent",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:25.920115"
+    },
+    {
+      "name": "AI Insights",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/ai-insights/performance",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.088088"
+    },
+    {
+      "name": "AUREA Status",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/aurea/status",
+        "status": 200,
+        "response": {
+          "status": "operational",
+          "version": "3.1.147",
+          "message": "AUREA Ultimate AI Assistant",
+          "features": {
+            "chat": "enabled",
+            "voice": "ready",
+            "memory": "active",
+            "automation": "operational"
+          },
+          "timestamp": "2025-08-01T18:46:25.981150"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.267273"
+    },
+    {
+      "name": "Github Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/integrations/github/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.436864"
+    },
+    {
+      "name": "Slack Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/integrations/slack/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.560397"
+    },
+    {
+      "name": "Stripe Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/integrations/stripe/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.760892"
+    },
+    {
+      "name": "Clickup Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/integrations/clickup/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:26.944950"
+    },
+    {
+      "name": "Elevenlabs Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/integrations/elevenlabs/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:27.104331"
+    },
+    {
+      "name": "Automation Types",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/automations/types",
+        "status": 404,
+        "response": {
+          "detail": "Automation not found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:27.704812"
+    },
+    {
+      "name": "Automation History",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/automations/history",
+        "status": 404,
+        "response": {
+          "detail": "Automation not found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:28.269668"
+    },
+    {
+      "name": "SEO Analysis Automation",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/automations/types/daily_seo_analysis",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:28.400206"
+    },
+    {
+      "name": "Voice Status",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/aurea/voice/status",
+        "status": 200,
+        "response": {
+          "status": "route_not_found",
+          "path": "voice/status",
+          "message": "This AUREA endpoint is not available. Use /api/v1/aurea/status to see available routes.",
+          "method": "GET",
+          "timestamp": "2025-08-01T18:46:28.301575"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:28.534413"
+    },
+    {
+      "name": "Available Voices",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/aurea/voice/voices",
+        "status": 200,
+        "response": {
+          "status": "route_not_found",
+          "path": "voice/voices",
+          "message": "This AUREA endpoint is not available. Use /api/v1/aurea/status to see available routes.",
+          "method": "GET",
+          "timestamp": "2025-08-01T18:46:28.460944"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:28.697153"
+    },
+    {
+      "name": "Voice Synthesis",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/aurea/voice/synthesize",
+        "status": 200,
+        "response": {
+          "status": "route_not_found",
+          "path": "voice/synthesize",
+          "message": "This AUREA endpoint is not available. Use /api/v1/aurea/status to see available routes.",
+          "method": "POST",
+          "timestamp": "2025-08-01T18:46:29.701075"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:29.929281"
+    },
+    {
+      "name": "Roof Analysis Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/roofing/analysis/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:30.096521"
+    },
+    {
+      "name": "Materials List",
+      "success": false,
+      "error": "Status: 405",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/roofing/materials",
+        "status": 405,
+        "response": {
+          "detail": "Method Not Allowed"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:30.242638"
+    },
+    {
+      "name": "Roofing Projects",
+      "success": true,
+      "error": null,
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/projects",
+        "status": 200,
+        "response": {
+          "projects": [],
+          "total": 0,
+          "skip": 0,
+          "limit": 100
+        }
+      },
+      "timestamp": "2025-08-01T18:46:30.827061"
+    },
+    {
+      "name": "Admin Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/admin/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:30.967712"
+    },
+    {
+      "name": "System Resources",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/admin/system/resources",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:31.098865"
+    },
+    {
+      "name": "Database Status",
+      "success": false,
+      "error": "Status: 404",
+      "details": {
+        "method": "GET",
+        "endpoint": "/api/v1/admin/database/status",
+        "status": 404,
+        "response": {
+          "detail": "Not Found"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:31.232434"
+    },
+    {
+      "name": "Create Project",
+      "success": false,
+      "error": "Status: 200",
+      "details": {
+        "method": "POST",
+        "endpoint": "/api/v1/projects",
+        "status": 200,
+        "response": {
+          "id": "d8db27b0-9014-4977-af2e-0b78c049313e",
+          "name": "E2E Test Project",
+          "description": "Automated test project",
+          "created_at": "2025-08-01T18:46:31.541833",
+          "user_id": "758487f8-7d99-4924-9fd2-a5735a1e07b1"
+        }
+      },
+      "timestamp": "2025-08-01T18:46:31.806362"
+    }
+  ],
+  "summary": {
+    "total": 32,
+    "passed": 10,
+    "failed": 22,
+    "success_rate": 31.25
+  }
+}

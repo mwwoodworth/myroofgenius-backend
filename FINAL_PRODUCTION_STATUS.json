@@ -1,0 +1,13 @@
+{
+    "timestamp": "2025-08-17T01:54:27.223618Z",
+    "operational_percentage": 80,
+    "tests_passed": 8,
+    "tests_total": 10,
+    "backend_version": "4.29",
+    "backend_routes": 31,
+    "database_status": "connected",
+    "centerpoint_customers": 1240,
+    "jobs": 200,
+    "monitoring": "active",
+    "status": "operational"
+}

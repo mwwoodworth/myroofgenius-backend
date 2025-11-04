@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-08-04T19:15:08.377883",
+  "modules_tested": 0,
+  "modules_passed": 0,
+  "modules_failed": 1,
+  "user_roles_tested": 0,
+  "issues": [
+    "Frontend HTTP 404"
+  ]
+}

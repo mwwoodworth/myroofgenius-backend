@@ -1,0 +1,39 @@
+2025-09-02 12:10:57,896 - __main__ - INFO - 🚀 Starting AI Orchestration System...
+2025-09-02 12:10:57,896 - __main__ - INFO - Verifying database tables...
+2025-09-02 12:10:58,387 - __main__ - INFO - ✅ All 9 orchestration tables verified
+2025-09-02 12:10:58,578 - __main__ - INFO - Starting SystemArchitect agent...
+2025-09-02 12:10:58,578 - __main__ - INFO - Starting DatabaseAgent...
+2025-09-02 12:10:58,578 - __main__ - INFO - Starting MyRoofGeniusAgent...
+2025-09-02 12:10:58,578 - __main__ - INFO - Starting WeatherCraftAgent...
+2025-09-02 12:10:58,578 - __main__ - INFO - ✅ All 4 agents started successfully!
+2025-09-02 12:10:58,578 - __main__ - INFO - ============================================================
+2025-09-02 12:10:58,578 - __main__ - INFO - 🧠 AI ORCHESTRATION SYSTEM ACTIVE
+2025-09-02 12:10:58,578 - __main__ - INFO - Agents are now:
+2025-09-02 12:10:58,578 - __main__ - INFO -   • Monitoring system health
+2025-09-02 12:10:58,578 - __main__ - INFO -   • Managing database operations
+2025-09-02 12:10:58,578 - __main__ - INFO -   • Optimizing revenue generation
+2025-09-02 12:10:58,578 - __main__ - INFO -   • Managing CenterPoint data & operations
+2025-09-02 12:10:58,578 - __main__ - INFO -   • Learning and adapting continuously
+2025-09-02 12:10:58,578 - __main__ - INFO - ============================================================
+2025-09-02 12:10:58,950 - core - INFO - Agent WeatherCraftAgent initialized with ID bb476d7f-b296-498a-869e-f4dc67359c22
+2025-09-02 12:10:58,950 - agents.weathercraft_agent - INFO - WeatherCraftAgent started with ID bb476d7f-b296-498a-869e-f4dc67359c22
+2025-09-02 12:10:58,965 - core - INFO - Agent SystemArchitect initialized with ID b031ef34-f413-4f7c-a851-30c0bd73043e
+2025-09-02 12:10:59,156 - core - INFO - Agent MyRoofGeniusAgent initialized with ID 32b96ede-9b5f-4efd-b613-ad1e68ce0ff7
+2025-09-02 12:10:59,156 - agents.myroofgenius_agent - INFO - MyRoofGeniusAgent started with ID 32b96ede-9b5f-4efd-b613-ad1e68ce0ff7
+2025-09-02 12:10:59,157 - core - INFO - Agent DatabaseAgent initialized with ID 2fb9e196-33b6-40c5-9d19-9a50e92b8df9
+2025-09-02 12:10:59,307 - agents.weathercraft_agent - ERROR - Failed to monitor CenterPoint data: column "address" does not exist
+2025-09-02 12:10:59,420 - agents.weathercraft_agent - ERROR - Failed to optimize job scheduling: column j.estimated_hours does not exist
+HINT:  Perhaps you meant to reference the column "j.estimated_costs".
+2025-09-02 12:10:59,502 - agents.myroofgenius_agent - ERROR - Failed to collect customer metrics: column "amount" does not exist
+2025-09-02 12:10:59,529 - agents.weathercraft_agent - ERROR - Failed to manage inventory: relation "materials" does not exist
+2025-09-02 12:10:59,615 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 12:10:59,631 - agents.myroofgenius_agent - ERROR - Failed to optimize funnel: relation "user_funnel_tracking" does not exist
+2025-09-02 12:10:59,745 - agents.myroofgenius_agent - ERROR - Failed to predict churn: relation "user_activity_summary" does not exist
+2025-09-02 12:10:59,745 - agents.myroofgenius_agent - ERROR - MyRoofGeniusAgent error: 'AgentMemory' object has no attribute 'add'
+2025-09-02 12:10:59,905 - httpx - INFO - HTTP Request: GET https://myroofgenius.com "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 12:11:00,219 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 12:11:01,562 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'
+2025-09-02 12:12:02,686 - httpx - INFO - HTTP Request: GET https://brainops-backend-prod.onrender.com/health "HTTP/1.1 200 OK"
+2025-09-02 12:12:02,832 - httpx - INFO - HTTP Request: GET https://myroofgenius.com/health "HTTP/1.1 307 Temporary Redirect"
+2025-09-02 12:12:03,015 - httpx - INFO - HTTP Request: GET https://weathercraft-erp.vercel.app/health "HTTP/1.1 404 Not Found"
+2025-09-02 12:12:03,630 - agents.system_architect - ERROR - SystemArchitectAgent error: 'str' object has no attribute 'get'

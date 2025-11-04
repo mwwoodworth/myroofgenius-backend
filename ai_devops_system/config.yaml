@@ -1,0 +1,94 @@
+# AI DevOps System Configuration
+
+system:
+  name: "Ultimate AI DevOps System"
+  version: "1.0.0"
+  environment: "development"
+  
+api:
+  host: "0.0.0.0"
+  port: 8080
+  reload: false
+  cors_enabled: true
+
+memory:
+  vector_store:
+    provider: "chromadb"  # chromadb, pgvector
+    collection_name: "ai_memory"
+    embedding_model: "all-MiniLM-L6-v2"
+    
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    
+  postgres:
+    host: "localhost"
+    port: 5432
+    database: "ai_memory"
+    username: "postgres"
+    password: "postgres"
+    
+  conversation:
+    max_messages: 100
+    
+  importance_weights:
+    recency: 0.3
+    frequency: 0.3
+    relevance: 0.4
+
+monitoring:
+  metrics:
+    port: 8000
+    enabled: true
+    
+  health_checks:
+    cpu_threshold: 90.0
+    memory_threshold: 90.0
+    disk_threshold: 85.0
+    
+  alerts:
+    smtp:
+      server: "smtp.gmail.com"
+      port: 587
+      username: ""  # Set via environment variable
+      password: ""  # Set via environment variable
+      from_email: ""
+      to_emails: []
+    
+    webhook:
+      url: ""  # Set via environment variable
+    
+  auto_healing:
+    enabled: true
+    max_retries: 3
+    
+services:
+  ollama:
+    host: "localhost"
+    port: 11434
+    models:
+      - "llama3.2:latest"
+      - "codellama:latest"
+    
+  redis:
+    host: "localhost"
+    port: 6379
+    
+  postgres:
+    host: "localhost"
+    port: 5432
+    
+  docker:
+    socket: "/var/run/docker.sock"
+    
+  anythingllm:
+    container_name: "anythingllm-container"
+    port: 3001
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/ai_devops.log"
+  max_size: "10MB"
+  backup_count: 5

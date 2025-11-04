@@ -1,0 +1,121 @@
+{
+  "last_updated": "2025-08-18T07:30:00Z",
+  "version": "1.0.0",
+  "system_architecture": {
+    "backend": {
+      "url": "https://brainops-backend-prod.onrender.com",
+      "current_version": "v6.11",
+      "docker_image": "mwwoodworth/brainops-backend:v6.11",
+      "deployment_method": "Render via Docker Hub",
+      "status": "OPERATIONAL",
+      "endpoints": {
+        "health": "/api/v1/health",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+        "memory": "/api/v1/memory/*",
+        "automation": "/api/v1/automation/*",
+        "crm": "/api/v1/crm/*",
+        "analytics": "/api/v1/analytics/*",
+        "feedback": "/api/v1/feedback/*",
+        "files": "/api/v1/files/*",
+        "tasks": "/api/v1/tasks/*",
+        "revenue": {
+          "test": "/api/v1/test-revenue/",
+          "ai_estimation": "/api/v1/ai-estimation/*",
+          "stripe": "/api/v1/stripe-revenue/*",
+          "pipeline": "/api/v1/customer-pipeline/*",
+          "landing": "/api/v1/landing-pages/*",
+          "google_ads": "/api/v1/google-ads/*",
+          "dashboard": "/api/v1/revenue-dashboard/*"
+        }
+      }
+    },
+    "frontends": {
+      "myroofgenius": {
+        "url": "https://myroofgenius.com",
+        "platform": "Vercel",
+        "status": "OPERATIONAL",
+        "purpose": "Main customer-facing application"
+      },
+      "weathercraft_erp": {
+        "url": "https://weathercraft-erp.vercel.app",
+        "platform": "Vercel",
+        "status": "OPERATIONAL",
+        "purpose": "Complete ERP system - MAIN PRODUCT"
+      },
+      "brainops_task_os": {
+        "url": "https://brainops-task-os.vercel.app",
+        "platform": "Vercel",
+        "status": "OPERATIONAL",
+        "purpose": "Task management dashboard"
+      },
+      "weathercraft_app": {
+        "url": "https://weathercraft-app.vercel.app",
+        "platform": "Vercel",
+        "status": "404 - NEEDS FIXING",
+        "purpose": "Public website (deprecated?)"
+      }
+    },
+    "database": {
+      "provider": "Supabase PostgreSQL",
+      "connection": "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require",
+      "tables_count": 172,
+      "ai_tables": 35,
+      "automation_tables": 6,
+      "data_status": {
+        "customers": 8,
+        "jobs": 8,
+        "invoices": 3,
+        "estimates": 5,
+        "products": 24,
+        "subscriptions": 0,
+        "employees": 0
+      }
+    },
+    "monitoring": {
+      "persistent_monitoring": {
+        "script": "/home/mwwoodworth/code/PERSISTENT_MONITORING_SYSTEM.py",
+        "instances": 4,
+        "status": "RUNNING"
+      },
+      "centerpoint_sync": {
+        "script": "/home/mwwoodworth/code/CENTERPOINT_24_7_SYNC_SERVICE.py",
+        "instances": 1,
+        "status": "RUNNING BUT NOT SYNCING"
+      }
+    },
+    "deployment": {
+      "docker_hub": {
+        "username": "mwwoodworth",
+        "repository": "mwwoodworth/brainops-backend",
+        "latest_tag": "v6.11"
+      },
+      "render": {
+        "service_id": "srv-d1tfs4idbo4c73di6k00",
+        "deploy_hook": "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+      }
+    }
+  },
+  "current_issues": [
+    "Revenue endpoints not fully registered (10/13 broken)",
+    "CenterPoint sync not pulling data",
+    "WeatherCraft App frontend returning 404",
+    "Minimal production data",
+    "No rate limiting implemented",
+    "Missing API keys in Render environment"
+  ],
+  "completed_today": [
+    "Fixed revenue database schema",
+    "Added production data",
+    "Verified WeatherCraft ERP is operational",
+    "Deployed v6.11 to Docker Hub"
+  ],
+  "truth": {
+    "weathercraft_erp_is_main": true,
+    "weathercraft_app_is_deprecated": true,
+    "revenue_system_incomplete": true,
+    "centerpoint_api_broken": true,
+    "system_overengineered": true,
+    "needs_simplification": true
+  }
+}

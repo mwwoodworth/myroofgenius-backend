@@ -1,0 +1,85 @@
+{
+  "timestamp": "2025-08-11T04:52:13.805709",
+  "systems": {
+    "Backend API": {
+      "name": "Backend API",
+      "url": "https://brainops-backend-prod.onrender.com",
+      "tests": [
+        {
+          "name": "Health Check",
+          "endpoint": "/api/v1/health",
+          "status": false,
+          "response": null
+        },
+        {
+          "name": "AI Streaming",
+          "endpoint": "/api/v1/ai/ai/health",
+          "status": false
+        },
+        {
+          "name": "SEO Automation",
+          "endpoint": "/api/v1/ai/seo/seo/health",
+          "status": false
+        }
+      ],
+      "operational": false
+    },
+    "MyRoofGenius": {
+      "name": "MyRoofGenius",
+      "url": "https://www.myroofgenius.com",
+      "tests": [
+        {
+          "name": "Homepage",
+          "url": "https://www.myroofgenius.com",
+          "status": true,
+          "response_time": 0.175193
+        },
+        {
+          "name": "Endpoint /ai-estimator",
+          "status": true
+        },
+        {
+          "name": "Endpoint /marketplace",
+          "status": false
+        },
+        {
+          "name": "Endpoint /tools",
+          "status": true
+        },
+        {
+          "name": "Endpoint /dashboard",
+          "status": false
+        }
+      ],
+      "operational": true
+    },
+    "WeatherCraft ERP": {
+      "name": "WeatherCraft ERP",
+      "url": "https://weathercraft-erp.vercel.app",
+      "tests": [
+        {
+          "name": "ERP Dashboard",
+          "url": "https://weathercraft-erp.vercel.app",
+          "status": true,
+          "deployed": true
+        }
+      ],
+      "operational": true
+    },
+    "BrainOps Orchestrator": {
+      "name": "BrainOps Orchestrator",
+      "tests": [
+        {
+          "name": "Local Orchestrator",
+          "port": 8000,
+          "status": true
+        }
+      ],
+      "operational": true
+    }
+  },
+  "overall_status": "critical",
+  "total_tests": 10,
+  "passed_tests": 5,
+  "failed_tests": 5
+}

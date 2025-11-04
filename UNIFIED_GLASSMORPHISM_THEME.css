@@ -1,0 +1,377 @@
+/* 
+ * UNIFIED GLASSMORPHISM THEME SYSTEM
+ * Ultra High-Tech Design System for BrainOps Ecosystem
+ * Consistent across MyRoofGenius, WeatherCraft, and Master Dashboard
+ */
+
+/* ===========================
+   ROOT VARIABLES 
+   =========================== */
+:root {
+  /* Primary Glassmorphism Colors */
+  --glass-bg-primary: #0B0B12;
+  --glass-bg-secondary: #1A1A2E;
+  --glass-bg-tertiary: #16162B;
+  
+  /* Accent Colors - Futuristic Cyan & Purple */
+  --glass-accent-cyan: #00D4FF;
+  --glass-accent-purple: #9945FF;
+  --glass-accent-green: #00FF88;
+  
+  /* Glow Effects */
+  --glass-glow-cyan: rgba(0, 212, 255, 0.4);
+  --glass-glow-purple: rgba(153, 69, 255, 0.3);
+  --glass-glow-green: rgba(0, 255, 136, 0.3);
+  
+  /* Glass Properties */
+  --glass-blur: 30px;
+  --glass-saturation: 180%;
+  --glass-opacity: 0.9;
+  --glass-border-opacity: 0.3;
+  
+  /* Animation Timing */
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: all 0.5s cubic-bezier(0.68, -0.6, 0.32, 1.6);
+  
+  /* Shadows */
+  --shadow-glass: 
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(0, 212, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  
+  --shadow-glass-hover: 
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(0, 212, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* ===========================
+   BASE STYLES 
+   =========================== */
+body {
+  background: linear-gradient(135deg, var(--glass-bg-primary) 0%, var(--glass-bg-secondary) 50%, var(--glass-bg-tertiary) 100%);
+  color: #f3f4f6;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Animated Background Particles */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 80%, var(--glass-glow-cyan) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, var(--glass-glow-purple) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(0, 212, 255, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+  animation: particle-drift 20s ease-in-out infinite;
+}
+
+@keyframes particle-drift {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(-20px, -20px); }
+  66% { transform: translate(20px, -10px); }
+}
+
+/* ===========================
+   GLASS COMPONENTS 
+   =========================== */
+
+/* Glass Container */
+.glass, .glass-container {
+  background: linear-gradient(135deg, rgba(11, 11, 18, var(--glass-opacity)), rgba(26, 26, 46, 0.8));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid rgba(0, 212, 255, var(--glass-border-opacity));
+  border-radius: 24px;
+  box-shadow: var(--shadow-glass);
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass:hover, .glass-container:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-glass-hover);
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+/* Glass Card */
+.glass-card {
+  background: linear-gradient(135deg, rgba(11, 11, 18, 0.9), rgba(26, 26, 46, 0.8));
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow-glass);
+  transition: var(--transition-smooth);
+}
+
+.glass-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-glass-hover);
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+/* Glass Button */
+.glass-button {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 24px;
+  font-weight: 500;
+  color: white;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(153, 69, 255, 0.1));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 12px;
+  transition: var(--transition-smooth);
+  cursor: pointer;
+}
+
+.glass-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+
+.glass-button:hover::before {
+  left: 100%;
+}
+
+.glass-button:hover {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(153, 69, 255, 0.2));
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Glass Input */
+.glass-input {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: white;
+  transition: var(--transition-smooth);
+}
+
+.glass-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 212, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* Glass Panel with Animated Border */
+.glass-panel {
+  background: linear-gradient(135deg, rgba(11, 11, 18, 0.9), rgba(26, 26, 46, 0.8));
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 24px;
+  box-shadow: var(--shadow-glass);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-panel::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, var(--glass-accent-cyan), var(--glass-accent-purple), var(--glass-accent-cyan));
+  border-radius: 24px;
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+}
+
+.glass-panel:hover::after {
+  opacity: 0.5;
+  animation: rotate-gradient 3s linear infinite;
+}
+
+@keyframes rotate-gradient {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ===========================
+   TEXT EFFECTS 
+   =========================== */
+
+/* Gradient Text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--glass-accent-cyan) 0%, var(--glass-accent-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  font-weight: bold;
+}
+
+/* Neon Glow Text */
+.neon-text {
+  color: var(--glass-accent-cyan);
+  text-shadow: 
+    0 0 10px rgba(0, 212, 255, 0.8),
+    0 0 20px rgba(0, 212, 255, 0.6),
+    0 0 30px rgba(0, 212, 255, 0.4),
+    0 0 40px rgba(0, 212, 255, 0.2);
+}
+
+.neon-text-purple {
+  color: var(--glass-accent-purple);
+  text-shadow: 
+    0 0 10px rgba(153, 69, 255, 0.8),
+    0 0 20px rgba(153, 69, 255, 0.6),
+    0 0 30px rgba(153, 69, 255, 0.4),
+    0 0 40px rgba(153, 69, 255, 0.2);
+}
+
+/* ===========================
+   SPECIAL EFFECTS 
+   =========================== */
+
+/* Holographic Effect */
+.holographic {
+  background: linear-gradient(45deg, 
+    rgba(0, 212, 255, 0.3) 0%, 
+    rgba(153, 69, 255, 0.3) 25%, 
+    rgba(0, 212, 255, 0.3) 50%, 
+    rgba(153, 69, 255, 0.3) 75%, 
+    rgba(0, 212, 255, 0.3) 100%);
+  background-size: 200% 200%;
+  animation: holographic-shift 3s ease infinite;
+}
+
+@keyframes holographic-shift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+
+/* Animated Gradient */
+.animated-gradient {
+  background: linear-gradient(270deg, var(--glass-accent-cyan), var(--glass-accent-purple), var(--glass-accent-cyan));
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Pulse Glow Animation */
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px var(--glass-glow-cyan),
+                0 0 40px rgba(0, 212, 255, 0.2); 
+  }
+  50% { 
+    box-shadow: 0 0 40px var(--glass-glow-purple),
+                0 0 60px rgba(153, 69, 255, 0.3); 
+  }
+}
+
+.glass-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* Float Animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-20px) scale(1.05); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ===========================
+   UTILITY CLASSES 
+   =========================== */
+
+/* Blur Backgrounds */
+.blur-sm { backdrop-filter: blur(4px); }
+.blur-md { backdrop-filter: blur(12px); }
+.blur-lg { backdrop-filter: blur(24px); }
+.blur-xl { backdrop-filter: blur(40px); }
+
+/* Glass Opacity Variants */
+.glass-opacity-10 { background: rgba(11, 11, 18, 0.1); }
+.glass-opacity-20 { background: rgba(11, 11, 18, 0.2); }
+.glass-opacity-30 { background: rgba(11, 11, 18, 0.3); }
+.glass-opacity-50 { background: rgba(11, 11, 18, 0.5); }
+.glass-opacity-70 { background: rgba(11, 11, 18, 0.7); }
+.glass-opacity-90 { background: rgba(11, 11, 18, 0.9); }
+
+/* Border Glow Variants */
+.border-glow-cyan { 
+  border: 1px solid var(--glass-accent-cyan);
+  box-shadow: 0 0 20px var(--glass-glow-cyan);
+}
+
+.border-glow-purple { 
+  border: 1px solid var(--glass-accent-purple);
+  box-shadow: 0 0 20px var(--glass-glow-purple);
+}
+
+.border-glow-green { 
+  border: 1px solid var(--glass-accent-green);
+  box-shadow: 0 0 20px var(--glass-glow-green);
+}
+
+/* ===========================
+   RESPONSIVE ADJUSTMENTS 
+   =========================== */
+
+@media (max-width: 768px) {
+  .glass-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  
+  .glass-button {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+  
+  body::before {
+    animation: none; /* Reduce animation on mobile for performance */
+  }
+}
+
+/* ===========================
+   PERFORMANCE OPTIMIZATIONS 
+   =========================== */
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* GPU Acceleration for smooth animations */
+.glass, .glass-card, .glass-button, .glass-panel {
+  will-change: transform;
+  transform: translateZ(0);
+}
