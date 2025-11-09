@@ -142,31 +142,40 @@ class AgentOrchestratorV2:
         }
 
     async def _select_agents_for_task(self, task_analysis: Dict) -> List[str]:
-        """Select best agents for the task"""
-        selected = []
+        """Select best agents for the task by querying the database."""
         required_skills = task_analysis.get('required_skills', [])
+        if not required_skills:
+            return ['WorkflowAutomation']
 
-        # Map skills to agent names
-        skill_map = {
-            'estimation': 'EstimationAgent',
-            'scheduling': 'IntelligentScheduler',
-            'crm': 'CustomerIntelligence',
-            'invoicing': 'InvoicingAgent',
-            'workflow': 'WorkflowAutomation'
-        }
+        async with self.db_pool.acquire() as conn:
+            # Find agents that have any of the required skills
+            potential_agents = await conn.fetch("""
+                SELECT name, skills
+                FROM ai_agents
+                WHERE status = 'active' AND skills && $1::text[]
+            """, required_skills)
 
-        for skill in required_skills:
-            agent_name = skill_map.get(skill)
-            if agent_name and agent_name in self.active_agents:
-                selected.append(agent_name)
+        if not potential_agents:
+            return ['WorkflowAutomation']
 
-        # Ensure at least 2 agents for collaboration
-        if len(selected) < 2:
-            # Add WorkflowAutomation as coordinator
-            if 'WorkflowAutomation' not in selected:
-                selected.append('WorkflowAutomation')
+        # Score agents based on how many required skills they have
+        agent_scores = []
+        for agent in potential_agents:
+            matching_skills = set(agent['skills']) & set(required_skills)
+            score = len(matching_skills)
+            agent_scores.append((agent['name'], score))
 
-        return selected[:5]  # Max 5 agents per task
+        # Sort agents by score in descending order
+        agent_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Select the top agents (up to 5)
+        selected_agents = [agent[0] for agent in agent_scores[:5]]
+
+        # Ensure WorkflowAutomation is included if multiple agents are selected
+        if len(selected_agents) > 1 and 'WorkflowAutomation' not in selected_agents:
+            selected_agents.insert(0, 'WorkflowAutomation')
+
+        return selected_agents
 
     async def _create_execution_plan(self, task_analysis: Dict, agents: List[str]) -> Dict:
         """Create step-by-step execution plan for agents"""
