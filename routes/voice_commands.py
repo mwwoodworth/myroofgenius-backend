@@ -4,6 +4,8 @@ Voice Commands System - Natural Language Control for WeatherCraft ERP
 """
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from ..database import get_db
+
 from sqlalchemy.orm import Session
 import openai
 import json

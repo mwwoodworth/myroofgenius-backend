@@ -9,14 +9,20 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
 import uuid
+import openai
+import anthropic
+import google.generativeai as genai
+from credential_manager import get_credential_manager
+from cns_service_simplified import BrainOpsCNS
 
 logger = logging.getLogger(__name__)
 
 class AgentOrchestratorV2:
     """Coordinates multiple AI agents to work together on complex tasks"""
 
-    def __init__(self, db_pool: asyncpg.Pool):
+    def __init__(self, db_pool: asyncpg.Pool, cns: BrainOpsCNS):
         self.db_pool = db_pool
+        self.cns = cns
         self.active_agents = {}
         self.neural_network = {}
         self.initialized = False
@@ -214,7 +220,7 @@ class AgentOrchestratorV2:
             logger.info(f"Step {step_num}: {agent_name} - {action}")
 
             # Simulate agent execution (replace with actual agent invocation)
-            step_result = await self._invoke_agent(agent_name, action, context, results)
+            step_result = await self._invoke_agent(agent_name, action, context, results, provider="openai")
 
             results[f"step_{step_num}"] = {
                 "agent": agent_name,
@@ -226,13 +232,61 @@ class AgentOrchestratorV2:
             # Record agent message (inter-agent communication)
             await self._record_agent_message(agent_name, action, step_result)
 
+        # Remember the final result
+        await self.cns.remember({
+            'type': 'task_result',
+            'category': 'agent_collaboration',
+            'title': f"Task completed: {context.get('task_description', 'N/A')}",
+            'content': results,
+            'importance': 0.7,
+            'tags': ['task_result', 'agent_collaboration']
+        })
+
         return results
 
-    async def _invoke_agent(self, agent_name: str, action: str, context: Dict, previous_results: Dict) -> str:
-        """Invoke specific agent (stub - implement actual agent execution)"""
-        # TODO: Implement actual agent invocation
-        # For now, return simulated result
-        return f"{agent_name} completed: {action}"
+    async def _invoke_agent(self, agent_name: str, action: str, context: Dict, previous_results: Dict, provider: str) -> str:
+        """Invoke specific agent"""
+        credential_manager = get_credential_manager()
+        api_key = credential_manager.get_ai_key(provider)
+
+        if not api_key:
+            return f"Error: API key for {provider} not found."
+
+        # Recall relevant memories
+        recalled_memories = await self.cns.recall(query=f"{action} {json.dumps(context)}", limit=5)
+
+        prompt = f"Agent: {agent_name}\nAction: {action}\nContext: {json.dumps(context)}\nPrevious Results: {json.dumps(previous_results)}\nRecalled Memories: {json.dumps(recalled_memories)}"
+
+        try:
+            if provider == "openai":
+                client = openai.OpenAI(api_key=api_key)
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": f"You are the {agent_name} agent. Your task is to: {action}."},
+                        {"role": "user", "content": f"Context: {json.dumps(context)}\n\nPrevious Results: {json.dumps(previous_results)}\n\nRecalled Memories: {json.dumps(recalled_memories)}"}
+                    ],
+                    max_tokens=500
+                )
+                return response.choices[0].message.content.strip()
+            elif provider == "anthropic":
+                client = anthropic.Anthropic(api_key=api_key)
+                response = client.completions.create(
+                    model="claude-2",
+                    prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
+                    max_tokens_to_sample=500,
+                )
+                return response.completion
+            elif provider == "gemini":
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-pro')
+                response = model.generate_content(prompt)
+                return response.text
+            else:
+                return f"Error: Unknown provider {provider}"
+        except Exception as e:
+            logger.error(f"Error invoking agent {agent_name} with provider {provider}: {e}")
+            return f"Error: {e}"
 
     async def _record_agent_message(self, agent_name: str, action: str, result: str):
         """Record inter-agent communication in database"""
@@ -367,10 +421,10 @@ class AgentOrchestratorV2:
 # Global instance
 _orchestrator: Optional[AgentOrchestratorV2] = None
 
-async def initialize_orchestrator(db_pool: asyncpg.Pool):
+async def initialize_orchestrator(db_pool: asyncpg.Pool, cns: BrainOpsCNS):
     """Initialize global orchestrator"""
     global _orchestrator
-    _orchestrator = AgentOrchestratorV2(db_pool)
+    _orchestrator = AgentOrchestratorV2(db_pool, cns)
     await _orchestrator.initialize()
     await _orchestrator.establish_neural_pathways()
     await _orchestrator.enable_autonomous_operation()

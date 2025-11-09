@@ -2,6 +2,8 @@
 # Complete workflow management and automation endpoints
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from ..database import get_db
+
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any, List, Optional
@@ -18,7 +20,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    ""
 )
 
 engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
