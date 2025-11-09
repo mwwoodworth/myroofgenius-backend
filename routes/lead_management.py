@@ -4,6 +4,8 @@ Complete lead tracking and qualification system
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from ..database import get_db
+
 from pydantic import BaseModel, Field, EmailStr, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
@@ -23,7 +25,7 @@ import os
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    ""
 )
 
 engine = create_engine(

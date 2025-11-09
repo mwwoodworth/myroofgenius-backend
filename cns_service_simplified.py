@@ -12,6 +12,8 @@ from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 import logging
 import hashlib
+import openai
+from credential_manager import get_credential_manager
 
 logger = logging.getLogger(__name__)
 
@@ -49,23 +51,36 @@ class BrainOpsCNS:
             raise
 
     def _generate_embedding(self, text: str) -> List[float]:
-        """Generate a deterministic embedding from text (fallback when no AI)"""
-        # Use SHA256 to generate deterministic values from text
-        hash_obj = hashlib.sha256(text.encode())
-        hash_hex = hash_obj.hexdigest()
+        """Generate an embedding from text using OpenAI"""
+        try:
+            credential_manager = get_credential_manager()
+            openai.api_key = credential_manager.get_ai_key("openai")
+            if not openai.api_key:
+                raise ValueError("OpenAI API key not found")
 
-        # Convert hex to floats between -1 and 1
-        embedding = []
-        for i in range(0, min(len(hash_hex), 1536*2), 2):
-            hex_pair = hash_hex[i:i+2]
-            value = (int(hex_pair, 16) / 127.5) - 1.0  # Normalize to [-1, 1]
-            embedding.append(value)
+            response = openai.Embedding.create(
+                input=text,
+                model="text-embedding-ada-002"
+            )
+            return response['data'][0]['embedding']
+        except Exception as e:
+            logger.error(f"Error generating embedding: {e}. Falling back to deterministic method.")
+            # Fallback to deterministic method
+            hash_obj = hashlib.sha256(text.encode())
+            hash_hex = hash_obj.hexdigest()
 
-        # Pad to 1536 dimensions if needed
-        while len(embedding) < 1536:
-            embedding.append(0.0)
+            # Convert hex to floats between -1 and 1
+            embedding = []
+            for i in range(0, min(len(hash_hex), 1536*2), 2):
+                hex_pair = hash_hex[i:i+2]
+                value = (int(hex_pair, 16) / 127.5) - 1.0  # Normalize to [-1, 1]
+                embedding.append(value)
 
-        return embedding[:1536]
+            # Pad to 1536 dimensions if needed
+            while len(embedding) < 1536:
+                embedding.append(0.0)
+
+            return embedding[:1536]
 
     async def remember(self, data: Dict) -> str:
         """Store anything in permanent memory"""

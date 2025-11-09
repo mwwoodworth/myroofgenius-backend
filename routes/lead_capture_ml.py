@@ -4,6 +4,8 @@ Task #102: Complete lead capture with ML-powered scoring, qualification, and nur
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks, Form
+from ..database import get_db
+
 from pydantic import BaseModel, EmailStr, Field, validator, HttpUrl
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date, timedelta

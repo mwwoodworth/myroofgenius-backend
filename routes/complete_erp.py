@@ -4,6 +4,8 @@ Comprehensive endpoints for all business processes
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, BackgroundTasks
+from ..database import get_db
+
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -105,7 +107,7 @@ def calculate_traditional_lead_score(lead_dict: Dict) -> tuple:
 # Database connection
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+    ""
 )
 
 engine = create_engine(

@@ -190,7 +190,7 @@ async def lifespan(app: FastAPI):
             if ORCHESTRATOR_AVAILABLE:
                 try:
                     print("\n🤖 Initializing Agent Orchestrator V2...")
-                    agent_orchestrator = await initialize_orchestrator(db_pool)
+                    agent_orchestrator = await initialize_orchestrator(db_pool, cns)
                     orch_status = await agent_orchestrator.get_orchestration_status()
                     print(f"✅ Agent Orchestrator V2 initialized!")
                     print(f"  Active agents: {orch_status['active_agents']}")
@@ -310,70 +310,6 @@ try:
 except Exception as e:
     logger.error(f"⚠️  Failed to load routes: {e}")
 
-# Products routes now loaded by load_all_routes with correct mapping
-# No need to load explicitly anymore
-
-try:
-    from routes.invoices import router as invoices_router
-    app.include_router(invoices_router)
-    logger.info("✅ Invoices routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load invoices routes: {e}")
-
-try:
-    from routes.jobs import router as jobs_router
-    app.include_router(jobs_router)
-    logger.info("✅ Jobs routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load jobs routes: {e}")
-
-try:
-    from routes.relationships import router as relationships_router
-    app.include_router(relationships_router)
-    logger.info("✅ Relationships routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load relationships routes: {e}")
-
-try:
-    from routes.customers import router as customers_router
-    app.include_router(customers_router)
-    logger.info("✅ Customers routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load customers routes: {e}")
-
-# Load LangGraph workflow routes
-try:
-    from routes.workflows_langgraph import router as workflows_router
-    app.include_router(workflows_router)
-    logger.info("✅ LangGraph workflow routes loaded")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load workflow routes: {e}")
-
-# Load Weathercraft ERP integration routes
-try:
-    from routes.weathercraft_integration import router as weathercraft_router
-    app.include_router(weathercraft_router)
-    logger.info("✅ Weathercraft ERP integration routes loaded")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load Weathercraft integration routes: {e}")
-
-# Load Relationship Awareness routes
-try:
-    from routes.relationship_aware import router as relationship_router
-    app.include_router(relationship_router)
-    logger.info("✅ Relationship Awareness routes loaded at /api/v1/aware")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load Relationship Awareness routes: {e}")
-
-# Load Elena Roofing AI routes
-if ELENA_AVAILABLE:
-    try:
-        from routes.elena_roofing_agent import router as elena_router
-        app.include_router(elena_router)
-        logger.info("✅ Elena Roofing AI routes loaded at /api/v1/elena")
-    except Exception as e:
-        logger.error(f"⚠️  Failed to load Elena routes: {e}")
-
 # Health check endpoint
 @app.get("/health")
 @app.get("/api/v1/health")
@@ -415,40 +351,6 @@ async def health_check():
             "version": app.version,
             "error": str(e)
         }
-
-# Customer model
-class Customer(BaseModel):
-    name: str
-    email: str
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    company: Optional[str] = None
-    status: Optional[str] = "active"
-    metadata: Optional[Dict[str, Any]] = {}
-
-# ============================================================================
-# BUSINESS LOGIC ENDPOINTS REMOVED (v147.0.0)
-# ============================================================================
-# All business endpoints now handled by route files with full CRUD capability
-# Previous GET-only stubs in main.py blocked the complete implementations
-#
-# Removed endpoints (now in route files):
-# - /api/v1/customers    → routes/customers_complete.py (full CRUD)
-# - /api/v1/jobs         → routes/jobs_*.py (full CRUD)
-# - /api/v1/employees    → routes/employees_*.py (full CRUD)
-# - /api/v1/estimates    → routes/estimates_*.py (full CRUD)
-# - /api/v1/invoices     → routes/invoices_*.py (full CRUD)
-# - /api/v1/equipment    → routes/equipment_*.py (full CRUD)
-# - /api/v1/inventory    → routes/inventory_*.py (full CRUD)
-# - /api/v1/timesheets   → routes/timesheets_*.py (full CRUD)
-# - /api/v1/reports      → routes/reports_*.py (full CRUD)
-# - /api/v1/revenue/stats→ routes/revenue_*.py (full CRUD)
-# - /api/v1/crm/leads    → routes/crm_*.py (full CRUD)
-# - /api/v1/tenants      → routes/tenants_*.py (full CRUD)
-# - /api/v1/monitoring   → routes/monitoring_*.py (full CRUD)
-# - /api/v1/ai/agents    → routes/ai_*.py (full CRUD)
-# - /api/v1/workflows    → routes/workflows_*.py (full CRUD)
-# ============================================================================
 
 # Root endpoint
 @app.get("/")
