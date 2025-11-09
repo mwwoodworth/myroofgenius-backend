@@ -23,3 +23,4 @@ BrainOps.env
 # Scripts with hardcoded keys
 CREATE_STRIPE_PRODUCTS.py
 deployment_scripts/revenue_api.py
+venv/
