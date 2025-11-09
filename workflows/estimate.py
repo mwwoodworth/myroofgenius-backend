@@ -17,6 +17,7 @@ import asyncpg
 
 from workflows.config import WorkflowConfig
 from workflows.state_manager import WorkflowStateManager
+from .executor import WorkflowExecutor
 
 class EstimateWorkflowState(TypedDict):
     """Workflow state (preserved across steps)"""
@@ -48,6 +49,7 @@ class EstimateWorkflow:
         self.db_pool = db_pool
         self.state_manager = WorkflowStateManager(db_pool)
         self.config = WorkflowConfig
+        self.executor = WorkflowExecutor(db_pool)
 
     async def execute(
         self,
@@ -83,17 +85,7 @@ class EstimateWorkflow:
         )
 
         try:
-            # Step 1: Fetch customer
-            state = await self._fetch_customer(state)
-
-            # Step 2: Analyze property
-            state = await self._analyze_property(state)
-
-            # Step 3: Generate pricing
-            state = await self._generate_pricing(state)
-
-            # Step 4: Create estimate
-            state = await self._create_estimate(state)
+            state = await self.executor.run("estimate_generation", state, self)
 
             # Mark as completed
             await self.state_manager.save_state(
@@ -171,21 +163,32 @@ class EstimateWorkflow:
             if llm:
                 # Use Claude for property analysis
                 prompt = f"""
-                Analyze this property for roofing estimate:
+                You are an expert roofing estimator for a company called WeatherCraft. Your task is to analyze a property and provide a detailed breakdown for a roofing estimate.
 
-                Address: {state['property_info'].get('address', 'Unknown')}
-                Property Type: {state['property_info'].get('type', 'residential')}
-                Roof Type: {state['property_info'].get('roof_type', 'asphalt shingle')}
-                Square Footage: {state['property_info'].get('sq_ft', 0)}
-                Stories: {state['property_info'].get('stories', 1)}
+                **Property Information:**
+                - Address: {state['property_info'].get('address', 'Unknown')}
+                - Property Type: {state['property_info'].get('type', 'residential')}
+                - Roof Type: {state['property_info'].get('roof_type', 'asphalt shingle')}
+                - Square Footage: {state['property_info'].get('sq_ft', 0)}
+                - Stories: {state['property_info'].get('stories', 1)}
 
-                Provide analysis as JSON with these fields:
-                - materials_needed (dict with item names and quantities)
-                - complexity_level (1-5)
-                - recommended_crew_size (number)
-                - estimated_labor_hours (number)
-                - estimated_materials_cost (number)
-                - confidence_score (0.0-1.0)
+                **Instructions:**
+
+                1.  **Analyze Complexity:** Based on the property information, determine the complexity of the roofing job on a scale of 1 to 5. A simple, single-story, asphalt shingle roof is a 1. A complex, multi-story roof with a steep pitch or difficult access is a 5.
+                2.  **Estimate Labor:** Based on the complexity and square footage, estimate the number of labor hours required and the recommended crew size.
+                3.  **Estimate Materials:** Based on the square footage and roof type, estimate the quantity of materials needed. Be specific (e.g., "shingles_sq": 20, "underlayment_rolls": 5).
+                4.  **Estimate Costs:** Based on your internal knowledge of material and labor costs, provide an estimated cost for materials and labor.
+                5.  **Confidence Score:** Provide a confidence score (0.0 to 1.0) for your estimate.
+
+                **Output Format:**
+
+                Provide your analysis as a single, valid JSON object with the following fields:
+                - "materials_needed": {{ "item_name": quantity }}
+                - "complexity_level": integer
+                - "recommended_crew_size": integer
+                - "estimated_labor_hours": integer
+                - "estimated_materials_cost": number
+                - "confidence_score": number
                 """
 
                 analysis_response = await llm.ainvoke(prompt)
@@ -235,31 +238,63 @@ class EstimateWorkflow:
         return state
 
     async def _generate_pricing(self, state: EstimateWorkflowState) -> EstimateWorkflowState:
-        """Step 3: Generate pricing"""
+        """Step 3: Generate pricing with AI"""
 
         start_time = datetime.now()
 
         try:
-            # Calculate pricing based on property analysis
-            materials_cost = state["property_analysis"].get("estimated_materials_cost", 5000)
-            labor_hours = state["property_analysis"].get("estimated_labor_hours", 40)
-            labor_rate = 75  # $75/hour
+            llm = self.config.get_llm()
+            pricing_data = {}
 
-            labor_cost = labor_hours * labor_rate
-            subtotal = materials_cost + labor_cost
-            markup = subtotal * 0.20  # 20% markup
-            total = subtotal + markup
+            if llm:
+                prompt = f"""
+                You are a senior pricing analyst for WeatherCraft, a roofing company. Your task is to generate a detailed pricing breakdown for a roofing estimate based on the provided analysis.
 
-            pricing_data = {
-                "materials_cost": materials_cost,
-                "labor_cost": labor_cost,
-                "labor_hours": labor_hours,
-                "labor_rate": labor_rate,
-                "subtotal": subtotal,
-                "markup": markup,
-                "total": total,
-                "profit_margin": 0.20
-            }
+                **Property & Labor Analysis:**
+                {json.dumps(state["property_analysis"])}
+
+                **Instructions:**
+
+                1.  **Calculate Labor Cost:** Based on the estimated labor hours and a standard labor rate of $75/hour, calculate the total labor cost.
+                2.  **Calculate Subtotal:** Calculate the subtotal by adding the estimated materials cost and the total labor cost.
+                3.  **Calculate Markup:** Apply a standard 20% markup to the subtotal. This is the company's profit margin.
+                4.  **Calculate Total:** Calculate the final total by adding the markup to the subtotal.
+
+                **Output Format:**
+
+                Provide the pricing breakdown as a single, valid JSON object with the following fields:
+                - "materials_cost": number
+                - "labor_cost": number
+                - "labor_hours": number
+                - "labor_rate": number
+                - "subtotal": number
+                - "markup": number
+                - "total": number
+                - "profit_margin": number (e.g., 0.20)
+                """
+                pricing_response = await llm.ainvoke(prompt)
+                pricing_data = json.loads(pricing_response.content)
+            else:
+                # Fallback: Rule-based pricing
+                materials_cost = state["property_analysis"].get("estimated_materials_cost", 5000)
+                labor_hours = state["property_analysis"].get("estimated_labor_hours", 40)
+                labor_rate = 75  # $75/hour
+
+                labor_cost = labor_hours * labor_rate
+                subtotal = materials_cost + labor_cost
+                markup = subtotal * 0.20  # 20% markup
+                total = subtotal + markup
+
+                pricing_data = {
+                    "materials_cost": materials_cost,
+                    "labor_cost": labor_cost,
+                    "labor_hours": labor_hours,
+                    "labor_rate": labor_rate,
+                    "subtotal": subtotal,
+                    "markup": markup,
+                    "total": total,
+                    "profit_margin": 0.20
+                }
 
             state["pricing_data"] = pricing_data
 
@@ -268,7 +303,7 @@ class EstimateWorkflow:
             await self.state_manager.log_step(
                 workflow_id=state["workflow_id"],
                 step_name="generate_pricing",
-                step_result={"total": total},
+                step_result={"total": pricing_data.get("total", 0)},
                 duration_ms=duration_ms
             )
 
