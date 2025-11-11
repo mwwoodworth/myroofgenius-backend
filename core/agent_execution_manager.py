@@ -200,6 +200,12 @@ class AgentExecutionManager:
         """
         Call the actual AI agent API with timeout
         """
+        # Get API key from environment
+        api_key = os.getenv("BRAINOPS_API_KEY")
+        headers = {}
+        if api_key:
+            headers["X-API-Key"] = api_key
+
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             # Try AI agents service first
             try:
@@ -210,6 +216,7 @@ class AgentExecutionManager:
                         "task": task,
                         "parameters": context
                     },
+                    headers=headers,
                     timeout=self.timeout_seconds
                 )
 
