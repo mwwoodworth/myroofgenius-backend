@@ -1,18 +1,28 @@
 #!/bin/bash
 # Execute all database migrations for production
 
+set -euo pipefail
+
+# Load environment variables
+if [ -f .env ]; then
+    source .env
+else
+    echo "Error: .env file not found. Please create one based on .env.example."
+    exit 1
+fi
+
 echo "🚀 EXECUTING ALL DATABASE MIGRATIONS"
 echo "===================================="
 echo ""
 
 # Database credentials
-export PGPASSWORD='Brain0ps2O2S'
-DB_HOST="db.yomagoqdmxszqtdwuhab.supabase.co"
-DB_USER="postgres"
-DB_NAME="postgres"
+export PGPASSWORD="${PGPASSWORD}"
+DB_HOST="${DB_HOST}"
+DB_USER="${DB_USER}"
+DB_NAME="${DB_NAME}"
 
 # Using pooler connection for better reliability
-POOLER_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+POOLER_URL="postgresql://${DB_USER}:${PGPASSWORD}@${DB_HOST}:6543/${DB_NAME}?sslmode=require"
 
 echo "📊 Step 1: Creating env_master table and loading environment variables..."
 psql "$POOLER_URL" -f CREATE_ENV_MASTER_PRODUCTION.sql
