@@ -374,6 +374,14 @@ if ELENA_AVAILABLE:
     except Exception as e:
         logger.error(f"⚠️  Failed to load Elena routes: {e}")
 
+# Load AI Agents routes (CRITICAL - needed for all agent endpoints)
+try:
+    from routes.ai_agents import router as ai_agents_router
+    app.include_router(ai_agents_router)
+    logger.info("✅ AI Agents routes loaded at /api/v1/agents")
+except Exception as e:
+    logger.error(f"⚠️  Failed to load AI Agents routes: {e}")
+
 # Health check endpoint
 @app.get("/health")
 @app.get("/api/v1/health")
