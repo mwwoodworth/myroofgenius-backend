@@ -51,8 +51,12 @@ class AgentAnalysisRequest(BaseModel):
 # ============================================================================
 
 async def get_db_pool(request: Request):
-    """Get database pool from app state"""
-    return request.app.state.db_pool
+    """Get database pool from app state, fail fast if unavailable."""
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        logger.error("Database pool is not initialized. Rejecting request with 503.")
+        raise HTTPException(status_code=503, detail="Service unavailable: database not initialized")
+    return db_pool
 
 async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) -> Dict[str, Any]:
     """Execute an AI agent with production service or raise if unavailable."""
