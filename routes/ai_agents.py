@@ -124,22 +124,29 @@ async def list_agents(request: Request):
         result_agents = []
         for agent in agents:
             agent_dict = dict(agent)
-            # Parse metadata to get category
-            if agent_dict.get('metadata'):
-                if isinstance(agent_dict['metadata'], str):
+            # Robustly parse metadata (jsonb can be dict/array/null)
+            raw_meta = agent_dict.get('metadata')
+            category = 'Uncategorized'
+            description = ''
+            if raw_meta is not None:
+                parsed = None
+                if isinstance(raw_meta, str):
                     try:
-                        metadata = json.loads(agent_dict['metadata'])
-                    except:
-                        metadata = {}
+                        parsed = json.loads(raw_meta)
+                    except Exception:
+                        parsed = None
                 else:
-                    metadata = agent_dict['metadata']
-                agent_dict['category'] = metadata.get('category', 'Uncategorized')
-                agent_dict['description'] = metadata.get('description', '')
-            else:
-                agent_dict['category'] = 'Uncategorized'
-                agent_dict['description'] = ''
+                    parsed = raw_meta
 
-            # Remove metadata from response (keep it clean)
+                if isinstance(parsed, dict):
+                    category = parsed.get('category', category)
+                    description = parsed.get('description', description)
+                # If metadata is list/number/bool, ignore and use defaults
+
+            agent_dict['category'] = category
+            agent_dict['description'] = description
+
+            # Remove metadata from response (keep it clean and consistent)
             agent_dict.pop('metadata', None)
             result_agents.append(agent_dict)
 
