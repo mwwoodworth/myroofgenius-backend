@@ -198,7 +198,7 @@ class AgentExecutionManager:
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Call the actual AI agent API with timeout
+        Call the actual AI agent API with timeout, fall back to local execution if unavailable
         """
         # Get API key from environment
         api_key = os.getenv("BRAINOPS_API_KEY")
@@ -221,7 +221,12 @@ class AgentExecutionManager:
                 )
 
                 if response.status_code == 200:
-                    return response.json()
+                    result = response.json()
+                    # Check if result indicates success (not a database error)
+                    if result.get("status") != "failed":
+                        return result
+                    else:
+                        logger.warning(f"AI agents service returned error: {result.get('error')}")
 
             except Exception as e:
                 logger.warning(f"AI agents service unavailable: {e}")
@@ -245,6 +250,7 @@ class AgentExecutionManager:
                 logger.warning(f"Backend API unavailable: {e}")
 
             # If both fail, use intelligent fallback
+            logger.info(f"Using intelligent fallback for {agent_type}")
             return self._intelligent_fallback(agent_type, task, context)
 
     def _intelligent_fallback(

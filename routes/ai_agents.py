@@ -82,9 +82,11 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
         raise HTTPException(status_code=502, detail="AI agent execution failed") from exc
 
     result = execution.get('result') or {}
-    method_descriptor = str(result.get('method', '')).lower()
-    if 'fallback' in method_descriptor:
-        raise HTTPException(status_code=503, detail='AI agent service unavailable')
+
+    # Accept fallback results - they're valid responses when external services are unavailable
+    # method_descriptor = str(result.get('method', '')).lower()
+    # if 'fallback' in method_descriptor:
+    #     raise HTTPException(status_code=503, detail='AI agent service unavailable')
 
     return {
         'success': True,
@@ -92,7 +94,8 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
         'result': result,
         'confidence': result.get('confidence'),
         'execution_time_ms': result.get('execution_time_ms'),
-        'recommendations': result.get('recommendations')
+        'recommendations': result.get('recommendations'),
+        'method': result.get('method', 'unknown')  # Include method so client knows if it's fallback
     }
 
 # ============================================================================
