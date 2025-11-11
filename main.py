@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import asyncio
 import os
 import logging
 from version import __version__
@@ -98,6 +99,34 @@ try:
 except ImportError as e:
     logger.warning(f"Elena Roofing AI not available: {e}")
 
+async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asyncpg.Pool:
+    """Initialize the asyncpg pool with retry and backoff. Raises on failure."""
+    backoffs = [2, 5, 10]
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            pool = await asyncpg.create_pool(
+                database_url,
+                min_size=5,
+                max_size=20,
+                command_timeout=10,
+            )
+            # Smoke test a connection
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            logger.info("✅ Database pool created successfully on attempt %d", attempt)
+            print("✅ Database pool created successfully")
+            return pool
+        except Exception as e:
+            last_err = e
+            logger.error("❌ Database initialization failed on attempt %d: %s", attempt, e)
+            print(f"❌ Database initialization failed (attempt {attempt}/{retries}): {e}")
+            if attempt < retries:
+                await asyncio.sleep(backoffs[min(attempt - 1, len(backoffs) - 1)])
+    assert last_err is not None
+    raise RuntimeError(f"Database initialization failed after {retries} attempts: {last_err}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
@@ -115,153 +144,143 @@ async def lifespan(app: FastAPI):
         db_pool = None
         app.state.db_pool = None
     else:
-        # Initialize database pool
+        # Initialize database pool with retries; crash app if not available
+        db_pool = await _init_db_pool_with_retries(DATABASE_URL, retries=3)
+        app.state.db_pool = db_pool
+
+        # Initialize Credential Manager FIRST (loads all credentials from DB)
+        if CREDENTIAL_MANAGER_AVAILABLE:
+            try:
+                print("\n🔐 Initializing Credential Manager...")
+                credential_manager = await initialize_credential_manager(db_pool)
+                cred_status = await credential_manager.health_check()
+                print(f"✅ Credential Manager initialized!")
+                print(f"  Total credentials: {cred_status['total_credentials']}")
+                print(f"  Status: {cred_status['status']}")
+                print("🔐 All credentials now loaded from database!")
+                app.state.credential_manager = credential_manager
+            except Exception as e:
+                print(f"⚠️  Credential Manager initialization failed: {e}")
+
+        # Initialize CNS with database pool if available
+        if CNS_AVAILABLE:
+            try:
+                print("\n🧠 Initializing Central Nervous System...")
+                cns = BrainOpsCNS(db_pool=db_pool)
+                await cns.initialize()
+
+                # Get CNS status
+                status = await cns.get_status()
+                print(f"✅ CNS initialized successfully!")
+                print(f"  Memory entries: {status.get('memory_count', 0)}")
+                print(f"  Tasks: {status.get('task_count', 0)}")
+                print(f"  Projects: {status.get('project_count', 0)}")
+                print("🧠 Central Nervous System is OPERATIONAL!")
+
+                # Register CNS routes
+                cns_routes = create_cns_routes(cns)
+                app.include_router(cns_routes, prefix="/api/v1/cns", tags=["CNS"])
+                print("✅ CNS routes registered at /api/v1/cns")
+
+                # Store a memory about initialization
+                await cns.remember({
+                    'type': 'system',
+                    'category': 'startup',
+                    'title': 'BrainOps v158.0.0 LangGraph Workflow Fixes',
+                    'content': {
+                        'version': 'v158.0.0',
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'status': status,
+                        'integrations': {
+                            'credential_manager': CREDENTIAL_MANAGER_AVAILABLE,
+                            'agent_orchestrator': ORCHESTRATOR_AVAILABLE,
+                            'cns': True,
+                            'langgraph_workflows': True
+                        }
+                    },
+                    'importance': 1.0,
+                    'tags': ['startup', 'initialization', 'v157', 'langgraph_integration']
+                })
+                print("💾 Stored initialization memory in CNS")
+                app.state.cns = cns
+
+            except Exception as e:
+                print(f"⚠️  CNS initialization failed: {e}")
+                cns = None
+
+        # Initialize Agent Orchestrator V2
+        if ORCHESTRATOR_AVAILABLE:
+            try:
+                print("\n🤖 Initializing Agent Orchestrator V2...")
+                agent_orchestrator = await initialize_orchestrator(db_pool)
+                orch_status = await agent_orchestrator.get_orchestration_status()
+                print(f"✅ Agent Orchestrator V2 initialized!")
+                print(f"  Active agents: {orch_status['active_agents']}")
+                print(f"  Neural pathways: {orch_status['neural_pathways']}")
+                print(f"  Autonomous tasks: {orch_status['autonomous_tasks']}")
+                print("🤖 Multi-agent coordination is OPERATIONAL!")
+                app.state.orchestrator = agent_orchestrator
+            except Exception as e:
+                print(f"⚠️  Orchestrator initialization failed: {e}")
+
+        # Initialize Weathercraft ERP Integration
         try:
-            db_pool = await asyncpg.create_pool(
-                DATABASE_URL,
-                min_size=5,
-                max_size=20,
-                command_timeout=10
-            )
-            print("✅ Database pool initialized")
-            app.state.db_pool = db_pool
-
-            # Initialize Credential Manager FIRST (loads all credentials from DB)
-            if CREDENTIAL_MANAGER_AVAILABLE:
-                try:
-                    print("\n🔐 Initializing Credential Manager...")
-                    credential_manager = await initialize_credential_manager(db_pool)
-                    cred_status = await credential_manager.health_check()
-                    print(f"✅ Credential Manager initialized!")
-                    print(f"  Total credentials: {cred_status['total_credentials']}")
-                    print(f"  Status: {cred_status['status']}")
-                    print("🔐 All credentials now loaded from database!")
-                    app.state.credential_manager = credential_manager
-                except Exception as e:
-                    print(f"⚠️  Credential Manager initialization failed: {e}")
-
-            # Initialize CNS with database pool if available
-            if CNS_AVAILABLE:
-                try:
-                    print("\n🧠 Initializing Central Nervous System...")
-                    cns = BrainOpsCNS(db_pool=db_pool)
-                    await cns.initialize()
-
-                    # Get CNS status
-                    status = await cns.get_status()
-                    print(f"✅ CNS initialized successfully!")
-                    print(f"  Memory entries: {status.get('memory_count', 0)}")
-                    print(f"  Tasks: {status.get('task_count', 0)}")
-                    print(f"  Projects: {status.get('project_count', 0)}")
-                    print("🧠 Central Nervous System is OPERATIONAL!")
-
-                    # Register CNS routes
-                    cns_routes = create_cns_routes(cns)
-                    app.include_router(cns_routes, prefix="/api/v1/cns", tags=["CNS"])
-                    print("✅ CNS routes registered at /api/v1/cns")
-
-                    # Store a memory about initialization
-                    await cns.remember({
-                        'type': 'system',
-                        'category': 'startup',
-                        'title': 'BrainOps v158.0.0 LangGraph Workflow Fixes',
-                        'content': {
-                            'version': 'v158.0.0',
-                            'timestamp': datetime.utcnow().isoformat(),
-                            'status': status,
-                            'integrations': {
-                                'credential_manager': CREDENTIAL_MANAGER_AVAILABLE,
-                                'agent_orchestrator': ORCHESTRATOR_AVAILABLE,
-                                'cns': True,
-                                'langgraph_workflows': True
-                            }
-                        },
-                        'importance': 1.0,
-                        'tags': ['startup', 'initialization', 'v157', 'langgraph_integration']
-                    })
-                    print("💾 Stored initialization memory in CNS")
-                    app.state.cns = cns
-
-                except Exception as e:
-                    print(f"⚠️  CNS initialization failed: {e}")
-                    cns = None
-
-            # Initialize Agent Orchestrator V2
-            if ORCHESTRATOR_AVAILABLE:
-                try:
-                    print("\n🤖 Initializing Agent Orchestrator V2...")
-                    agent_orchestrator = await initialize_orchestrator(db_pool)
-                    orch_status = await agent_orchestrator.get_orchestration_status()
-                    print(f"✅ Agent Orchestrator V2 initialized!")
-                    print(f"  Active agents: {orch_status['active_agents']}")
-                    print(f"  Neural pathways: {orch_status['neural_pathways']}")
-                    print(f"  Autonomous tasks: {orch_status['autonomous_tasks']}")
-                    print("🤖 Multi-agent coordination is OPERATIONAL!")
-                    app.state.orchestrator = agent_orchestrator
-                except Exception as e:
-                    print(f"⚠️  Orchestrator initialization failed: {e}")
-
-            # Initialize Weathercraft ERP Integration
-            try:
-                print("\n🏢 Initializing Weathercraft ERP Deep Integration...")
-                from integrations.weathercraft_erp import WeathercraftERPIntegration
-                weathercraft_integration = WeathercraftERPIntegration(db_pool)
-                await weathercraft_integration.initialize()
-                print("✅ Weathercraft ERP Integration initialized!")
-                print("  🔄 Bidirectional sync enabled")
-                print("  🤖 AI enrichment active")
-                print("  🔗 Deep relationships established")
-                print("🏢 Weathercraft ERP is INTRICATELY LINKED!")
-                app.state.weathercraft_integration = weathercraft_integration
-            except Exception as e:
-                print(f"⚠️  Weathercraft Integration initialization failed: {e}")
-
-            # Initialize Relationship Awareness System
-            try:
-                print("\n🔗 Initializing Relationship Awareness System...")
-                from core.relationship_awareness import RelationshipAwareness
-                relationship_awareness = RelationshipAwareness(db_pool)
-                print("✅ Relationship Awareness System initialized!")
-                print("  🔗 Auto-linking on entity creation")
-                print("  🔍 Complete 360° entity views")
-                print("  📊 Computed field materialization")
-                print("  🕸️  Relationship graph tracking")
-                print("🔗 ERP MODULES ARE NOW INTRICATELY AWARE!")
-                app.state.relationship_awareness = relationship_awareness
-            except Exception as e:
-                print(f"⚠️  Relationship Awareness initialization failed: {e}")
-
-            # Initialize Elena Roofing AI
-            if ELENA_AVAILABLE:
-                try:
-                    print("\n🏗️ Initializing Elena Roofing AI...")
-                    # Use production URL in deployment, localhost for local dev
-                    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    elena_instance = await initialize_elena(
-                        db_pool,
-                        backend_url=backend_url
-                    )
-                    print("✅ Elena Roofing AI initialized!")
-                    print("  🎯 Roofing estimation capabilities active")
-                    print("  🏗️ Integrated with roofing backend")
-                    print("  📊 50+ manufacturer products available")
-                    print("  🤖 AI-powered assembly recommendations")
-                    print("🏗️ ELENA IS READY FOR ROOFING PROJECTS!")
-                    app.state.elena = elena_instance
-                except Exception as e:
-                    print(f"⚠️  Elena initialization failed: {e}")
-
-            print("\n" + "=" * 80)
-            print("✅ BrainOps Backend v163.0.0 FULLY OPERATIONAL")
-            print("  🤖 23 AI agent endpoints active")
-            print("  🔗 Complete relationship awareness")
-            print("  ✅ All frontend linkages verified")
-            print("=" * 80 + "\n")
-
+            print("\n🏢 Initializing Weathercraft ERP Deep Integration...")
+            from integrations.weathercraft_erp import WeathercraftERPIntegration
+            weathercraft_integration = WeathercraftERPIntegration(db_pool)
+            await weathercraft_integration.initialize()
+            print("✅ Weathercraft ERP Integration initialized!")
+            print("  🔄 Bidirectional sync enabled")
+            print("  🤖 AI enrichment active")
+            print("  🔗 Deep relationships established")
+            print("🏢 Weathercraft ERP is INTRICATELY LINKED!")
+            app.state.weathercraft_integration = weathercraft_integration
         except Exception as e:
-            print(f"⚠️ System initialization failed: {e}")
-            db_pool = None
+            print(f"⚠️  Weathercraft Integration initialization failed: {e}")
 
+        # Initialize Relationship Awareness System
+        try:
+            print("\n🔗 Initializing Relationship Awareness System...")
+            from core.relationship_awareness import RelationshipAwareness
+            relationship_awareness = RelationshipAwareness(db_pool)
+            print("✅ Relationship Awareness System initialized!")
+            print("  🔗 Auto-linking on entity creation")
+            print("  🔍 Complete 360° entity views")
+            print("  📊 Computed field materialization")
+            print("  🕸️  Relationship graph tracking")
+            print("🔗 ERP MODULES ARE NOW INTRICATELY AWARE!")
+            app.state.relationship_awareness = relationship_awareness
+        except Exception as e:
+            print(f"⚠️  Relationship Awareness initialization failed: {e}")
+
+        # Initialize Elena Roofing AI
+        if ELENA_AVAILABLE:
+            try:
+                print("\n🏗️ Initializing Elena Roofing AI...")
+                # Use production URL in deployment, localhost for local dev
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                elena_instance = await initialize_elena(
+                    db_pool,
+                    backend_url=backend_url
+                )
+                print("✅ Elena Roofing AI initialized!")
+                print("  🎯 Roofing estimation capabilities active")
+                print("  🏗️ Integrated with roofing backend")
+                print("  📊 50+ manufacturer products available")
+                print("  🤖 AI-powered assembly recommendations")
+                print("🏗️ ELENA IS READY FOR ROOFING PROJECTS!")
+                app.state.elena = elena_instance
+            except Exception as e:
+                print(f"⚠️  Elena initialization failed: {e}")
+
+        print("\n" + "=" * 80)
+        print("✅ BrainOps Backend v163.0.0 FULLY OPERATIONAL")
+        print("  🤖 23 AI agent endpoints active")
+        print("  🔗 Complete relationship awareness")
+        print("  ✅ All frontend linkages verified")
+        print("=" * 80 + "\n")
+
+    # If we reached here, either offline mode or fully initialized
     yield
 
     # Cleanup
