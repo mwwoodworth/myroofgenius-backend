@@ -141,7 +141,7 @@ async def list_agents(request: Request):
             'total': len(result_agents)
         }
     except Exception as e:
-        logger.error(f"Error listing agents: {e}")
+        logger.exception("Error listing agents:")
         raise HTTPException(status_code=500, detail="Failed to list agents")
 
 @router.get("/{agent_id}")
