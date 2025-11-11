@@ -60,7 +60,7 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
     async with db_pool.acquire() as conn:
         agent = await conn.fetchrow(
             """
-            SELECT id, name
+            SELECT id, name, type
             FROM ai_agents
             WHERE id::text = $1 OR name = $1
             """,
@@ -71,8 +71,9 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
         raise HTTPException(status_code=404, detail=f"Agent '{agent_identifier}' not found")
 
     try:
+        # Use agent type for execution (e.g., "MonitoringAgent" not "Monitor")
         execution = await agent_executor.execute_agent(
-            agent['name'],
+            agent['type'],
             'execute',
             data,
             retry_on_failure=False
