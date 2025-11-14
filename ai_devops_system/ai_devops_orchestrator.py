@@ -24,6 +24,7 @@ from pydantic import BaseModel
 # Import our custom modules
 from memory_system import PersistentMemorySystem
 from monitoring_system import MonitoringSystem
+from rag.service import RagService, IngestionOptions, QueryOptions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -51,6 +52,34 @@ class HealthCheckResponse(BaseModel):
     timestamp: str
     details: Dict[str, Any]
 
+class RagIngestRequest(BaseModel):
+    paths: Optional[List[str]] = None
+    glob_patterns: Optional[List[str]] = None
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    collection_name: str = "local_docs"
+    batch_size: Optional[int] = None
+    reset: bool = False
+    max_files: Optional[int] = None
+
+class RagQueryRequest(BaseModel):
+    query: str
+    n_results: int = 5
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    collection_name: str = "local_docs"
+
+class ChatRequest(BaseModel):
+    message: str
+    use_memory: bool = True
+    use_rag: bool = True
+    rag_results: int = 3
+    rag_provider: Optional[str] = None
+    rag_model_name: Optional[str] = None
+    rag_collection: str = "local_docs"
+
 class AIDevOpsOrchestrator:
     """Main orchestrator for the AI DevOps system"""
     
@@ -73,6 +102,7 @@ class AIDevOpsOrchestrator:
         # Initialize components
         self.memory_system = None
         self.monitoring_system = None
+        self.rag_service: Optional[RagService] = None
         self._is_running = False
         
         # Setup API routes
@@ -116,6 +146,12 @@ class AIDevOpsOrchestrator:
             await self.monitoring_system.start_monitoring()
         except Exception as e:
             logger.error(f"Monitoring system error: {e}")
+
+    def _ensure_rag_service(self) -> RagService:
+        """Lazily initialize the RagService."""
+        if self.rag_service is None:
+            self.rag_service = RagService()
+        return self.rag_service
     
     def _setup_routes(self):
         """Setup FastAPI routes"""
@@ -245,6 +281,57 @@ class AIDevOpsOrchestrator:
             except Exception as e:
                 logger.error(f"Alerts retrieval error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+        # RAG endpoints
+        @self.app.get("/rag/status")
+        async def rag_status(collection: str = "local_docs"):
+            """Get stats for the configured RAG collection"""
+            try:
+                service = self._ensure_rag_service()
+                return service.get_status(collection)
+            except Exception as e:
+                logger.error(f"RAG status error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/rag/ingest")
+        async def rag_ingest(request: RagIngestRequest):
+            """Trigger ingestion into the RAG vector store"""
+            try:
+                service = self._ensure_rag_service()
+                options = IngestionOptions(
+                    paths=request.paths or [".."],
+                    glob_patterns=request.glob_patterns,
+                    chunk_size=request.chunk_size or 1000,
+                    chunk_overlap=request.chunk_overlap or 200,
+                    provider=request.provider or os.getenv("EMBED_PROVIDER", "sentence-transformers"),
+                    model_name=request.model_name or os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2"),
+                    collection_name=request.collection_name,
+                    batch_size=request.batch_size or 64,
+                    reset=request.reset,
+                    max_files=request.max_files,
+                )
+                result = service.ingest(options)
+                return result
+            except Exception as e:
+                logger.error(f"RAG ingest error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/rag/query")
+        async def rag_query(request: RagQueryRequest):
+            """Query the RAG vector store."""
+            try:
+                service = self._ensure_rag_service()
+                options = QueryOptions(
+                    query=request.query,
+                    n_results=request.n_results,
+                    provider=request.provider,
+                    model_name=request.model_name,
+                    collection_name=request.collection_name,
+                )
+                return {"results": service.query(options)}
+            except Exception as e:
+                logger.error(f"RAG query error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
         
         @self.app.post("/monitoring/alert/{alert_id}/resolve")
         async def resolve_alert(alert_id: str):
@@ -283,11 +370,10 @@ class AIDevOpsOrchestrator:
         
         # AI model interaction endpoints
         @self.app.post("/ai/chat")
-        async def chat_with_ai(message: str, use_memory: bool = True):
-            """Chat with AI using the memory system"""
+        async def chat_with_ai(request: ChatRequest):
+            """Chat with AI using memory + RAG context"""
             try:
-                response = await self._process_ai_chat(message, use_memory)
-                return {"response": response}
+                return await self._process_ai_chat(request)
             except Exception as e:
                 logger.error(f"AI chat error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -323,51 +409,68 @@ class AIDevOpsOrchestrator:
                 logger.error(f"System info error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
     
-    async def _process_ai_chat(self, message: str, use_memory: bool = True) -> str:
-        """Process AI chat with memory integration"""
+    async def _process_ai_chat(self, request: ChatRequest) -> Dict[str, Any]:
+        """Process chat using both memory context and RAG retrieval."""
+        message = request.message
         try:
-            context = ""
-            relevant_memories = []
-            
-            if use_memory:
-                # Get relevant memories
+            memory_context = ""
+            relevant_memories: List[Dict[str, Any]] = []
+            if request.use_memory and self.memory_system:
                 relevant_memories = self.memory_system.retrieve_memories(message, n_results=3)
-                
-                # Get conversation context
-                context = self.memory_system.get_conversation_context(n_messages=5)
-                
-                # Build context string
-                memory_context = "\n".join([
-                    f"Memory: {mem['content'][:200]}..."
-                    for mem in relevant_memories
-                ])
-                
-                if memory_context:
-                    context = f"Conversation Context:\n{context}\n\nRelevant Memories:\n{memory_context}"
-            
-            # For now, return a simple response
-            # In a real implementation, this would integrate with Ollama or other AI models
+                conversation_log = self.memory_system.get_conversation_context(n_messages=5)
+                memory_snippets = "\n".join(
+                    f"- {mem['content'][:200]}..." for mem in relevant_memories
+                )
+                if memory_snippets.strip():
+                    memory_context = f"Conversation Context:\n{conversation_log}\n\nRelevant Memories:\n{memory_snippets}"
+
+            rag_chunks: List[Dict[str, Any]] = []
+            rag_context_text = ""
+            if request.use_rag:
+                rag_service = self._ensure_rag_service()
+                rag_chunks = rag_service.query(
+                    QueryOptions(
+                        query=message,
+                        n_results=request.rag_results,
+                        provider=request.rag_provider,
+                        model_name=request.rag_model_name,
+                        collection_name=request.rag_collection,
+                    )
+                )
+                if rag_chunks:
+                    rag_context_lines = [
+                        f"- ({chunk.get('similarity', 0):.2f}) {str(chunk.get('content', ''))[:200]}..."
+                        for chunk in rag_chunks
+                    ]
+                    rag_context_text = "Relevant Knowledge:\n" + "\n".join(rag_context_lines)
+
             response = f"I received your message: '{message}'"
-            
-            if context:
-                response += f"\n\nBased on our conversation history and memories, I can see we've discussed related topics before."
-            
-            # Store the conversation
-            if use_memory:
+            if memory_context:
+                response += "\n\n" + memory_context
+            if rag_context_text:
+                response += "\n\n" + rag_context_text
+
+            if request.use_memory and self.memory_system:
                 self.memory_system.add_conversation_turn(
                     human_input=message,
                     ai_response=response,
                     metadata={
                         "relevant_memories_count": len(relevant_memories),
-                        "context_used": bool(context)
-                    }
+                        "rag_chunks": len(rag_chunks),
+                    },
                 )
-            
-            return response
-            
+
+            return {
+                "response": response,
+                "memory_context": memory_context,
+                "rag_chunks": rag_chunks,
+            }
+
         except Exception as e:
             logger.error(f"AI chat processing error: {e}")
-            return f"Sorry, I encountered an error processing your message: {str(e)}"
+            return {
+                "response": f"Sorry, I encountered an error processing your message: {str(e)}"
+            }
     
     def run_server(self, host: str = "0.0.0.0", port: int = 8080, reload: bool = False):
         """Run the FastAPI server"""
