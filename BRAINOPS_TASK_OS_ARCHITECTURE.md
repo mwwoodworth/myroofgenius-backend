@@ -111,6 +111,17 @@ ai_observations (
 - Analysis tasks → Claude_Analyst completes
 - Creative tasks → Gemini_Creative handles
 
+## 🔁 Operational Loop (Task CLI + Memory Bridge)
+
+1. **CLI as the TaskOS Front Door** – `/home/matt-woodworth/dev/brainops-command-center/cli/tasks` now talks directly to the production TaskOS API (`https://brainops-ai-agents.onrender.com/ai/tasks/*`). Every command auto-queries Memory Bridge before running and auto-stores the outcome afterward, so all agents inherit the same context trail.
+2. **Env-Driven Everything** – `TASKOS_API_URL`, `TASKOS_API_KEY`, and `MEMORY_API_URL` live inside `BrainOps.env` and are honored by both the CLI and VSCode tasks. Point them at staging or prod and the tooling follows automatically.
+3. **VSCode Task Deck** – `.vscode/tasks.json` ships ready-made launchers:
+   - `TaskOS: List Pending (API)` → raw `curl` against `/ai/tasks/list`
+   - `TaskOS: Create ERP Task (CLI)` → prompts for title/description/priority and invokes the CLI
+   - `Memory Bridge: Query Context` / `Memory Bridge: Store Session Summary` → guarantee every workflow starts/ends with official `/api/memory/*` calls
+4. **Proof in Production** – Task `erp_perfection_memory_bridge_verification` (`1972f43f-d355-4515-9ebd-03a500d4342a`) was created/executed entirely through this loop, and Memory entries `745294-745297` chronicle the run (create → execute → note).
+5. **Usage Pattern** – When any AI (or human) grabs a directive: run the “TaskOS: List Pending” task → `tasks create … --auto true` → `tasks start <id>` → add notes via `tasks note <id> "…"` or the VSCode memory task. This enforces the same habit pattern across Claude, Codex, Gemini, and humans.
+
 ## 📱 UI/UX Design
 
 ### Dashboard Views:
