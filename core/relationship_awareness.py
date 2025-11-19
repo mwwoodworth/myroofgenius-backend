@@ -183,8 +183,14 @@ class RelationshipAwareness:
         async with self.db_pool.acquire() as conn:
             async with conn.transaction():
                 # Create customer
-                # Use provided org_id or default to WeatherCraft Roofing
-                org_id = customer_data.get("org_id", "00000000-0000-0000-0000-000000000001")
+                tenant_id = customer_data.get("tenant_id")
+                org_id = customer_data.get("org_id")
+
+                if not tenant_id:
+                    raise ValueError("tenant_id is required to create customer with awareness")
+
+                if not org_id:
+                    raise ValueError("org_id is required to create customer with awareness")
 
                 customer = await conn.fetchrow("""
                     INSERT INTO customers (
@@ -201,7 +207,7 @@ class RelationshipAwareness:
                     customer_data.get("city"),
                     customer_data.get("state"),
                     customer_data.get("zip"),
-                    customer_data.get("tenant_id"),
+                    tenant_id,
                     org_id
                 )
 
