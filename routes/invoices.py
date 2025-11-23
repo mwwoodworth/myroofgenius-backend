@@ -35,6 +35,7 @@ async def list_invoices(
     offset: int = Query(default=0, ge=0),
     status: Optional[str] = None,
     customer_id: Optional[str] = None,
+    job_id: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all invoices for the authenticated tenant"""
@@ -46,23 +47,17 @@ async def list_invoices(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback invoices list.")
-            return {
-                "success": True,
-                "data": [],
-                "total": 0,
-                "limit": limit,
-                "offset": offset,
-                "degraded": True,
-                "message": "Database unavailable; returning empty invoices list."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         query = """
-            SELECT i.id, i.invoice_number, i.customer_id, i.total_amount,
-                   i.status, i.due_date, i.items, i.created_at,
-                   c.name as customer_name
+            SELECT i.id, i.invoice_number, i.customer_id, i.job_id,
+                   i.subtotal, i.tax_amount, i.total_amount, i.paid_amount, i.balance,
+                   i.status, i.due_date, i.issued_date, i.created_at,
+                   c.name as customer_name,
+                   j.title as job_title
             FROM invoices i
             LEFT JOIN customers c ON i.customer_id = c.id
+            LEFT JOIN jobs j ON i.job_id = j.id
             WHERE i.tenant_id = $1
         """
 
@@ -78,6 +73,11 @@ async def list_invoices(
             param_count += 1
             query += f" AND i.customer_id = ${param_count + 1}"
             params.append(customer_id)
+
+        if job_id:
+            param_count += 1
+            query += f" AND i.job_id = ${param_count + 1}"
+            params.append(job_id)
 
         query += " ORDER BY i.created_at DESC LIMIT ${} OFFSET ${}".format(param_count + 2, param_count + 3)
         params.extend([limit, offset])
@@ -99,6 +99,11 @@ async def list_invoices(
                 cp += 1
                 count_query += f" AND customer_id = ${cp}"
                 count_params.append(customer_id)
+            
+            if job_id:
+                cp += 1
+                count_query += f" AND job_id = ${cp}"
+                count_params.append(job_id)
 
             total = await conn.fetchval(count_query, *count_params)
 
@@ -107,14 +112,9 @@ async def list_invoices(
         for invoice in invoices:
             invoice_dict = dict(invoice)
             # Convert Decimal to float for JSON serialization
-            if invoice_dict.get('total_amount'):
-                invoice_dict['total_amount'] = float(invoice_dict['total_amount'])
-            # Parse items if string
-            if invoice_dict.get('items') and isinstance(invoice_dict['items'], str):
-                try:
-                    invoice_dict['items'] = json.loads(invoice_dict['items'])
-                except:
-                    invoice_dict['items'] = []
+            for field in ['subtotal', 'tax_amount', 'total_amount', 'paid_amount', 'balance']:
+                if invoice_dict.get(field):
+                    invoice_dict[field] = float(invoice_dict[field])
             result.append(invoice_dict)
 
         return {
@@ -126,17 +126,10 @@ async def list_invoices(
         }
 
     except Exception as e:
-        message = str(e)
-        logger.warning(f"Invoices listing degraded fallback activated: {message}")
-        return {
-            "success": True,
-            "data": [],
-            "total": 0,
-            "limit": limit,
-            "offset": offset,
-            "degraded": True,
-            "message": "Invoices data unavailable; returning empty list."
-        }
+        logger.error(f"Error listing invoices: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{invoice_id}")
 async def get_invoice(
@@ -153,21 +146,18 @@ async def get_invoice(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback invoice detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Database unavailable; invoice details unavailable."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             invoice = await conn.fetchrow("""
-                SELECT i.id, i.invoice_number, i.customer_id, i.total_amount,
-                       i.status, i.due_date, i.items, i.created_at,
-                       c.name as customer_name, c.email as customer_email
+                SELECT i.id, i.invoice_number, i.customer_id, i.job_id,
+                       i.subtotal, i.tax_amount, i.total_amount, i.paid_amount, i.balance,
+                       i.status, i.due_date, i.issued_date, i.items, i.notes, i.terms, i.created_at,
+                       c.name as customer_name, c.email as customer_email, c.address as customer_address,
+                       j.title as job_title
                 FROM invoices i
                 LEFT JOIN customers c ON i.customer_id = c.id
+                LEFT JOIN jobs j ON i.job_id = j.id
                 WHERE i.id = $1::uuid AND i.tenant_id = $2
             """, invoice_id, tenant_id)
 
@@ -176,8 +166,10 @@ async def get_invoice(
 
         invoice_dict = dict(invoice)
         # Convert Decimal to float
-        if invoice_dict.get('total_amount'):
-            invoice_dict['total_amount'] = float(invoice_dict['total_amount'])
+        for field in ['subtotal', 'tax_amount', 'total_amount', 'paid_amount', 'balance']:
+            if invoice_dict.get(field):
+                invoice_dict[field] = float(invoice_dict[field])
+        
         # Parse items if string
         if invoice_dict.get('items') and isinstance(invoice_dict['items'], str):
             try:
@@ -193,17 +185,8 @@ async def get_invoice(
     except HTTPException:
         raise
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Invoices schema not available; returning fallback invoice detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Invoices schema unavailable; details cannot be retrieved."
-            }
-        logger.error(f"Error getting invoice: {message}")
-        raise HTTPException(status_code=500, detail="Failed to get invoice")
+        logger.error(f"Error getting invoice: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get invoice details")
 
 @router.get("/stats/summary")
 async def get_invoice_stats(
@@ -219,26 +202,7 @@ async def get_invoice_stats(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback invoice stats.")
-            return {
-                "success": True,
-                "data": {
-                    "total_invoices": 0,
-                    "by_status": {
-                        "draft": 0,
-                        "sent": 0,
-                        "paid": 0,
-                        "overdue": 0
-                    },
-                    "amounts": {
-                        "total": 0.0,
-                        "paid": 0.0,
-                        "overdue": 0.0
-                    }
-                },
-                "degraded": True,
-                "message": "Database unavailable; returning empty invoice statistics."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -274,27 +238,7 @@ async def get_invoice_stats(
         }
 
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Invoices statistics schema unavailable; returning fallback statistics.")
-            return {
-                "success": True,
-                "data": {
-                    "total_invoices": 0,
-                    "by_status": {
-                        "draft": 0,
-                        "sent": 0,
-                        "paid": 0,
-                        "overdue": 0
-                    },
-                    "amounts": {
-                        "total": 0.0,
-                        "paid": 0.0,
-                        "overdue": 0.0
-                    }
-                },
-                "degraded": True,
-                "message": "Invoice statistics unavailable; returning empty dataset."
-            }
-        logger.error(f"Error getting invoice stats: {message}")
+        logger.error(f"Error getting invoice stats: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail="Failed to get invoice statistics")

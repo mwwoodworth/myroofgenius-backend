@@ -48,16 +48,7 @@ async def list_customers(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback customers list.")
-            return {
-                "success": True,
-                "data": [],
-                "total": 0,
-                "limit": limit,
-                "offset": offset,
-                "degraded": True,
-                "message": "Database unavailable; returning empty customer list."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         query = """
             SELECT id, name, email, phone, company, address, city, state,
@@ -117,17 +108,8 @@ async def list_customers(
         }
 
     except Exception as e:
-        message = str(e)
-        logger.warning(f"Customers listing degraded fallback activated: {message}")
-        return {
-            "success": True,
-            "data": [],
-            "total": 0,
-            "limit": limit,
-            "offset": offset,
-            "degraded": True,
-            "message": "Customers data unavailable; returning empty list."
-        }
+        logger.error(f"Error listing customers: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list customers")
 
 @router.get("/{customer_id}")
 async def get_customer(
@@ -144,13 +126,7 @@ async def get_customer(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback customer detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Database unavailable; customer details unavailable."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             customer = await conn.fetchrow("""
@@ -191,16 +167,7 @@ async def get_customer(
     except HTTPException:
         raise
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Customers schema not available; returning fallback customer detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Customers schema unavailable; details cannot be retrieved."
-            }
-        logger.error(f"Error getting customer: {message}")
+        logger.error(f"Error getting customer: {e}")
         raise HTTPException(status_code=500, detail="Failed to get customer")
 
 @router.get("/stats/summary")
@@ -217,24 +184,7 @@ async def get_customer_stats(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback customer stats.")
-            return {
-                "success": True,
-                "data": {
-                    "total_customers": 0,
-                    "by_status": {
-                        "active": 0,
-                        "inactive": 0
-                    },
-                    "growth": {
-                        "new_this_month": 0,
-                        "new_this_week": 0
-                    },
-                    "top_customers": []
-                },
-                "degraded": True,
-                "message": "Database unavailable; returning empty statistics."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -283,25 +233,5 @@ async def get_customer_stats(
         }
 
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Customer stats schema unavailable; returning fallback statistics.")
-            return {
-                "success": True,
-                "data": {
-                    "total_customers": 0,
-                    "by_status": {
-                        "active": 0,
-                        "inactive": 0
-                    },
-                    "growth": {
-                        "new_this_month": 0,
-                        "new_this_week": 0
-                    },
-                    "top_customers": []
-                },
-                "degraded": True,
-                "message": "Customer statistics unavailable; returning empty dataset."
-            }
-        logger.error(f"Error getting customer stats: {message}")
+        logger.error(f"Error getting customer stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get customer statistics")
