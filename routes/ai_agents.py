@@ -13,6 +13,7 @@ import logging
 import json
 
 from core.agent_execution_manager import AgentExecutionManager
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +88,6 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
 
     result = execution.get('result') or {}
 
-    # Accept fallback results - they're valid responses when external services are unavailable
-    # method_descriptor = str(result.get('method', '')).lower()
-    # if 'fallback' in method_descriptor:
-    #     raise HTTPException(status_code=503, detail='AI agent service unavailable')
-
     return {
         'success': True,
         'agent_id': str(agent['id']),
@@ -99,8 +95,14 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
         'confidence': result.get('confidence'),
         'execution_time_ms': result.get('execution_time_ms'),
         'recommendations': result.get('recommendations'),
-        'method': result.get('method', 'unknown')  # Include method so client knows if it's fallback
+        'method': result.get('method', 'unknown')
     }
+
+def get_tenant_id(current_user: Dict[str, Any]) -> str:
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+    return tenant_id
 
 # ============================================================================
 # ENDPOINTS
@@ -124,7 +126,6 @@ async def list_agents(request: Request):
         result_agents = []
         for agent in agents:
             agent_dict = dict(agent)
-            # Robustly parse metadata (jsonb can be dict/array/null)
             raw_meta = agent_dict.get('metadata')
             category = 'Uncategorized'
             description = ''
@@ -141,12 +142,9 @@ async def list_agents(request: Request):
                 if isinstance(parsed, dict):
                     category = parsed.get('category', category)
                     description = parsed.get('description', description)
-                # If metadata is list/number/bool, ignore and use defaults
 
             agent_dict['category'] = category
             agent_dict['description'] = description
-
-            # Remove metadata from response (keep it clean and consistent)
             agent_dict.pop('metadata', None)
             result_agents.append(agent_dict)
 
@@ -179,7 +177,6 @@ async def get_agent_details(
 
         agent_dict = dict(agent)
 
-        # Extract category and description from metadata
         if agent_dict.get('metadata'):
             if isinstance(agent_dict['metadata'], str):
                 try:
@@ -194,7 +191,6 @@ async def get_agent_details(
             agent_dict['category'] = 'Uncategorized'
             agent_dict['description'] = ''
 
-        # Remove metadata from response
         agent_dict.pop('metadata', None)
 
         return agent_dict
@@ -209,9 +205,13 @@ async def get_agent_details(
 async def execute_agent_endpoint(
     agent_id: str,
     request_data: AgentExecutionRequest,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Execute a specific AI agent"""
+    # Verify tenant context
+    get_tenant_id(current_user)
+    
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent(agent_id, request_data.data, db_pool)
@@ -226,17 +226,19 @@ async def execute_agent_endpoint(
 @router.post("/lead-scorer/analyze")
 async def lead_scorer_analyze(
     analysis: AgentAnalysisRequest,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze and score a lead"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
-        # Get lead data
+        # Get lead data - SECURED
         async with db_pool.acquire() as conn:
             lead = await conn.fetchrow(
-                "SELECT * FROM leads WHERE id = $1",
-                analysis.entity_id
+                "SELECT * FROM leads WHERE id = $1 AND tenant_id = $2",
+                analysis.entity_id, tenant_id
             )
 
         if not lead:
@@ -256,13 +258,15 @@ async def lead_scorer_analyze(
 @router.post("/customer-health/analyze")
 async def customer_health_analyze(
     analysis: AgentAnalysisRequest,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze customer health and engagement"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
-        # Get customer data with aggregates
+        # Get customer data with aggregates - SECURED
         async with db_pool.acquire() as conn:
             customer = await conn.fetchrow("""
                 SELECT c.*,
@@ -270,11 +274,11 @@ async def customer_health_analyze(
                     COALESCE(SUM(i.total_amount), 0) as lifetime_revenue,
                     MAX(j.created_at) as last_job_date
                 FROM customers c
-                LEFT JOIN jobs j ON c.id = j.customer_id
-                LEFT JOIN invoices i ON c.id = i.customer_id
-                WHERE c.id = $1
+                LEFT JOIN jobs j ON c.id = j.customer_id AND j.tenant_id = $2
+                LEFT JOIN invoices i ON c.id = i.customer_id AND i.tenant_id = $2
+                WHERE c.id = $1 AND c.tenant_id = $2
                 GROUP BY c.id
-            """, analysis.entity_id)
+            """, analysis.entity_id, tenant_id)
 
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
@@ -300,13 +304,15 @@ async def customer_health_analyze(
 async def predictive_forecast(
     forecast_type: str,
     time_period: str = 'next_quarter',
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Generate predictive forecasts"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
-        # Get historical data
+        # Get historical data - SECURED
         async with db_pool.acquire() as conn:
             if forecast_type == 'revenue':
                 revenue_data = await conn.fetchrow("""
@@ -314,11 +320,11 @@ async def predictive_forecast(
                         COALESCE(SUM(total_amount), 0) as current_revenue,
                         COUNT(*) as invoice_count
                     FROM invoices
-                    WHERE created_at >= NOW() - INTERVAL '3 months'
-                """)
-                data = dict(revenue_data)
+                    WHERE created_at >= NOW() - INTERVAL '3 months' AND tenant_id = $1
+                """, tenant_id)
+                data = dict(revenue_data) if revenue_data else {'current_revenue': 0, 'invoice_count': 0}
             else:
-                data = {'current_revenue': 100000}  # Default
+                data = {'current_revenue': 0}  # Default safety
 
         data['period'] = time_period
         data['forecast_type'] = forecast_type
@@ -333,13 +339,15 @@ async def predictive_forecast(
 # HR Analytics
 @router.post("/hr-analytics/analyze")
 async def hr_analytics_analyze(
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze HR metrics and team health"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
-        # Get employee data
+        # Get employee data - SECURED
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
                 SELECT
@@ -347,9 +355,10 @@ async def hr_analytics_analyze(
                     COUNT(CASE WHEN status = 'active' THEN 1 END) as active_employees,
                     AVG(EXTRACT(epoch FROM (NOW() - hire_date)) / 86400 / 365) as avg_tenure_years
                 FROM employees
-            """)
+                WHERE tenant_id = $1
+            """, tenant_id)
 
-        result = await execute_agent('hr-analytics', dict(stats), db_pool)
+        result = await execute_agent('hr-analytics', dict(stats) if stats else {}, db_pool)
         return result
 
     except Exception as e:
@@ -360,9 +369,11 @@ async def hr_analytics_analyze(
 @router.post("/payroll-agent/validate")
 async def payroll_validate(
     payroll_data: Dict[str, Any] = Body(...),
-    request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Validate payroll data"""
+    get_tenant_id(current_user) # Ensure auth
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('payroll-agent', payroll_data, db_pool)
@@ -375,9 +386,11 @@ async def payroll_validate(
 @router.post("/onboarding-agent/create-plan")
 async def onboarding_create_plan(
     employee_data: Dict[str, Any] = Body(...),
-    request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create employee onboarding plan"""
+    get_tenant_id(current_user) # Ensure auth
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('onboarding-agent', employee_data, db_pool)
@@ -390,16 +403,18 @@ async def onboarding_create_plan(
 @router.post("/training-agent/recommend")
 async def training_recommend(
     employee_id: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get training recommendations for employee"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
         async with db_pool.acquire() as conn:
             employee = await conn.fetchrow(
-                "SELECT * FROM employees WHERE id = $1",
-                employee_id
+                "SELECT * FROM employees WHERE id = $1 AND tenant_id = $2",
+                employee_id, tenant_id
             )
 
         if not employee:
@@ -407,6 +422,8 @@ async def training_recommend(
 
         result = await execute_agent('training-agent', dict(employee), db_pool)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Training recommendation error: {e}")
         raise HTTPException(status_code=500, detail="Training recommendation failed")
@@ -415,9 +432,11 @@ async def training_recommend(
 @router.post("/recruiting-agent/analyze")
 async def recruiting_analyze(
     candidate_data: Dict[str, Any] = Body(...),
-    request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze recruitment candidate"""
+    get_tenant_id(current_user) # Ensure auth
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('recruiting-agent', candidate_data, db_pool)
@@ -430,13 +449,15 @@ async def recruiting_analyze(
 @router.post("/insights-analyzer/analyze")
 async def insights_analyze(
     data_source: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze business data for insights"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
-        # Get relevant data based on source
+        # Get relevant data based on source - SECURED
         async with db_pool.acquire() as conn:
             if data_source == 'revenue':
                 data = await conn.fetchrow("""
@@ -445,8 +466,8 @@ async def insights_analyze(
                         SUM(total_amount) as total_revenue,
                         AVG(total_amount) as avg_invoice
                     FROM invoices
-                    WHERE created_at >= NOW() - INTERVAL '30 days'
-                """)
+                    WHERE created_at >= NOW() - INTERVAL '30 days' AND tenant_id = $1
+                """, tenant_id)
             else:
                 data = {}
 
@@ -460,9 +481,11 @@ async def insights_analyze(
 @router.post("/metrics-calculator/calculate")
 async def metrics_calculate(
     metric_type: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Calculate business metrics"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
@@ -474,9 +497,10 @@ async def metrics_calculate(
                         COUNT(DISTINCT j.id) as total_jobs,
                         COALESCE(SUM(i.total_amount), 0) as total_revenue
                     FROM customers c
-                    LEFT JOIN jobs j ON c.id = j.customer_id
-                    LEFT JOIN invoices i ON c.id = i.customer_id
-                """)
+                    LEFT JOIN jobs j ON c.id = j.customer_id AND j.tenant_id = $1
+                    LEFT JOIN invoices i ON c.id = i.customer_id AND i.tenant_id = $1
+                    WHERE c.tenant_id = $1
+                """, tenant_id)
             else:
                 metrics = {}
 
@@ -488,8 +512,12 @@ async def metrics_calculate(
 
 # Dashboard Monitor
 @router.get("/dashboard-monitor/alerts")
-async def dashboard_alerts(request: Request):
+async def dashboard_alerts(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get dashboard alerts"""
+    get_tenant_id(current_user)
     try:
         # Return intelligent alerts based on system status
         alerts = [
@@ -505,8 +533,12 @@ async def dashboard_alerts(request: Request):
         raise HTTPException(status_code=500, detail="Failed to get alerts")
 
 @router.post("/dashboard-monitor/analyze")
-async def dashboard_analyze(request: Request):
+async def dashboard_analyze(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Analyze dashboard metrics"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
@@ -517,11 +549,12 @@ async def dashboard_analyze(request: Request):
                     COUNT(DISTINCT j.id) as jobs,
                     COALESCE(SUM(i.total_amount), 0) as revenue
                 FROM customers c
-                LEFT JOIN jobs j ON c.id = j.customer_id
-                LEFT JOIN invoices i ON c.id = i.customer_id
-            """)
+                LEFT JOIN jobs j ON c.id = j.customer_id AND j.tenant_id = $1
+                LEFT JOIN invoices i ON c.id = i.customer_id AND i.tenant_id = $1
+                WHERE c.tenant_id = $1
+            """, tenant_id)
 
-        result = await execute_agent('dashboard-monitor', dict(stats), db_pool)
+        result = await execute_agent('dashboard-monitor', dict(stats) if stats else {}, db_pool)
         return result
     except Exception as e:
         logger.error(f"Dashboard analysis error: {e}")
@@ -531,9 +564,11 @@ async def dashboard_analyze(request: Request):
 @router.post("/dispatch-agent/analyze-availability")
 async def dispatch_analyze_availability(
     date: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Analyze crew availability for dispatch"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
@@ -546,7 +581,8 @@ async def dispatch_analyze_availability(
                 FROM employees e
                 WHERE e.status = 'active'
                 AND e.role IN ('crew_lead', 'technician')
-            """)
+                AND e.tenant_id = $1
+            """, tenant_id)
 
         result = await execute_agent('dispatch-agent', {
             'date': date,
@@ -558,8 +594,12 @@ async def dispatch_analyze_availability(
         raise HTTPException(status_code=500, detail="Availability analysis failed")
 
 @router.post("/dispatch-agent/optimize-schedule")
-async def dispatch_optimize(request: Request):
+async def dispatch_optimize(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Optimize dispatch schedule"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('dispatch-agent', {'action': 'optimize'}, db_pool)
@@ -571,16 +611,18 @@ async def dispatch_optimize(request: Request):
 @router.post("/dispatch-agent/recommend-crew")
 async def dispatch_recommend_crew(
     job_id: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Recommend crew for a job"""
+    tenant_id = get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
 
         async with db_pool.acquire() as conn:
             job = await conn.fetchrow(
-                "SELECT * FROM jobs WHERE id = $1",
-                job_id
+                "SELECT * FROM jobs WHERE id = $1 AND tenant_id = $2",
+                job_id, tenant_id
             )
 
         if not job:
@@ -591,14 +633,20 @@ async def dispatch_recommend_crew(
             'job': dict(job)
         }, db_pool)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Crew recommendation error: {e}")
         raise HTTPException(status_code=500, detail="Crew recommendation failed")
 
 # Intelligent Scheduler
 @router.post("/intelligent-scheduler/optimize")
-async def scheduler_optimize(request: Request):
+async def scheduler_optimize(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Optimize scheduling intelligently"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('intelligent-scheduler', {'action': 'optimize'}, db_pool)
@@ -612,9 +660,11 @@ async def scheduler_optimize(request: Request):
 async def next_action_recommend(
     entity_type: str,
     entity_id: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Recommend next best action for an entity"""
+    get_tenant_id(current_user) # Ensure tenant context in future
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('next-best-action', {
@@ -628,8 +678,12 @@ async def next_action_recommend(
 
 # Notification Agent
 @router.post("/notification-agent/optimize")
-async def notification_optimize(request: Request):
+async def notification_optimize(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Optimize notification delivery"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('notification-agent', {'action': 'optimize'}, db_pool)
@@ -639,8 +693,12 @@ async def notification_optimize(request: Request):
         raise HTTPException(status_code=500, detail="Notification optimization failed")
 
 @router.post("/notification-agent/suggest")
-async def notification_suggest(request: Request):
+async def notification_suggest(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Suggest optimal notification strategy"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('notification-agent', {'action': 'suggest'}, db_pool)
@@ -653,9 +711,11 @@ async def notification_suggest(request: Request):
 @router.post("/reporting-agent/recommend")
 async def reporting_recommend(
     report_type: str,
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Recommend reporting insights"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('reporting-agent', {'report_type': report_type}, db_pool)
@@ -666,8 +726,12 @@ async def reporting_recommend(
 
 # Routing Agent
 @router.post("/routing-agent/optimize")
-async def routing_optimize(request: Request):
+async def routing_optimize(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Optimize routing for field operations"""
+    get_tenant_id(current_user)
     try:
         db_pool = await get_db_pool(request)
         result = await execute_agent('routing-agent', {'action': 'optimize'}, db_pool)

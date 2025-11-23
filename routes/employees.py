@@ -13,19 +13,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/employees", tags=["Employees"])
 
-
-def _fallback_list(limit: int, offset: int) -> Dict[str, Any]:
-    return {
-        "success": True,
-        "data": [],
-        "total": 0,
-        "limit": limit,
-        "offset": offset,
-        "degraded": True,
-        "message": "Employees data unavailable; returning empty list."
-    }
-
-
 @router.get("")
 @router.get("/")
 async def list_employees(
@@ -36,60 +23,57 @@ async def list_employees(
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List employees for the authenticated tenant."""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant assignment required")
-
-    db_pool = getattr(request.app.state, "db_pool", None)
-    if not db_pool:
-        logger.warning("Database pool unavailable; returning fallback employees list.")
-        return _fallback_list(limit, offset)
-
-    query = """
-        SELECT id, first_name, last_name, email, phone,
-               position, status, created_at
-        FROM employees
-        WHERE tenant_id = $1
-    """
-    params = [tenant_id]
-    param_idx = 1
-
-    if status:
-        param_idx += 1
-        query += f" AND status = ${param_idx}"
-        params.append(status)
-
-    query += f" ORDER BY created_at DESC LIMIT ${param_idx + 1} OFFSET ${param_idx + 2}"
-    params.extend([limit, offset])
-
     try:
+        db_pool = getattr(request.app.state, "db_pool", None)
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+
+        query = """
+            SELECT id, first_name, last_name, email, phone,
+                   position, status, created_at
+            FROM employees
+            WHERE tenant_id = $1
+        """
+        params = [tenant_id]
+        param_idx = 1
+
+        if status:
+            param_idx += 1
+            query += f" AND status = ${param_idx}"
+            params.append(status)
+
+        query += f" ORDER BY created_at DESC LIMIT ${param_idx + 1} OFFSET ${param_idx + 2}"
+        params.extend([limit, offset])
+
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
             count = await conn.fetchval(
                 "SELECT COUNT(*) FROM employees WHERE tenant_id = $1",
                 tenant_id
             )
-    except Exception as exc:
-        message = str(exc)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Employees schema unavailable; returning fallback dataset.")
-            return _fallback_list(limit, offset)
-        logger.error(f"Error listing employees: {message}")
+
+        employees = []
+        for row in rows:
+            record = dict(row)
+            record["id"] = str(record.get("id"))
+            employees.append(record)
+
+        return {
+            "success": True,
+            "data": employees,
+            "total": count or 0,
+            "limit": limit,
+            "offset": offset
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing employees: {e}")
         raise HTTPException(status_code=500, detail="Failed to list employees")
-
-    employees = []
-    for row in rows:
-        record = dict(row)
-        record["id"] = str(record.get("id"))
-        employees.append(record)
-
-    return {
-        "success": True,
-        "data": employees,
-        "total": count or 0,
-        "limit": limit,
-        "offset": offset
-    }
 
 
 @router.get("/{employee_id}")
@@ -99,21 +83,16 @@ async def get_employee(
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Retrieve an employee profile."""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant assignment required")
-
-    db_pool = getattr(request.app.state, "db_pool", None)
-    if not db_pool:
-        logger.warning("Database pool unavailable; returning fallback employee detail.")
-        return {
-            "success": True,
-            "data": None,
-            "degraded": True,
-            "message": "Employees data unavailable; detail cannot be retrieved."
-        }
-
     try:
+        db_pool = getattr(request.app.state, "db_pool", None)
+        tenant_id = current_user.get("tenant_id")
+
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        if not db_pool:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -125,26 +104,20 @@ async def get_employee(
                 employee_id,
                 tenant_id
             )
-    except Exception as exc:
-        message = str(exc)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Employees schema unavailable; returning fallback employee detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Employees schema unavailable; detail cannot be retrieved."
-            }
-        logger.error(f"Error retrieving employee {employee_id}: {message}")
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        record = dict(row)
+        record["id"] = str(record.get("id"))
+
+        return {
+            "success": True,
+            "data": record
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving employee {employee_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve employee")
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Employee not found")
-
-    record = dict(row)
-    record["id"] = str(record.get("id"))
-
-    return {
-        "success": True,
-        "data": record
-    }

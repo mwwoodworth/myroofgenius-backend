@@ -93,10 +93,17 @@ def load_all_routes(app: FastAPI):
     loaded_count = 0
     failed_count = 0
     skipped_files = ["__init__.py", "route_loader.py", "__pycache__"]
+    skipped_dirs = ["archive", "__pycache__", "tests"]
 
     # Get all Python files in routes directory
     route_files = []
     for filename in os.listdir(routes_dir):
+        file_path = os.path.join(routes_dir, filename)
+        
+        # Skip directories and non-python files
+        if os.path.isdir(file_path):
+            continue
+            
         if filename.endswith(".py") and filename not in skipped_files:
             module_name = filename[:-3]  # Remove .py extension
             route_files.append(module_name)

@@ -100,20 +100,17 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     token = authorization.replace("Bearer ", "").strip()
 
     try:
-        # Decode the JWT token without verification first to get the payload
+        # Decode the JWT token with verification
         # Supabase JWTs are signed with HS256 using the JWT_SECRET
-        # For now, we'll decode without verification to get user info
-        # The JWT itself being valid from Supabase is sufficient authentication
-
-        # Decode JWT to get payload (Supabase uses HS256)
-        # We decode without verification because we trust tokens from Supabase Auth
-        # The token was issued by Supabase after successful authentication
+        audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+        
         try:
             payload = jwt.decode(
                 token,
                 SUPABASE_JWT_SECRET,
                 algorithms=["HS256"],
-                options={"verify_aud": False}
+                audience=audience,
+                options={"verify_aud": True}
             )
         except PyJWTError as jwt_error:
             logger.error(f"JWT verification error: {jwt_error}")

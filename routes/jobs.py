@@ -52,21 +52,15 @@ async def list_jobs(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback jobs list.")
-            return {
-                "success": True,
-                "data": [],
-                "total": 0,
-                "limit": limit,
-                "offset": offset,
-                "degraded": True,
-                "message": "Database unavailable; returning empty jobs list."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         query = """
             SELECT j.id, j.job_number, j.customer_id, j.title, j.description,
-                   j.status, j.priority, j.assigned_to, j.scheduled_date,
-                   j.completed_date, j.estimated_hours, j.actual_hours, j.created_at,
+                   j.status, j.priority, j.job_type, j.assigned_to, j.tags,
+                   j.scheduled_date, j.scheduled_start, j.scheduled_end,
+                   j.completed_date, j.address, j.city, j.state, j.zip_code,
+                   j.estimated_hours, j.actual_hours, j.estimated_cost, 
+                   j.total_amount, j.paid_amount, j.created_at,
                    c.name as customer_name
             FROM jobs j
             LEFT JOIN customers c ON j.customer_id = c.id
@@ -124,10 +118,9 @@ async def list_jobs(
         for job in jobs:
             job_dict = dict(job)
             # Convert Decimal to float for JSON serialization
-            if job_dict.get('estimated_hours'):
-                job_dict['estimated_hours'] = float(job_dict['estimated_hours'])
-            if job_dict.get('actual_hours'):
-                job_dict['actual_hours'] = float(job_dict['actual_hours'])
+            for field in ['estimated_hours', 'actual_hours', 'estimated_cost', 'total_amount', 'paid_amount']:
+                if job_dict.get(field):
+                    job_dict[field] = float(job_dict[field])
             result.append(job_dict)
 
         return {
@@ -139,17 +132,10 @@ async def list_jobs(
         }
 
     except Exception as e:
-        message = str(e)
-        logger.warning(f"Jobs listing degraded fallback activated: {message}")
-        return {
-            "success": True,
-            "data": [],
-            "total": 0,
-            "limit": limit,
-            "offset": offset,
-            "degraded": True,
-            "message": "Jobs data unavailable; returning empty list."
-        }
+        logger.error(f"Error listing jobs: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail="Failed to list jobs")
 
 @router.get("/{job_id}")
 async def get_job(
@@ -166,20 +152,18 @@ async def get_job(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback job detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Database unavailable; job details unavailable."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             job = await conn.fetchrow("""
                 SELECT j.id, j.job_number, j.customer_id, j.title, j.description,
-                       j.status, j.priority, j.assigned_to, j.scheduled_date,
-                       j.completed_date, j.estimated_hours, j.actual_hours, j.created_at,
-                       c.name as customer_name, c.email as customer_email
+                       j.status, j.priority, j.job_type, j.assigned_to, j.tags,
+                       j.scheduled_date, j.scheduled_start, j.scheduled_end,
+                       j.completed_date, j.address, j.city, j.state, j.zip_code,
+                       j.estimated_hours, j.actual_hours, j.estimated_cost,
+                       j.total_amount, j.paid_amount, j.created_at, j.custom_fields,
+                       c.name as customer_name, c.email as customer_email, 
+                       c.phone as customer_phone
                 FROM jobs j
                 LEFT JOIN customers c ON j.customer_id = c.id
                 WHERE j.id = $1::uuid AND j.tenant_id = $2
@@ -190,10 +174,9 @@ async def get_job(
 
         job_dict = dict(job)
         # Convert Decimal to float
-        if job_dict.get('estimated_hours'):
-            job_dict['estimated_hours'] = float(job_dict['estimated_hours'])
-        if job_dict.get('actual_hours'):
-            job_dict['actual_hours'] = float(job_dict['actual_hours'])
+        for field in ['estimated_hours', 'actual_hours', 'estimated_cost', 'total_amount', 'paid_amount']:
+            if job_dict.get(field):
+                job_dict[field] = float(job_dict[field])
 
         return {
             "success": True,
@@ -203,17 +186,8 @@ async def get_job(
     except HTTPException:
         raise
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Jobs schema not available; returning fallback job detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Jobs schema unavailable; details cannot be retrieved."
-            }
-        logger.error(f"Error getting job: {message}")
-        raise HTTPException(status_code=500, detail="Failed to get job")
+        logger.error(f"Error getting job: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get job details")
 
 @router.get("/stats/summary")
 async def get_job_stats(
@@ -229,27 +203,7 @@ async def get_job_stats(
             raise HTTPException(status_code=403, detail="Tenant assignment required")
 
         if not db_pool:
-            logger.warning("Database pool unavailable; returning fallback job stats.")
-            return {
-                "success": True,
-                "data": {
-                    "total_jobs": 0,
-                    "by_status": {
-                        "pending": 0,
-                        "in_progress": 0,
-                        "completed": 0,
-                        "cancelled": 0
-                    },
-                    "by_priority": {
-                        "high": 0,
-                        "medium": 0,
-                        "low": 0
-                    },
-                    "average_completion_days": 0.0
-                },
-                "degraded": True,
-                "message": "Database unavailable; returning empty job statistics."
-            }
+            raise HTTPException(status_code=503, detail="Database unavailable")
 
         async with db_pool.acquire() as conn:
             stats = await conn.fetchrow("""
@@ -293,28 +247,7 @@ async def get_job_stats(
         }
 
     except Exception as e:
-        message = str(e)
-        if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Jobs statistics schema unavailable; returning fallback statistics.")
-            return {
-                "success": True,
-                "data": {
-                    "total_jobs": 0,
-                    "by_status": {
-                        "pending": 0,
-                        "in_progress": 0,
-                        "completed": 0,
-                        "cancelled": 0
-                    },
-                    "by_priority": {
-                        "high": 0,
-                        "medium": 0,
-                        "low": 0
-                    },
-                    "average_completion_days": 0.0
-                },
-                "degraded": True,
-                "message": "Jobs statistics unavailable; returning empty dataset."
-            }
-        logger.error(f"Error getting job stats: {message}")
+        logger.error(f"Error getting job stats: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail="Failed to get job statistics")
