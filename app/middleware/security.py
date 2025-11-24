@@ -71,6 +71,9 @@ DEFAULT_PUBLIC_PATHS: Sequence[str] = (
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
+    DEPRECATED: This middleware is unused. The application uses middleware/rate_limiter.py instead.
+    Keeping for reference only - do NOT enable without ensuring it matches the active implementation.
+
     Rate limiting middleware using Redis
     Implements sliding window algorithm
     """
