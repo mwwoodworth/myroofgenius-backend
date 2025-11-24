@@ -32,7 +32,6 @@ RUN rm -f BrainOps.env
 RUN mkdir -p logs memory reports .ai_persistent
 
 # Environment variables
-ENV DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 ENV PYTHONUNBUFFERED=1
 ENV ENV=production
 

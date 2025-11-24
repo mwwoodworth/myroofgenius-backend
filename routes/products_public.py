@@ -4,8 +4,12 @@ from pydantic import BaseModel
 from datetime import datetime
 import psycopg2
 import os
+import logging
+from urllib.parse import urlparse
+from config import get_database_url
 
 router = APIRouter(tags=["Public Products"])
+logger = logging.getLogger(__name__)
 
 class Product(BaseModel):
     id: str
@@ -25,14 +29,12 @@ class ProductListResponse(BaseModel):
 @router.get("/", response_model=List[Product])
 async def get_public_products(category: Optional[str] = None):
     """Get all public products - NO AUTH REQUIRED"""
+    db_config = _get_db_config()
+    if not db_config:
+        return _fallback_products("Database configuration incomplete")["products"]
+
     try:
-        conn = psycopg2.connect(
-            host='aws-0-us-east-2.pooler.supabase.com',
-            port=6543,
-            database='postgres',
-            user='postgres.yomagoqdmxszqtdwuhab',
-            password='Brain0ps2O2S'
-        )
+        conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
         
         if category:
@@ -70,7 +72,8 @@ async def get_public_products(category: Optional[str] = None):
         return products
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to load public products: {e}")
+        return _fallback_products("Database error loading products")["products"]
 
 @router.get("/list", response_model=ProductListResponse)
 async def get_products_list(
@@ -79,14 +82,12 @@ async def get_products_list(
     category: Optional[str] = None
 ):
     """Get paginated products list - NO AUTH REQUIRED"""
+    db_config = _get_db_config()
+    if not db_config:
+        return ProductListResponse(products=[], total=0, page=page, per_page=per_page)
+
     try:
-        conn = psycopg2.connect(
-            host='aws-0-us-east-2.pooler.supabase.com',
-            port=6543,
-            database='postgres',
-            user='postgres.yomagoqdmxszqtdwuhab',
-            password='Brain0ps2O2S'
-        )
+        conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
 
         # Get total count
@@ -146,19 +147,18 @@ async def get_products_list(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to load products list: {e}")
+        return ProductListResponse(products=[], total=0, page=page, per_page=per_page)
 
 @router.get("/featured", response_model=List[Product])
 async def get_featured_products():
     """Get featured products - NO AUTH REQUIRED"""
+    db_config = _get_db_config()
+    if not db_config:
+        return _fallback_products("Database configuration incomplete")["products"]
+
     try:
-        conn = psycopg2.connect(
-            host='aws-0-us-east-2.pooler.supabase.com',
-            port=6543,
-            database='postgres',
-            user='postgres.yomagoqdmxszqtdwuhab',
-            password='Brain0ps2O2S'
-        )
+        conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -188,19 +188,18 @@ async def get_featured_products():
         return products
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to load featured products: {e}")
+        return _fallback_products("Database error loading featured products")["products"]
 
 @router.get("/categories", response_model=List[str])
 async def get_product_categories():
     """Get all product categories - NO AUTH REQUIRED"""
+    db_config = _get_db_config()
+    if not db_config:
+        return []
+
     try:
-        conn = psycopg2.connect(
-            host='aws-0-us-east-2.pooler.supabase.com',
-            port=6543,
-            database='postgres',
-            user='postgres.yomagoqdmxszqtdwuhab',
-            password='Brain0ps2O2S'
-        )
+        conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -219,7 +218,8 @@ async def get_product_categories():
         return categories
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to load product categories: {e}")
+        return []
 
 @router.get("/detail/{product_id}", response_model=Product)
 async def get_product_detail(product_id: str):
@@ -229,14 +229,12 @@ async def get_product_detail(product_id: str):
 @router.get("/{product_id}", response_model=Product)
 async def get_product_by_id(product_id: str):
     """Get a specific product - NO AUTH REQUIRED"""
+    db_config = _get_db_config()
+    if not db_config:
+        raise HTTPException(status_code=503, detail="Database configuration unavailable")
+
     try:
-        conn = psycopg2.connect(
-            host='aws-0-us-east-2.pooler.supabase.com',
-            port=6543,
-            database='postgres',
-            user='postgres.yomagoqdmxszqtdwuhab',
-            password='Brain0ps2O2S'
-        )
+        conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -268,4 +266,46 @@ async def get_product_by_id(product_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to load product detail: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get product")
+
+
+def _get_db_config():
+    """Resolve DB connection settings from environment (DATABASE_URL or DB_* vars)"""
+    try:
+        db_url = get_database_url()
+        parsed = urlparse(db_url)
+        return {
+            "host": parsed.hostname,
+            "port": parsed.port or 5432,
+            "database": parsed.path.lstrip("/") if parsed.path else None,
+            "user": parsed.username,
+            "password": parsed.password,
+            "sslmode": "require",
+            "connect_timeout": 5,
+        }
+    except Exception as e:
+        logger.error(f"Unable to resolve database configuration: {e}")
+        return None
+
+
+def _fallback_products(reason: str):
+    """Return a safe fallback response when DB is unavailable"""
+    logger.warning(f"Serving fallback public products due to: {reason}")
+    fallback = [
+        Product(
+            id="prod_fallback_1",
+            name="Basic Plan",
+            description="Fallback product listing (DB unavailable)",
+            price_cents=4999,
+            category="fallback",
+            is_active=True,
+            created_at=datetime.utcnow(),
+        )
+    ]
+    return {
+        "products": fallback,
+        "total": len(fallback),
+        "fallback": True,
+        "note": reason,
+    }
