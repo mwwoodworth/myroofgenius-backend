@@ -21,9 +21,9 @@ class RateLimiter:
 
     def __init__(
         self,
-        requests_per_minute: int = 100,
-        requests_per_hour: int = 1000,
-        requests_per_day: int = 10000,
+        requests_per_minute: int = 1000,
+        requests_per_hour: int = 60000,
+        requests_per_day: int = 1000000,
         use_redis: bool = False,
         redis_url: str = None
     ):
@@ -48,6 +48,13 @@ class RateLimiter:
 
     def _get_client_id(self, request: Request) -> str:
         """Get unique client identifier"""
+        # Respect proxy headers when present (Render/ELB will set X-Forwarded-For)
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            client_ip = xff.split(",")[0].strip()
+            if client_ip:
+                return f"ip:{client_ip}"
+
         # Try to get user ID from request state (set by auth)
         if hasattr(request.state, "user_id") and request.state.user_id:
             return f"user:{request.state.user_id}"
@@ -179,7 +186,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/v1/health",
             "/docs",
             "/redoc",
-            "/openapi.json"
+            "/openapi.json",
+            "/api/v1/products/public",
+            "/api/v1/products/public/"
         }
 
     async def dispatch(self, request: Request, call_next):
