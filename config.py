@@ -11,6 +11,13 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
 
+    model_config = {
+        "extra": "ignore",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
+
     # ============================================================================
     # DATABASE
     # ============================================================================
@@ -130,11 +137,6 @@ class Settings(BaseSettings):
     # ============================================================================
     api_default_limit: int = Field(default=1000, env="API_DEFAULT_LIMIT")
     api_max_limit: int = Field(default=10000, env="API_MAX_LIMIT")
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 # Create global settings instance
 settings = Settings()

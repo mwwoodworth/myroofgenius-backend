@@ -82,6 +82,11 @@ async def get_product(
     request: Request
 ):
     """Get product details"""
+    # Avoid treating the public products path as a product ID
+    if product_id.lower() == "public":
+        from routes.products_public import get_public_products
+        return await get_public_products()
+
     try:
         db_pool = getattr(request.app.state, 'db_pool', None)
         if not db_pool:
