@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 ROUTE_MAPPINGS = {
     # Core business routes
     "products_api": "/api/v1/products",
+    "products_public": "/api/v1/products/public",
 
     # Tasks 61-70: Sales & CRM
     "lead_management": "/api/v1/leads",
