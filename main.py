@@ -317,6 +317,7 @@ app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=settings.rate_limit_per_minute,
     requests_per_hour=settings.rate_limit_per_hour,
+    requests_per_day=settings.rate_limit_per_day,
     use_redis=bool(settings.redis_url),
     redis_url=settings.redis_url,
 )

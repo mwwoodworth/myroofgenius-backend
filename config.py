@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     # ============================================================================
     rate_limit_per_minute: int = Field(default=100, env="RATE_LIMIT_PER_MINUTE")
     rate_limit_per_hour: int = Field(default=1000, env="RATE_LIMIT_PER_HOUR")
+    rate_limit_per_day: int = Field(default=1000000, env="RATE_LIMIT_PER_DAY")  # 1M requests/day for production
 
     # ============================================================================
     # API PAGINATION
