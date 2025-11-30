@@ -110,6 +110,7 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
                 min_size=5,
                 max_size=20,
                 command_timeout=10,
+                statement_cache_size=0,
             )
             # Smoke test a connection
             async with pool.acquire() as conn:
