@@ -11,7 +11,7 @@ echo "🚀 Starting MyRoofGenius Backend Docker Deployment"
 DOCKER_USERNAME="myroofgenius"
 DOCKER_REPO="myroofgenius-backend"
 IMAGE_TAG="latest"
-RENDER_SERVICE_ID="srv-crg8kqe8ii6s73dpbkgg"
+RENDER_SERVICE_ID="srv-d1tfs4idbo4c73di6k00"
 
 # Build the Docker image
 echo "📦 Building Docker image..."
