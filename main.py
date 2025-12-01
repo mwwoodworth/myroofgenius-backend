@@ -116,7 +116,8 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
             return pool
         except Exception as e:
             last_err = e
-            logger.error("❌ Database initialization failed on attempt %d: %s", attempt, e)
+            # Log rich error information to help diagnose environment issues
+            logger.exception("❌ Database initialization failed on attempt %d: %r", attempt, e)
             print(f"❌ Database initialization failed (attempt {attempt}/{retries}): {e}")
             if attempt < retries:
                 await asyncio.sleep(backoffs[min(attempt - 1, len(backoffs) - 1)])
