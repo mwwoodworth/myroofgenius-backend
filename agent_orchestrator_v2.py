@@ -346,12 +346,12 @@ class AgentOrchestratorV2:
 
             # Get active pathways
             active_pathways = await conn.fetchval("""
-                SELECT COUNT(*) FROM neural_pathways WHERE is_active = true
+                SELECT COUNT(*) FROM neural_pathways
             """)
 
             # Get autonomous tasks
             autonomous_tasks = await conn.fetchval("""
-                SELECT COUNT(*) FROM ai_autonomous_tasks WHERE is_active = true
+                SELECT COUNT(*) FROM ai_autonomous_tasks
             """)
 
         return {

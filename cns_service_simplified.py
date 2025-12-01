@@ -73,9 +73,12 @@ class BrainOpsCNS:
             await self.initialize()
 
         async with self.db_pool.acquire() as conn:
-            # Generate embedding
+            # Generate embedding from full payload
             text = json.dumps(data)
             embedding = self._generate_embedding(text)
+
+            # Serialize content to JSON string to match TEXT columns safely.
+            content_str = json.dumps(data)
 
             # Store in database
             result = await conn.fetchval("""
@@ -88,7 +91,7 @@ class BrainOpsCNS:
                 data.get('type', 'general'),
                 data.get('category', 'system'),
                 data.get('title', 'Memory'),
-                data,
+                content_str,
                 embedding,
                 data.get('importance', 0.5),
                 data.get('tags', [])
