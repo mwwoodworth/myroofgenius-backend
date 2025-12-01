@@ -15,7 +15,9 @@ supabase>=2.0.0  # CORRECT AUTH - Supabase replaces custom JWT
 python-jose[cryptography]>=3.3.0  # DEPRECATED - Remove after migration
 passlib[bcrypt]>=1.7.4  # DEPRECATED - Remove after migration
 python-decouple>=3.8
-pydantic[email]>=2.0.0
+# Explicitly pin pydantic and pydantic-core to a known-good, compatible pair
+pydantic[email]==2.11.7
+pydantic-core==2.33.2
 PyJWT>=2.8.0  # DEPRECATED - Remove after migration
 
 # AI & ML
@@ -24,6 +26,7 @@ anthropic>=0.25.0
 google-generativeai>=0.3.0
 langchain>=0.1.0
 langchain-community>=0.0.10
+langchain-anthropic>=0.1.0
 langgraph>=0.0.20
 langsmith>=0.0.87
 faiss-cpu>=1.7.4
