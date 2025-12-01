@@ -51,10 +51,10 @@ weathercraft_integration = None
 relationship_awareness = None
 elena_instance = None
 
-# Global offline mode flag, controlled via environment variable.
-# When OFFLINE_MODE=true, health checks report database status as "offline"
-# and startup logic can skip non-essential external dependencies if needed.
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", "false").lower() == "true"
+# Global offline mode flag.
+# We deliberately keep this false to avoid "zombie" states where the service
+# reports healthy while it cannot reach the database.
+OFFLINE_MODE = False
 
 # Check if CNS is available
 CNS_AVAILABLE = False
@@ -398,37 +398,54 @@ except Exception as e:
 async def health_check():
     """Health check endpoint.
 
-    Intentionally tolerant of transient dependency failures so that the service
-    remains reachable and reports degraded components instead of going fully
-    unhealthy on a single database hiccup.
+    Fail-fast when the database is unreachable to avoid false-healthy states.
+    Returns 503 when DB connectivity is not confirmed.
+
+    CRITICAL: All probes have 2-second timeouts to prevent Render health check
+    failures (Render times out after 5 seconds).
     """
     offline = OFFLINE_MODE
 
-    # Database status: treat connection errors as degraded rather than fatal.
-    db_status = "offline" if offline else "disconnected"
+    db_status = "disconnected"
+    db_ok = False
     if not offline and db_pool:
         try:
-            async with db_pool.acquire() as conn:
-                result = await conn.fetchval("SELECT 1")
-                if result == 1:
-                    db_status = "connected"
+            # Use asyncio.wait_for to enforce a strict 2-second timeout
+            # This prevents the health check from hanging when DB is slow
+            async def db_probe():
+                async with db_pool.acquire(timeout=2) as conn:
+                    return await conn.fetchval("SELECT 1")
+
+            result = await asyncio.wait_for(db_probe(), timeout=2.0)
+            if result == 1:
+                db_status = "connected"
+                db_ok = True
+        except asyncio.TimeoutError:
+            logger.warning("Health check database probe timed out (2s limit)")
+            db_status = "timeout"
         except Exception as e:
             logger.warning("Health check database probe failed: %s", e)
             db_status = "error"
+    elif offline:
+        db_status = "offline"
 
-    # CNS status: best-effort only.
+    # CNS status: best-effort only with 1-second timeout.
+    # Skip CNS check entirely if DB is not healthy to speed up response.
     cns_status = "not available"
     cns_info = {}
-    if cns and CNS_AVAILABLE:
+    if db_ok and cns and CNS_AVAILABLE:
         try:
-            cns_info = await cns.get_status()
+            cns_info = await asyncio.wait_for(cns.get_status(), timeout=1.0)
             cns_status = cns_info.get("status", "unknown")
+        except asyncio.TimeoutError:
+            logger.warning("Health check CNS probe timed out (1s limit)")
+            cns_status = "timeout"
         except Exception as e:
             logger.warning("Health check CNS probe failed: %s", e)
             cns_status = "error"
 
-    return {
-        "status": "healthy",
+    payload = {
+        "status": "healthy" if db_ok else "degraded",
         "version": app.version,
         "database": db_status,
         "offline_mode": offline,
@@ -436,6 +453,10 @@ async def health_check():
         "cns_info": cns_info,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+    if not db_ok:
+        return JSONResponse(payload, status_code=503)
+    return payload
 
 # Customer model
 class Customer(BaseModel):
