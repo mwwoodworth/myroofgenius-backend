@@ -396,43 +396,46 @@ except Exception as e:
 @app.get("/health")
 @app.get("/api/v1/health")
 async def health_check():
-    """Health check endpoint"""
-    try:
-        # Test database connection
-        offline = OFFLINE_MODE
-        db_status = "offline" if offline else "disconnected"
-        if not offline and db_pool:
+    """Health check endpoint.
+
+    Intentionally tolerant of transient dependency failures so that the service
+    remains reachable and reports degraded components instead of going fully
+    unhealthy on a single database hiccup.
+    """
+    offline = OFFLINE_MODE
+
+    # Database status: treat connection errors as degraded rather than fatal.
+    db_status = "offline" if offline else "disconnected"
+    if not offline and db_pool:
+        try:
             async with db_pool.acquire() as conn:
                 result = await conn.fetchval("SELECT 1")
                 if result == 1:
                     db_status = "connected"
+        except Exception as e:
+            logger.warning("Health check database probe failed: %s", e)
+            db_status = "error"
 
-        # Check CNS status
-        cns_status = "not available"
-        cns_info = {}
-        if cns and CNS_AVAILABLE:
-            try:
-                cns_info = await cns.get_status()
-                cns_status = cns_info.get('status', 'unknown')
-            except:
-                cns_status = "error"
+    # CNS status: best-effort only.
+    cns_status = "not available"
+    cns_info = {}
+    if cns and CNS_AVAILABLE:
+        try:
+            cns_info = await cns.get_status()
+            cns_status = cns_info.get("status", "unknown")
+        except Exception as e:
+            logger.warning("Health check CNS probe failed: %s", e)
+            cns_status = "error"
 
-        return {
-            "status": "healthy",
-            "version": app.version,
-            "database": db_status,
-            "offline_mode": offline,
-            "cns": cns_status,
-            "cns_info": cns_info,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return {
-            "status": "unhealthy",
-            "version": app.version,
-            "error": str(e)
-        }
+    return {
+        "status": "healthy",
+        "version": app.version,
+        "database": db_status,
+        "offline_mode": offline,
+        "cns": cns_status,
+        "cns_info": cns_info,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 # Customer model
 class Customer(BaseModel):
