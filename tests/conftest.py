@@ -43,7 +43,16 @@ def db_cursor(db_connection):
     """Database cursor with transaction rollback"""
     cursor = db_connection.cursor()
     yield cursor
-    db_connection.rollback()  # Rollback after each test
+    # Connection may already be closed or may be a lightweight stub without a
+    # `.closed` attribute (as in some unit tests). Guard accordingly so teardown
+    # never raises and real connections still get rolled back.
+    try:
+        closed_flag = getattr(db_connection, "closed", 0)
+        if not closed_flag:
+            db_connection.rollback()  # Rollback after each test
+    except Exception:
+        # Best-effort rollback only; ignore teardown errors.
+        pass
     cursor.close()
 
 @pytest.fixture
