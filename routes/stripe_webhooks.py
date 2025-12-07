@@ -20,13 +20,19 @@ try:
 except ImportError:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    try:
+        from config import get_database_url
+    except ImportError:
+        get_database_url = lambda: None  # type: ignore
 
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    DATABASE_URL = os.getenv("DATABASE_URL") or get_database_url()
     if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL must be configured for Stripe webhook handling.")
-
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        # In test/offline scenarios we allow import to succeed without DB.
+        def SessionLocal():  # type: ignore
+            raise RuntimeError("DATABASE_URL must be configured for Stripe webhook handling.")
+    else:
+        engine = create_engine(DATABASE_URL)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 logger = logging.getLogger(__name__)
 
