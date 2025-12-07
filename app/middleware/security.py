@@ -208,6 +208,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("ApiKey "):
             return auth_header[len("ApiKey "):].strip()
+        if auth_header.startswith("Bearer "):
+            return auth_header[len("Bearer "):].strip()
 
         # Check X-API-Key header
         return request.headers.get("X-API-Key")

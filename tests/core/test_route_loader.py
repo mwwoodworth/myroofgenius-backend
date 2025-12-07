@@ -14,9 +14,10 @@ from routes.route_loader import load_all_routes
 
 def test_route_loader_skips_archive_and_non_py():
     app = FastAPI()
-    
+
     # Mock os.listdir to return a mix of files
-    with patch('os.listdir') as mock_listdir, \
+    with patch('os.environ', {}), \
+         patch('os.listdir') as mock_listdir, \
          patch('os.path.isdir') as mock_isdir, \
          patch('importlib.import_module') as mock_import:
         
@@ -49,8 +50,9 @@ def test_route_loader_skips_archive_and_non_py():
 
 def test_route_loader_handles_exceptions_gracefully():
     app = FastAPI()
-    
-    with patch('os.listdir') as mock_listdir, \
+
+    with patch('os.environ', {}), \
+         patch('os.listdir') as mock_listdir, \
          patch('os.path.isdir') as mock_isdir, \
          patch('importlib.import_module') as mock_import:
         

@@ -83,7 +83,8 @@ async def test_vector_search_function(async_db_pool, mock_openai_embedding):
     """Test vector similarity search function"""
     async with async_db_pool.acquire() as conn:
         # Insert test embedding
-        embedding_str = str(mock_openai_embedding).replace('[', '{').replace(']', '}')
+        # pgvector expects bracketed arrays: [0.1,0.2,...]
+        embedding_str = "[" + ",".join(str(x) for x in mock_openai_embedding) + "]"
         embedding_id = await conn.fetchval("""
             INSERT INTO context_embeddings (content, embedding, context_type)
             VALUES ($1, $2::vector, $3)

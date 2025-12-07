@@ -90,6 +90,9 @@ def load_all_routes(app: FastAPI):
     """
     Dynamically load all route files from the routes directory
     """
+    if os.getenv("SKIP_ROUTE_LOADING") == "1":
+        logger.info("SKIP_ROUTE_LOADING set; skipping dynamic route loading for this process")
+        return 0, 0
     routes_dir = os.path.dirname(__file__)
     loaded_count = 0
     failed_count = 0

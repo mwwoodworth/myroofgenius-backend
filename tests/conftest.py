@@ -10,6 +10,11 @@ import psycopg2
 from fastapi.testclient import TestClient
 import sys
 from pathlib import Path
+import os
+
+# Speed up tests by skipping heavy dynamic route loading
+os.environ.setdefault("SKIP_ROUTE_LOADING", "1")
+os.environ.setdefault("FAST_TEST_MODE", "1")
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -66,10 +71,15 @@ async def async_db_pool():
         password=TEST_DB_CONFIG["password"],
         port=TEST_DB_CONFIG["port"],
         min_size=2,
-        max_size=10
+        max_size=10,
+        statement_cache_size=0  # Avoid prepared statement conflicts with pgBouncer
     )
     yield pool
-    await pool.close()
+    # Ensure pool shutdown does not hang if connections are stuck
+    try:
+        await asyncio.wait_for(pool.close(), timeout=15)
+    except (asyncio.TimeoutError, Exception):
+        pool.terminate()
 
 @pytest.fixture
 def test_client():
