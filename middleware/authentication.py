@@ -25,6 +25,8 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/webhooks/render",
     "/api/v1/revenue/webhook",
     "/webhook/stripe",
+    "/api/v1/logs/vercel",  # Vercel log drain - no auth needed
+    "/api/v1/logs/render",  # Render log drain - no auth needed
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
@@ -63,7 +65,18 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         if self._is_exempt(path):
             return await call_next(request)
 
+        # Check for API key - if present, let API key middleware handle authentication
+        # This allows either JWT OR API key authentication
+        api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+        if api_key:
+            # Let the request proceed - APIKeyMiddleware will validate the key
+            return await call_next(request)
+
         authorization = request.headers.get("Authorization") or request.headers.get("authorization")
+
+        # Also allow ApiKey bearer scheme to pass through to API key middleware
+        if authorization and authorization.startswith("ApiKey "):
+            return await call_next(request)
 
         try:
             user = await get_current_user(authorization=authorization)
