@@ -31,6 +31,7 @@ from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.security import APIKeyMiddleware
+from database import get_db  # Legacy import path used by many route modules
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -104,11 +105,13 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
         try:
             pool = await asyncpg.create_pool(
                 database_url,
-                min_size=2,  # Reduced to prevent resource exhaustion
-                max_size=15,  # Reduced for Supabase pooler compatibility
-                command_timeout=15,  # Increased for slow queries
+                min_size=int(os.getenv("ASYNCPG_POOL_MIN_SIZE", "1")),
+                max_size=int(os.getenv("ASYNCPG_POOL_MAX_SIZE", "5")),
+                command_timeout=float(os.getenv("ASYNCPG_COMMAND_TIMEOUT_SECS", "15")),
                 statement_cache_size=0,
-                max_inactive_connection_lifetime=60.0,  # Recycle connections after 60s idle
+                max_inactive_connection_lifetime=float(os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")),
+                timeout=float(os.getenv("ASYNCPG_CONNECT_TIMEOUT_SECS", "10")),
+                ssl=True,
             )
             # Smoke test a connection
             async with pool.acquire() as conn:
@@ -371,6 +374,8 @@ except Exception as e:
 try:
     from routes.weathercraft_integration import router as weathercraft_router
     app.include_router(weathercraft_router)
+    # CONTRACT FIX: Alias /complete-erp to existing ERP routes to satisfy MRG frontend
+    app.include_router(weathercraft_router, prefix="/api/v1/complete-erp", tags=["Weathercraft ERP (Alias)"])
     logger.info("✅ Weathercraft ERP integration routes loaded")
 except Exception as e:
     logger.error(f"⚠️  Failed to load Weathercraft integration routes: {e}")
@@ -465,7 +470,12 @@ async def health_check():
     elif not offline and not db_pool:
         # Lazily probe DB when pool isn't initialized (e.g., tests or partial startup)
         try:
-            conn = await asyncpg.connect(DATABASE_URL, timeout=2, statement_cache_size=0)
+            conn = await asyncpg.connect(
+                DATABASE_URL,
+                timeout=2,
+                statement_cache_size=0,
+                ssl=True,
+            )
             try:
                 result = await conn.fetchval("SELECT 1")
                 if result == 1:
