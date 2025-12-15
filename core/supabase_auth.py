@@ -106,12 +106,16 @@ OFFLINE_USER_CONTEXT: Dict[str, Any] = {
 }
 
 
-async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
+async def get_current_user(
+    request: Request = None,
+    authorization: str = Header(None)
+) -> Dict[str, Any]:
     """
-    Get current user from Supabase Auth JWT token
+    Get current user from request state (set by middleware) or Supabase Auth JWT token.
 
-    This replaces the custom JWT authentication.
-    Frontend sends: Authorization: Bearer <supabase_jwt_token>
+    Authentication methods (in order of precedence):
+    1. request.state.user - Set by APIKeyMiddleware for API key auth
+    2. Authorization: Bearer <supabase_jwt_token> - Supabase JWT auth
 
     Returns:
         dict: User info including id, email, tenant_id, metadata
@@ -119,6 +123,12 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     Raises:
         HTTPException: If token is invalid or missing
     """
+    # Check if already authenticated by middleware (API key auth)
+    if request is not None:
+        user = getattr(request.state, "user", None)
+        if user:
+            return user
+
     if not SUPABASE_AUTH_AVAILABLE:
         if ALLOW_OFFLINE_AUTH:
             return OFFLINE_USER_CONTEXT.copy()
