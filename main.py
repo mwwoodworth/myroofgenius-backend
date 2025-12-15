@@ -99,6 +99,14 @@ except ImportError as e:
 
 async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asyncpg.Pool:
     """Initialize the asyncpg pool with retry, backoff, and connection recycling. Raises on failure."""
+    import ssl as ssl_module
+
+    # Create SSL context that doesn't verify certificates (required for Supabase pooler)
+    # Supabase poolers use self-signed certs which fail default verification
+    ssl_context = ssl_module.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl_module.CERT_NONE
+
     backoffs = [2, 5, 10]
     last_err: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -111,7 +119,7 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
                 statement_cache_size=0,
                 max_inactive_connection_lifetime=float(os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")),
                 timeout=float(os.getenv("ASYNCPG_CONNECT_TIMEOUT_SECS", "10")),
-                ssl=True,
+                ssl=ssl_context,
             )
             # Smoke test a connection
             async with pool.acquire() as conn:
@@ -470,11 +478,15 @@ async def health_check():
     elif not offline and not db_pool:
         # Lazily probe DB when pool isn't initialized (e.g., tests or partial startup)
         try:
+            import ssl as ssl_module
+            ssl_ctx = ssl_module.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl_module.CERT_NONE
             conn = await asyncpg.connect(
                 DATABASE_URL,
                 timeout=2,
                 statement_cache_size=0,
-                ssl=True,
+                ssl=ssl_ctx,
             )
             try:
                 result = await conn.fetchval("SELECT 1")
