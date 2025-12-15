@@ -20,7 +20,7 @@ import time
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com/api/v1"
 FRONTEND_URL = "https://www.myroofgenius.com"
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Pricing Strategy (Aggressive but Value-Packed)
 PRICING_TIERS = {

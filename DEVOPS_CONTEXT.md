@@ -9,7 +9,7 @@
 SUDO_PASSWORD="Mww00dw0rth@2O1S$"
 
 # Database
-DB_PASSWORD="Brain0ps2O2S"
+DB_PASSWORD="<DB_PASSWORD_REDACTED>"
 DB_HOST="aws-0-us-east-2.pooler.supabase.com"
 DB_PORT="6543"
 DB_USER="postgres.yomagoqdmxszqtdwuhab"
@@ -126,10 +126,10 @@ docker-compose -f docker-compose.devops.yml logs -f
 ### Access Databases
 ```bash
 # Production
-psql "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+psql "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Local
-psql "postgresql://postgres:Brain0ps2O2S@localhost:5432/postgres"
+psql "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:5432/postgres"
 ```
 
 ## 🧠 AI CONTEXT PERSISTENCE
@@ -160,7 +160,7 @@ echo "Mww00dw0rth@2O1S$" | sudo -S systemctl restart docker
 ### Database Connection
 ```bash
 # Test connection
-python3 -c "import psycopg2; conn = psycopg2.connect(host='aws-0-us-east-2.pooler.supabase.com', port='6543', database='postgres', user='postgres.yomagoqdmxszqtdwuhab', password='Brain0ps2O2S', sslmode='require'); print('✅ Connected'); conn.close()"
+python3 -c "import psycopg2; conn = psycopg2.connect(host='aws-0-us-east-2.pooler.supabase.com', port='6543', database='postgres', user='postgres.yomagoqdmxszqtdwuhab', password='<DB_PASSWORD_REDACTED>', sslmode='require'); print('✅ Connected'); conn.close()"
 ```
 
 ### Port Conflicts

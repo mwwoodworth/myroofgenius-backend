@@ -655,7 +655,7 @@
               "rich_text": [
                 {
                   "text": {
-                    "content": "Value: postgresql://postgres.yomagoqdmxszqtdwuhab:***@aws-0-us-east-2.pooler.supabase.com:5432/postgres\nStatus: Set\nNotes: Supabase PostgreSQL connection"
+                    "content": "Value: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres\nStatus: Set\nNotes: Supabase PostgreSQL connection"
                   }
                 }
               ]
@@ -1808,7 +1808,7 @@
   },
   "environment_variables": {
     "DATABASE_URL": {
-      "value": "postgresql://postgres.yomagoqdmxszqtdwuhab:***@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
+      "value": "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
       "status": "Set",
       "category": "Database",
       "notes": "Supabase PostgreSQL connection"

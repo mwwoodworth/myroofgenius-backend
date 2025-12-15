@@ -262,7 +262,7 @@ def setup_workspace():
                     {
                         "Service": {"title": [{"text": {"content": "Supabase Database"}}]},
                         "Username": {"rich_text": [{"text": {"content": "postgres"}}]},
-                        "Password": {"rich_text": [{"text": {"content": "Brain0ps2O2S"}}]},
+                        "Password": {"rich_text": [{"text": {"content": "<DB_PASSWORD_REDACTED>"}}]},
                         "URL": {"url": "https://supabase.com/dashboard/project/yomagoqdmxszqtdwuhab"},
                         "Category": {"select": {"name": "Database"}},
                         "Status": {"select": {"name": "Active"}}
@@ -284,7 +284,7 @@ def setup_workspace():
                     },
                     {
                         "Service": {"title": [{"text": {"content": "Stripe"}}]},
-                        "API Key": {"rich_text": [{"text": {"content": "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"}}]},
+                        "API Key": {"rich_text": [{"text": {"content": "<STRIPE_KEY_REDACTED>"}}]},
                         "URL": {"url": "https://dashboard.stripe.com"},
                         "Category": {"select": {"name": "Payment"}},
                         "Status": {"select": {"name": "Active"}}

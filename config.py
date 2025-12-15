@@ -155,7 +155,7 @@ def get_database_url() -> str:
     password = os.getenv("DB_PASSWORD") or os.getenv("SUPABASE_DB_PASSWORD")
 
     if all([host, port, name, user, password]):
-        return f"postgresql://{user}:{password}@{host}:{port}/{name}?sslmode=require"
+        return f"postgresql://{user}:<DB_PASSWORD_REDACTED>@{host}:{port}/{name}?sslmode=require"
 
     raise RuntimeError(
         "DATABASE_URL is not configured. Set DATABASE_URL or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD in the environment."

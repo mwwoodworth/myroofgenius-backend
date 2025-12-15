@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 # Permanent Restricted Key - Never Expires
-STRIPE_SECRET_KEY = "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"
+STRIPE_SECRET_KEY = "<STRIPE_KEY_REDACTED>"
 stripe.api_key = STRIPE_SECRET_KEY
 
 print("=" * 80)

@@ -116,7 +116,7 @@ def main():
     print("-" * 40)
     
     try:
-        db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+        db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         
         # Get table count
         cmd = f'psql "{db_url}" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \'public\';"'

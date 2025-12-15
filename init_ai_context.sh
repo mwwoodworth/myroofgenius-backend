@@ -65,7 +65,7 @@ try:
         port='6543',
         database='postgres',
         user='postgres.yomagoqdmxszqtdwuhab',
-        password='Brain0ps2O2S',
+        password='<DB_PASSWORD_REDACTED>',
         sslmode='require',
         connect_timeout=3
     )
@@ -165,7 +165,7 @@ try:
         port='6543',
         database='postgres',
         user='postgres.yomagoqdmxszqtdwuhab',
-        password='Brain0ps2O2S',
+        password='<DB_PASSWORD_REDACTED>',
         sslmode='require',
         connect_timeout=3
     )

@@ -31,7 +31,7 @@ class MasterCredentialsManager:
                 port="6543",
                 database="postgres",
                 user="postgres.yomagoqdmxszqtdwuhab",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 sslmode="require"
             )
             return True
@@ -371,8 +371,8 @@ Generated: {datetime.now()}
         # Add missing critical variables with correct values
         critical_fixes = {
             "NOTION_TOKEN": self.notion_token,
-            "DATABASE_URL": "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
-            "SUPABASE_DB_PASSWORD": "Brain0ps2O2S",
+            "DATABASE_URL": "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
+            "SUPABASE_DB_PASSWORD": "<DB_PASSWORD_REDACTED>",
             "JWT_SECRET_KEY": "brainops-jwt-secret-2025-production",
             "ENVIRONMENT": "production"
         }

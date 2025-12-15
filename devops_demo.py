@@ -62,7 +62,7 @@ class DevOpsCapabilityDemo:
                 port="6543",
                 database="postgres",
                 user="postgres.yomagoqdmxszqtdwuhab",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 sslmode="require"
             )
             cur = conn.cursor()
@@ -165,7 +165,7 @@ class DevOpsCapabilityDemo:
                 host="localhost",
                 database="postgres",
                 user="postgres",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 port=5432
             )
             local_conn.close()

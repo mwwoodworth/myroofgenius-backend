@@ -99,7 +99,7 @@ echo ""
 echo "4️⃣ DATABASE"
 echo "-----------"
 echo -n "Checking database... "
-export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 if psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
     echo "✅ Connected"
 else

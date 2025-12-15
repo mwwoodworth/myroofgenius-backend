@@ -10,7 +10,7 @@ import uuid
 
 # Database connection
 conn = psycopg2.connect(
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 )
 cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -75,7 +75,7 @@ logger = logging.getLogger(__name__)
 # Agents Router
 agents_router = APIRouter(prefix="/api/v1/agents", tags=["Agents"])
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 engine = create_engine(DATABASE_URL)
 
 def get_db():

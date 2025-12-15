@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     
     @field_validator("DATABASE_URL", mode="before")
     def validate_database_url(cls, v):
-        if not v or v == "postgresql://user:password@host:port/database":
+        if not v or v == "postgresql://user:<DB_PASSWORD_REDACTED>@host:port/database":
             raise ValueError("DATABASE_URL must be configured with actual values")
         return v
     

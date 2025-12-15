@@ -15,7 +15,7 @@ from termcolor import colored
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
 FRONTEND_URL = "https://myroofgenius.com"
-DATABASE_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 class ProductionVerifier:
     def __init__(self):

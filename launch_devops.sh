@@ -96,12 +96,12 @@ echo -e "\n${GREEN}Step 4: Creating Environment Configuration...${NC}"
 # Create .env file for Docker Compose
 cat > .env <<EOF
 # Database
-DATABASE_URL=postgresql://postgres:Brain0ps2O2S@localhost:5432/postgres
-PROD_DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+DATABASE_URL=postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:5432/postgres
+PROD_DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=JWT_REDACTED
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
 
 # Redis
 REDIS_URL=redis://localhost:6379

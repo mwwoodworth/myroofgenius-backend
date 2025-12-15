@@ -41,7 +41,7 @@ class AIOrchestrator:
             'backend_url': 'https://brainops-backend-prod.onrender.com',
             'frontend_url': 'https://www.myroofgenius.com',
             'database_url': os.getenv('DATABASE_URL', 
-                'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'),
+                'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'),
             'supabase_url': 'https://yomagoqdmxszqtdwuhab.supabase.co',
             'supabase_key': os.getenv('SUPABASE_SERVICE_ROLE_KEY'),
             'openai_key': os.getenv('OPENAI_API_KEY'),

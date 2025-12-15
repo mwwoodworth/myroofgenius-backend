@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 import subprocess
 
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 print("=" * 80)
 print("💾 STORING COMPLETE SYSTEM STATE IN PERSISTENT MEMORY")
@@ -184,8 +184,8 @@ Status: 100% OPERATIONAL - NO FAKE DATA
 - PAT: dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho
 
 ### Database
-- Password: Brain0ps2O2S
-- Connection: postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres
+- Password: <DB_PASSWORD_REDACTED>
+- Connection: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres
 
 ### Render
 - API Key: rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx

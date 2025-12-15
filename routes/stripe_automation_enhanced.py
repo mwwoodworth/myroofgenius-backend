@@ -18,12 +18,12 @@ router = APIRouter(tags=["Stripe Automation"])
 logger = logging.getLogger(__name__)
 
 # Stripe configuration - PERMANENT RESTRICTED KEY
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "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")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
 stripe.api_key = STRIPE_SECRET_KEY
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 )
 
 def get_db_engine():

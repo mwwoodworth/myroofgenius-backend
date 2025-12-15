@@ -1,7 +1,7 @@
 [project]
 api_url = "http://localhost:54321"
 studio_url = "http://localhost:54323"
-db_url = "postgresql://postgres:postgres@localhost:54322/postgres"
+db_url = "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:54322/postgres"
 
 [api]
 port = 54321

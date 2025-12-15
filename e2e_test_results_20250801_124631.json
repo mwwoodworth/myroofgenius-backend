@@ -1080,9 +1080,9 @@
         "endpoint": "/api/v1/auth/login",
         "status": 200,
         "response": {
-          "access_token": "JWT_REDACTED",
+          "access_token": "<JWT_REDACTED>",
           "token_type": "bearer",
-          "refresh_token": "JWT_REDACTED",
+          "refresh_token": "<JWT_REDACTED>",
           "expires_in": 1800,
           "user": {
             "id": "758487f8-7d99-4924-9fd2-a5735a1e07b1",

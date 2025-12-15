@@ -39,7 +39,7 @@
 1. **Added AI Keys to Render**:
    ```bash
    OPENAI_API_KEY=sk-proj-AplqZef... ✅
-   ANTHROPIC_API_KEY=sk-ant-REDACTED... ✅
+   ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY_REDACTED>... ✅
    GEMINI_API_KEY=AIzaSyC2J0GTI... ✅
    ```
 
@@ -166,7 +166,7 @@
 **Environment Keys** (from BrainOps (7).env):
 ```bash
 ✅ OPENAI_API_KEY=sk-proj-AplqZef... (verified working locally)
-✅ ANTHROPIC_API_KEY=sk-ant-REDACTED... (configured in Render)
+✅ ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY_REDACTED>... (configured in Render)
 ✅ GEMINI_API_KEY=AIzaSyC2J0GTI... (configured in Render)
 ```
 

@@ -9,25 +9,44 @@ from typing import Optional
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
-# Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+def _resolve_database_url() -> Optional[str]:
+    """Resolve the database URL without embedding secrets in code."""
+    url = os.getenv("DATABASE_URL")
+    if url:
+        return url
+
+    # Fallback to structured env vars via config.py when available.
+    try:
+        from config import get_database_url  # local import to avoid circular dependencies
+        return get_database_url()
+    except Exception:
+        return None
+
+
+DATABASE_URL = _resolve_database_url()
 
 # Global connection pool (AsyncPG)
 _connection_pool: Optional[asyncpg.Pool] = None
 
 # SQLAlchemy engine and SessionLocal for sync routes
-engine = create_engine(
-    DATABASE_URL.replace("+asyncpg", ""),  # Remove async driver if present
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600
-)
+engine = None
+SessionLocal = None
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if DATABASE_URL:
+    engine = create_engine(
+        DATABASE_URL.replace("+asyncpg", ""),  # Remove async driver if present
+        pool_size=int(os.getenv("DB_POOL_SIZE", "2")),
+        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "3")),
+        pool_pre_ping=True,
+        pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "300")),
+        pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "10")),
+        connect_args={
+            "sslmode": os.getenv("DB_SSLMODE", "require"),
+            "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
+        },
+    )
+
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 async def get_db_connection():
     """
@@ -35,14 +54,20 @@ async def get_db_connection():
     """
     global _connection_pool
 
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not configured.")
+
     if _connection_pool is None:
         _connection_pool = await asyncpg.create_pool(
             DATABASE_URL,
-            min_size=5,
-            max_size=20,
+            min_size=int(os.getenv("ASYNCPG_POOL_MIN_SIZE", "1")),
+            max_size=int(os.getenv("ASYNCPG_POOL_MAX_SIZE", "5")),
             max_queries=50000,
-            max_inactive_connection_lifetime=300.0,
-            command_timeout=60.0
+            max_inactive_connection_lifetime=float(os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")),
+            command_timeout=float(os.getenv("ASYNCPG_COMMAND_TIMEOUT_SECS", "30")),
+            statement_cache_size=0,
+            timeout=float(os.getenv("ASYNCPG_CONNECT_TIMEOUT_SECS", "10")),
+            ssl=True,
         )
 
     return _connection_pool
@@ -105,6 +130,9 @@ def get_db():
     """
     Synchronous database session for SQLAlchemy routes
     """
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not configured.")
+
     db = SessionLocal()
     try:
         yield db

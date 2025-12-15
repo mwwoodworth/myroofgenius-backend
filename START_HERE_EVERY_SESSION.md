@@ -4,7 +4,7 @@
 ## STEP 1: RUN THIS IMMEDIATELY
 ```bash
 # Check what's REAL right now
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Get latest context check
 psql "$DATABASE_URL" -c "SELECT * FROM context_tracking ORDER BY check_timestamp DESC LIMIT 10;"
@@ -71,7 +71,7 @@ VALUES ('what_changed', 'expected', 'actual', true/false, 'details');
 ## QUICK STATUS CHECK
 ```bash
 # Run this for instant context
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 psql "$DATABASE_URL" -c "
 SELECT component, actual_value, is_correct, notes 
 FROM context_tracking 

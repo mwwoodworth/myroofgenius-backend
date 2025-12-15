@@ -19,9 +19,9 @@
 6. ⏳ NEXT: Deploy to production on Vercel
 
 ### Database Connection Info
-- **CORRECT Password**: `Brain0ps2O2S` (NOT the old one)
-- **Pooler URL**: `postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require`
-- **Direct URL**: `postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
+- **CORRECT Password**: `<DB_PASSWORD_REDACTED> (NOT the old one)
+- **Pooler URL**: `postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require`
+- **Direct URL**: `postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
 
 ---
 
@@ -176,7 +176,7 @@ npm run dev
 curl https://brainops-backend-prod.onrender.com/api/v1/health
 
 # 3. Test CenterPoint data
-DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' \
+DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' \
 npx tsx -e "
 import postgres from 'postgres';
 const sql = postgres(process.env.DATABASE_URL);
@@ -191,7 +191,7 @@ await sql.end();
 ## ⚠️ DO NOT FORGET
 
 1. **The ERP work is NOT complete** - Need to test and deploy
-2. **Database password is `Brain0ps2O2S`** - NOT the old one
+2. **Database password is `<DB_PASSWORD_REDACTED> - NOT the old one
 3. **All mock data has been removed** - System uses REAL data now
 4. **Master env table is a GOOD IDEA** - Implement after ERP
 5. **User wants 100% operational system** - No demos, no mocks

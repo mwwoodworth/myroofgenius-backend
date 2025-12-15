@@ -40,7 +40,7 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       
       # Database
-      DATABASE_URL: postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
+      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
       
       # Render
       RENDER_API_KEY: rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx
@@ -108,7 +108,7 @@ Create `mcp-config.json`:
       "command": "npx",
       "args": ["@modelcontextprotocol/server-postgres"],
       "env": {
-        "DATABASE_URL": "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+        "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
       }
     },
     "filesystem": {

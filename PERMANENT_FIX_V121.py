@@ -138,7 +138,7 @@ services:
       - "10000:10000"
     environment:
       - PORT=10000
-      - DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+      - DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
       - ENV=production
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:10000/health"]

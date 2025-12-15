@@ -11,7 +11,7 @@ from pydantic import BaseModel
 router = APIRouter()
 
 # Stripe configuration - Use live key if available, otherwise API key
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY") or os.getenv("STRIPE_API_KEY_LIVE") or os.getenv("STRIPE_API_KEY_TEST", "sk_test_REDACTED")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY") or os.getenv("STRIPE_API_KEY_LIVE") or os.getenv("STRIPE_API_KEY_TEST", "<STRIPE_KEY_REDACTED>")
 
 class CheckoutSessionRequest(BaseModel):
     price_id: str
@@ -37,7 +37,7 @@ async def create_checkout_session(request: CheckoutSessionRequest):
     """Create a Stripe checkout session"""
     try:
         # Check if we have a real Stripe key
-        if stripe.api_key and not stripe.api_key.startswith("sk_test_REDACTED"):
+        if stripe.api_key and not stripe.api_key.startswith("<STRIPE_KEY_REDACTED>"):
             # Create real Stripe checkout session
             session = stripe.checkout.Session.create(
                 payment_method_types=['card'],

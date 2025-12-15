@@ -14,7 +14,7 @@ from typing import Dict, List, Tuple
 
 # Configuration
 PRODUCTION_URL = "https://brainops-backend-prod.onrender.com"
-AUTH_TOKEN = "JWT_REDACTED"
+AUTH_TOKEN = "<JWT_REDACTED>"
 
 class EndpointTester:
     def __init__(self):

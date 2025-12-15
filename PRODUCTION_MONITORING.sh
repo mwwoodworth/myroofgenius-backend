@@ -5,7 +5,7 @@
 # Run this before/after any deployment to verify system health
 #
 
-TOKEN="${SUPABASE_JWT_TOKEN:-JWT_REDACTED}"
+TOKEN="${SUPABASE_JWT_TOKEN:-<JWT_REDACTED>}"
 BASE="https://brainops-backend-prod.onrender.com"
 
 PASS=0

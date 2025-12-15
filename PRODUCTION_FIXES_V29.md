@@ -75,7 +75,7 @@ ADD COLUMN IF NOT EXISTS unit_of_measure VARCHAR(50) DEFAULT 'unit';
 - **Mobile Optimizations**: MobileNav component active
 
 ### Database (Supabase)
-- **Connection**: postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
+- **Connection**: postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
 - **Schema Updates**: All migrations applied
 - **Missing Columns**: Fixed via SQL migrations
 

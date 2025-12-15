@@ -8,7 +8,7 @@ import uuid
 
 router = APIRouter(prefix="/api/v1/testing", tags=["Reality Check Testing"])
 
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 @router.get("/suites")
 async def get_test_suites(current_user: dict = Depends(get_current_user)) -> List[Dict[str, Any]]:

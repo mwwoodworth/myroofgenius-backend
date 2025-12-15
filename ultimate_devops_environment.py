@@ -51,14 +51,14 @@ class UltimateDevOpsEnvironment:
                 "port": "6543",
                 "database": "postgres",
                 "user": "postgres.yomagoqdmxszqtdwuhab",
-                "password": "Brain0ps2O2S"
+                "password": "<DB_PASSWORD_REDACTED>"
             },
             "local": {
                 "host": "localhost",
                 "port": "5432",
                 "database": "brainops",
                 "user": "postgres",
-                "password": "Brain0ps2O2S"
+                "password": "<DB_PASSWORD_REDACTED>"
             }
         }
 
@@ -66,7 +66,7 @@ class UltimateDevOpsEnvironment:
         self.ai_keys = {
             "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
             "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "sk-ant-REDACTED")
+            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "<ANTHROPIC_API_KEY_REDACTED>")
         }
 
         # Notion configuration
@@ -217,7 +217,7 @@ services:
     image: supabase/postgres:15.1.0.117
     container_name: brainops-postgres
     environment:
-      POSTGRES_PASSWORD: Brain0ps2O2S
+      POSTGRES_PASSWORD: <DB_PASSWORD_REDACTED>
       POSTGRES_DB: postgres
     ports:
       - "5432:5432"
@@ -235,7 +235,7 @@ services:
     container_name: supabase-studio
     environment:
       SUPABASE_URL: http://kong:8000
-      SUPABASE_ANON_KEY: JWT_REDACTED
+      SUPABASE_ANON_KEY: <JWT_REDACTED>
     ports:
       - "54323:3000"
 
@@ -255,10 +255,10 @@ services:
       dockerfile: Dockerfile
     container_name: brainops-backend
     environment:
-      DATABASE_URL: postgresql://postgres:Brain0ps2O2S@postgres:5432/postgres
+      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/postgres
       REDIS_URL: redis://redis:6379
       SYNC_WITH_PROD: "true"
-      PROD_DATABASE_URL: postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+      PROD_DATABASE_URL: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
     ports:
       - "8000:8000"
     volumes:
@@ -402,7 +402,7 @@ def sync_tables():
                 port="6543",
                 database="postgres",
                 user="postgres.yomagoqdmxszqtdwuhab",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 sslmode="require"
             )
 
@@ -412,7 +412,7 @@ def sync_tables():
                 port="5432",
                 database="postgres",
                 user="postgres",
-                password="Brain0ps2O2S"
+                password="<DB_PASSWORD_REDACTED>"
             )
 
             # Get list of tables
@@ -481,7 +481,7 @@ if __name__ == "__main__":
                 env_content = f"""
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=JWT_REDACTED
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
 """
                 with open(app_path / ".env.local", "w") as f:
                     f.write(env_content)

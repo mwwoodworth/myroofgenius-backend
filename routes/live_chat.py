@@ -19,7 +19,7 @@ async def get_db():
         host="aws-0-us-east-2.pooler.supabase.com",
         port=5432,
         user="postgres.yomagoqdmxszqtdwuhab",
-        password="Brain0ps2O2S",
+        password="<DB_PASSWORD_REDACTED>",
         database="postgres"
     )
     try:
@@ -120,7 +120,7 @@ async def websocket_endpoint(
                 host="aws-0-us-east-2.pooler.supabase.com",
                 port=5432,
                 user="postgres.yomagoqdmxszqtdwuhab",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 database="postgres"
             )
 

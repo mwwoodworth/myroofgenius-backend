@@ -9,7 +9,7 @@ import asyncpg
 from datetime import datetime, timedelta
 
 # Database connection string (keep secure in production)
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 
 class DatabaseGuide:
     """Guide for using the AI agent database infrastructure"""
@@ -26,7 +26,7 @@ class DatabaseGuide:
         print("  • Port: 5432")
         print("  • Database: postgres")
         print("  • Username: postgres.yomagoqdmxszqtdwuhab")
-        print("  • Password: Brain0ps2O2S")
+        print("  • Password: <DB_PASSWORD_REDACTED>")
         print()
         print("⚠️  Security Note: Store connection details in environment variables in production")
 
@@ -174,7 +174,7 @@ class DatabaseGuide:
 import asyncio
 import asyncpg
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 
 async def get_engaged_users():
     """Get highly engaged users"""

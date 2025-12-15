@@ -246,7 +246,7 @@ async def get_db():
         host="aws-0-us-east-2.pooler.supabase.com",
         port=5432,
         user="postgres.yomagoqdmxszqtdwuhab",
-        password="Brain0ps2O2S",
+        password="<DB_PASSWORD_REDACTED>",
         database="postgres"
     )
     try:
@@ -449,7 +449,7 @@ def run_migration(name):
             "-f", migration_file
         ]
         env = os.environ.copy()
-        env['PGPASSWORD'] = 'Brain0ps2O2S'
+        env['PGPASSWORD'] = '<DB_PASSWORD_REDACTED>'
 
         try:
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=10)

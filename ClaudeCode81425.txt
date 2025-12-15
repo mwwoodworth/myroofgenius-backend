@@ -228,7 +228,7 @@
 
 
 
-● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql -c "SELECT COUNT(*…)
+● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql -c "SELECT COUNT(*…)
   ⎿   count                      
      -------
      0
@@ -252,7 +252,7 @@
      ./scripts/add_centerpoint_columns.ts
      … +7 lines (ctrl+r to expand)
 
-● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' npx tsx scripts/centerp…)
+● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' npx tsx scripts/centerp…)
   ⎿  Error: Command timed out after 30s
 
      🚀 CENTERPOINT COMPLETE DATA EXTRACTION
@@ -283,13 +283,13 @@
 
 ● JSON error in address field. Let me fix:
 
-  Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql -c "\d customers"…)
-  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
+  Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql -c "\d customers"…)
+  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
 
-  Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -c…)
-  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
+  Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -c…)
+  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
 
-● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' npx tsx -e "
+● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' npx tsx -e "
       import pos…)
   ⎿  Error: node:internal/process/promises:394
          triggerUncaughtException(err, true /* fromPromise */);
@@ -316,7 +316,7 @@
      -- Insert real customers with proper IDs
      … +102 lines (ctrl+r to expand)
 
-● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -f…)
+● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -f…)
   ⎿  ALTER TABLE                   
      TRUNCATE TABLE
       table_name | count
@@ -324,15 +324,15 @@
 
 ● The tables have different column names than expected. Let me check the actual schema:
 
-● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -c…)
-  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
+● Bash(DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' psql "$DATABASE_URL" -c…)
+  ⎿  /bin/bash: line 1: DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require: No such file or directory
 
-● Bash(PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -c "\d customers" | head -30)
-  ⎿  /bin/bash: line 1: PGPASSWORD=Brain0ps2O2S: command not found
+● Bash(PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -c "\d customers" | head -30)
+  ⎿  /bin/bash: line 1: PGPASSWORD=<DB_PASSWORD_REDACTED> command not found
 
 ● Let me use proper syntax:
 
-  Bash(export PGPASSWORD='Brain0ps2O2S' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -c "\d customers" | head -3…)
+  Bash(export PGPASSWORD='<DB_PASSWORD_REDACTED>' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -c "\d customers" | head -3…)
   ⎿                                                 Table "public.customers"                                                
            Column       |            Type             | Collation | Nullable |                   Default
      -------------------+-----------------------------+-----------+----------+----------------------------------------------
@@ -353,7 +353,7 @@
      ALTER TABLE inventory_items ALTER COLUMN id SET DEFAULT gen_random_uuid();
      … +74 lines (ctrl+r to expand)
 
-● Bash(export PGPASSWORD='Brain0ps2O2S' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -f /home/mwwoodworth/code/P…)
+● Bash(export PGPASSWORD='<DB_PASSWORD_REDACTED>' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 -f /home/mwwoodworth/code/P…)
   ⎿  ALTER TABLE                   
      ALTER TABLE
      ALTER TABLE
@@ -361,7 +361,7 @@
 
 ● Let me fix this simpler:
 
-● Bash(export PGPASSWORD='Brain0ps2O2S' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 << 'EOF'
+● Bash(export PGPASSWORD='<DB_PASSWORD_REDACTED>' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 << 'EOF'
       -- Simple insert w…)
   ⎿  INSERT 0 3                   
       customer_count
@@ -370,7 +370,7 @@
 
 ● Good! Now let me add more data and fix the APIs:
 
-● Bash(export PGPASSWORD='Brain0ps2O2S' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 << 'EOF'
+● Bash(export PGPASSWORD='<DB_PASSWORD_REDACTED>' && psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -p 6543 << 'EOF'
       -- Add more custom…)
   ⎿  INSERT 0 50                  
      INSERT 0 30

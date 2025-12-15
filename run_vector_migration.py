@@ -17,7 +17,7 @@ async def run_vector_migration():
         import asyncpg
         
         conn = await asyncpg.connect(
-            'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres'
+            'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres'
         )
         
         print("🚀 Running vector database migration...")
