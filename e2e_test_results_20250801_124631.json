@@ -1080,9 +1080,9 @@
         "endpoint": "/api/v1/auth/login",
         "status": 200,
         "response": {
-          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBicmFpbm9wcy5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU0MDc1NzgxLCJpYXQiOjE3NTQwNzM5ODEsInRva2VuX3R5cGUiOiJhY2Nlc3MifQ.TV9cogtvj4qVhz8HDx2XNzMB9mg99VsKCsDqTE63NiQ",
+          "access_token": "<JWT_REDACTED>",
           "token_type": "bearer",
-          "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBicmFpbm9wcy5jb20iLCJleHAiOjE3NTQ2Nzg3ODEsImlhdCI6MTc1NDA3Mzk4MSwidHlwZSI6InJlZnJlc2giLCJ0b2tlbl90eXBlIjoicmVmcmVzaCJ9.105CldoDHIzXTrN5WrDIiCdiqUAq3J9f6rYKTTqqDDc",
+          "refresh_token": "<JWT_REDACTED>",
           "expires_in": 1800,
           "user": {
             "id": "758487f8-7d99-4924-9fd2-a5735a1e07b1",

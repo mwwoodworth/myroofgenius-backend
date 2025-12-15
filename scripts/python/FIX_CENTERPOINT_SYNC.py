@@ -18,7 +18,7 @@ CENTERPOINT_BEARER_TOKEN = "eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6
 CENTERPOINT_TENANT_ID = "97f82b360baefdd73400ad342562586"
 
 # Database configuration
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 def test_centerpoint_connection():
     """Test CenterPoint API connection"""
@@ -198,7 +198,7 @@ import requests
 import psycopg2
 from datetime import datetime
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 CENTERPOINT_BASE_URL = "https://api.centerpointconnect.io"
 CENTERPOINT_BEARER_TOKEN = "eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6ImM4ZDdiMDIyNGQ4NDQ5OGI5M2MwYzY4MTc0NWU5M2Y0IiwiaCI6Im11cm11cjEyOCJ9"
 CENTERPOINT_TENANT_ID = "97f82b360baefdd73400ad342562586"

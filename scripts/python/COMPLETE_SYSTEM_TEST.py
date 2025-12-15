@@ -99,7 +99,7 @@ class SystemTester:
         print("\n💾 TESTING DATABASE...")
         
         # Use psql to check data
-        cmd = """export PGPASSWORD='Brain0ps2O2S' && psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "
+        cmd = """export PGPASSWORD='<DB_PASSWORD_REDACTED>' && psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "
         SELECT 
             'customers' as table_name, COUNT(*) as count FROM customers
         UNION ALL

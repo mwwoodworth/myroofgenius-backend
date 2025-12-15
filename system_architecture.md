@@ -14,7 +14,7 @@
 
 ### Database
 - **Provider**: Supabase
-- **URL**: postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres
+- **URL**: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
 - **Project**: yomagoqdmxszqtdwuhab
 
 ## Environment Variables Master Table

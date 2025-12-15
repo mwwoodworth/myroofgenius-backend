@@ -10,7 +10,7 @@ import subprocess
 from datetime import datetime
 import uuid
 
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 def consolidate_ai_os():
     """Consolidate and activate the complete AI OS"""

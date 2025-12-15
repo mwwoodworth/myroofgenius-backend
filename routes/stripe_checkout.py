@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Configure Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_51Pg8yJH8H1TLfKlKOhVYOCJQlUjJBs46HSHUN6YzGlwHWiMlJMO4jzBnqLdpx3K1g6pV4rEUOsJh9uyQzqW5Cblk00WMzRzP4o")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
 
 # Price IDs for different plans
 PRICE_IDS = {

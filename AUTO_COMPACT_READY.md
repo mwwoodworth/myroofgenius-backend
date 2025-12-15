@@ -92,7 +92,7 @@
 ### Critical Information:
 - **Docker Hub**: v3.3.46 pushed successfully
 - **Deployment ID**: dep-d2f0pduuk2gs73bviil0
-- **Database Password**: Brain0ps2O2S
+- **Database Password**: <DB_PASSWORD_REDACTED>
 - **Supabase Project**: yomagoqdmxszqtdwuhab
 
 ### System Architecture:

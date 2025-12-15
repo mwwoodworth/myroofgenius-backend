@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional
 class PersistentMemorySync:
     def __init__(self):
         # Production database connection
-        self.prod_db_url = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+        self.prod_db_url = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
         
         # Local SQLite for fast access
         self.local_db = "/home/mwwoodworth/code/.ai_persistent/memory.db"

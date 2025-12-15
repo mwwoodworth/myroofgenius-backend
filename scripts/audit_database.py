@@ -14,7 +14,7 @@ from psycopg2.extras import RealDictCursor
 # from tabulate import tabulate  # Optional, not required
 
 # Database connection - use pooler for better reliability
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
+DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
 
 class DatabaseAuditor:
     def __init__(self):

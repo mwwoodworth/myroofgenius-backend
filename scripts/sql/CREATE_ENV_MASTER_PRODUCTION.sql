@@ -74,20 +74,20 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Insert critical environment variables (PRODUCTION KEYS)
 INSERT INTO env_master (key, value, description, category, project, is_sensitive) VALUES
 -- Stripe (LIVE KEYS)
-('STRIPE_SECRET_KEY', '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', 'Stripe Live Secret Key', 'PAYMENT', 'all', true),
+('STRIPE_SECRET_KEY', '<STRIPE_KEY_REDACTED>', 'Stripe Live Secret Key', 'PAYMENT', 'all', true),
 ('STRIPE_PUBLISHABLE_KEY', 'pk_live_51PXs5fRw7K3sXkUXe9L1N37RNnQPBBBKRQKKPEBJdNqz2RQxYpqxXXyYKJ0fTINGjGkOsIy09m1v4fKtY5xOPud00Z8YP8Cxr', 'Stripe Live Publishable Key', 'PAYMENT', 'frontend', false),
 ('STRIPE_WEBHOOK_SECRET', 'whsec_PENDING', 'Stripe Webhook Secret - Will be set by automation', 'PAYMENT', 'backend', true),
 
 -- AI Services
-('ANTHROPIC_API_KEY', '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', 'Anthropic Claude API', 'AI', 'all', true),
-('OPENAI_API_KEY', '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', 'OpenAI GPT API', 'AI', 'all', true),
-('GEMINI_API_KEY', 'AIzaSyAHlPJBr5HH1xKvVoKR8C6BHvMZh3G_kik', 'Google Gemini API', 'AI', 'all', true),
+('ANTHROPIC_API_KEY', '<ANTHROPIC_API_KEY_REDACTED>', 'Anthropic Claude API', 'AI', 'all', true),
+('OPENAI_API_KEY', '<OPENAI_API_KEY_REDACTED>', 'OpenAI GPT API', 'AI', 'all', true),
+('GEMINI_API_KEY', '<GOOGLE_API_KEY_REDACTED>', 'Google Gemini API', 'AI', 'all', true),
 
 -- Database
-('DATABASE_URL', 'postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 'Primary Database Connection', 'DATABASE', 'backend', true),
+('DATABASE_URL', 'postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 'Primary Database Connection', 'DATABASE', 'backend', true),
 ('SUPABASE_URL', 'https://yomagoqdmxszqtdwuhab.supabase.co', 'Supabase Project URL', 'DATABASE', 'all', false),
-('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE', 'Supabase Anon Key', 'DATABASE', 'frontend', false),
-('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ', 'Supabase Service Role Key', 'DATABASE', 'backend', true),
+('SUPABASE_ANON_KEY', '<JWT_REDACTED>', 'Supabase Anon Key', 'DATABASE', 'frontend', false),
+('SUPABASE_SERVICE_ROLE_KEY', '<JWT_REDACTED>', 'Supabase Service Role Key', 'DATABASE', 'backend', true),
 
 -- Authentication
 ('JWT_SECRET_KEY', 'your-super-secret-jwt-key-change-this-in-production', 'JWT Secret for tokens', 'AUTH', 'backend', true),

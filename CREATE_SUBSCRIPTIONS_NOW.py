@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 # STRIPE LIVE KEYS (Valid for 7 days from activation)
-STRIPE_SECRET_KEY = "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"
+STRIPE_SECRET_KEY = "<STRIPE_KEY_REDACTED>"
 STRIPE_PUBLISHABLE_KEY = "pk_live_51RHXCuFs5YLnaPiWkafx5348uNTKn2b5iUT0gKalb9lFgdVZt8lESg2MqDkZHjRPYto8uGtMnzUJJP3BV9ziff1H00VuIKLyPG"
 
 stripe.api_key = STRIPE_SECRET_KEY

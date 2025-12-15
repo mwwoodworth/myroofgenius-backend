@@ -71,7 +71,7 @@ echo ""
 echo "5️⃣ DATABASE CONNECTIVITY TEST"
 echo "----------------------------"
 echo -n "Testing database tables... "
-PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 \
+PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 \
     -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c \
     "SELECT COUNT(*) FROM information_schema.tables 
      WHERE table_schema = 'public' 

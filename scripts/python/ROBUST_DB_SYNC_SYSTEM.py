@@ -13,8 +13,8 @@ import subprocess
 import os
 
 # Database connections
-PROD_DB = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-LOCAL_DB = "postgresql://postgres:postgres@localhost:54322/postgres"
+PROD_DB = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+LOCAL_DB = "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:54322/postgres"
 
 class RobustDBSync:
     def __init__(self):
@@ -151,7 +151,7 @@ class RobustDBSync:
             
             # Dump from production
             dump_cmd = f"""
-            PGPASSWORD='Brain0ps2O2S' pg_dump \
+            PGPASSWORD='<DB_PASSWORD_REDACTED>' pg_dump \
                 -h db.yomagoqdmxszqtdwuhab.supabase.co \
                 -U postgres \
                 -d postgres \

@@ -81,11 +81,11 @@ echo "================="
 
 # Test database connectivity
 run_test "Database Connection" \
-    "PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c 'SELECT 1' 2>/dev/null"
+    "PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c 'SELECT 1' 2>/dev/null"
 
 # Test Centerpoint data
 echo -n "Centerpoint Customers: "
-CUSTOMER_COUNT=$(PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM customers WHERE external_id LIKE 'CP-%'" 2>/dev/null | tr -d ' ')
+CUSTOMER_COUNT=$(PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM customers WHERE external_id LIKE 'CP-%'" 2>/dev/null | tr -d ' ')
 if [ "$CUSTOMER_COUNT" -gt 0 ]; then
     echo -e "${GREEN}$CUSTOMER_COUNT records${NC}"
     PASSED_TESTS=$((PASSED_TESTS + 1))
@@ -97,7 +97,7 @@ TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
 # Test products table
 echo -n "Products in Database: "
-PRODUCT_COUNT=$(PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM products" 2>/dev/null | tr -d ' ')
+PRODUCT_COUNT=$(PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM products" 2>/dev/null | tr -d ' ')
 if [ "$PRODUCT_COUNT" -gt 0 ]; then
     echo -e "${GREEN}$PRODUCT_COUNT records${NC}"
     PASSED_TESTS=$((PASSED_TESTS + 1))
@@ -140,7 +140,7 @@ echo "======================="
 
 # Check for orphaned records
 echo -n "Checking for orphaned jobs: "
-ORPHANED_JOBS=$(PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM jobs WHERE customer_id IS NULL" 2>/dev/null | tr -d ' ')
+ORPHANED_JOBS=$(PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM jobs WHERE customer_id IS NULL" 2>/dev/null | tr -d ' ')
 if [ "$ORPHANED_JOBS" = "0" ]; then
     echo -e "${GREEN}None found${NC}"
     PASSED_TESTS=$((PASSED_TESTS + 1))
@@ -151,7 +151,7 @@ TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
 # Check for data tagged as sample
 echo -n "Sample data tagging: "
-SAMPLE_COUNT=$(PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM customers WHERE metadata->>'is_sample' = 'true'" 2>/dev/null | tr -d ' ')
+SAMPLE_COUNT=$(PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -t -c "SELECT COUNT(*) FROM customers WHERE metadata->>'is_sample' = 'true'" 2>/dev/null | tr -d ' ')
 echo -e "${GREEN}$SAMPLE_COUNT records tagged${NC}"
 PASSED_TESTS=$((PASSED_TESTS + 1))
 TOTAL_TESTS=$((TOTAL_TESTS + 1))
@@ -190,7 +190,7 @@ echo "============================================================"
 # Database metrics
 echo ""
 echo "DATABASE METRICS:"
-PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c "
+PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c "
 SELECT 
     'Centerpoint Customers' as metric, COUNT(*) as count 
 FROM customers 
@@ -211,7 +211,7 @@ ORDER BY count DESC;" 2>/dev/null
 
 echo ""
 echo "RECENT SYNC ACTIVITY:"
-PGPASSWORD='Brain0ps2O2S' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c "
+PGPASSWORD='<DB_PASSWORD_REDACTED>' psql -h aws-0-us-east-2.pooler.supabase.com -p 6543 -U postgres.yomagoqdmxszqtdwuhab -d postgres -c "
 SELECT 
     sync_type,
     status,

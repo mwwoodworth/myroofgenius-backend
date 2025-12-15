@@ -45,18 +45,18 @@ CREATE TABLE env_master_audit (
 -- Insert all your current environment variables
 INSERT INTO env_master (key, value, description, category, project, is_sensitive) VALUES
 -- API Keys
-('ANTHROPIC_API_KEY', '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', 'Anthropic Claude API', 'API_KEYS', 'all', true),
-('OPENAI_API_KEY', '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', 'OpenAI GPT API', 'API_KEYS', 'all', true),
-('GEMINI_API_KEY', 'AIzaSyAHlPJBr5HH1xKvVoKR8C6BHvMZh3G_kik', 'Google Gemini API', 'API_KEYS', 'all', true),
-('STRIPE_SECRET_KEY', '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', 'Stripe Live Secret Key', 'API_KEYS', 'all', true),
+('ANTHROPIC_API_KEY', '<ANTHROPIC_API_KEY_REDACTED>', 'Anthropic Claude API', 'API_KEYS', 'all', true),
+('OPENAI_API_KEY', '<OPENAI_API_KEY_REDACTED>', 'OpenAI GPT API', 'API_KEYS', 'all', true),
+('GEMINI_API_KEY', '<GOOGLE_API_KEY_REDACTED>', 'Google Gemini API', 'API_KEYS', 'all', true),
+('STRIPE_SECRET_KEY', '<STRIPE_KEY_REDACTED>', 'Stripe Live Secret Key', 'API_KEYS', 'all', true),
 ('STRIPE_WEBHOOK_SECRET', 'whsec_2NdWoNYo3VqDbvWJ2hjy5Pv0V4vLNPOL', 'Stripe Webhook Secret', 'API_KEYS', 'backend', true),
 ('ELEVENLABS_API_KEY', 'sk_a4be8c327484fa7d24eb94e8b16462827095939269fd6e49', 'ElevenLabs Voice API', 'API_KEYS', 'all', true),
 
 -- Database
-('DATABASE_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres', 'Primary database connection', 'DATABASE', 'all', true),
+('DATABASE_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres', 'Primary database connection', 'DATABASE', 'all', true),
 ('SUPABASE_URL', 'https://yomagoqdmxszqtdwuhab.supabase.co', 'Supabase project URL', 'DATABASE', 'all', false),
-('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMzNzY3NzcsImV4cCI6MjA0ODk1Mjc3N30.5tL0ms5Bs9PqQs_RdkBj8Xq_QhqoUvMKZTML3MCXbFw', 'Supabase anon key', 'DATABASE', 'all', false),
-('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ', 'Supabase service role key', 'DATABASE', 'backend', true),
+('SUPABASE_ANON_KEY', '<JWT_REDACTED>', 'Supabase anon key', 'DATABASE', 'all', false),
+('SUPABASE_SERVICE_ROLE_KEY', '<JWT_REDACTED>', 'Supabase service role key', 'DATABASE', 'backend', true),
 
 -- CenterPoint
 ('CENTERPOINT_BASE_URL', 'https://api.centerpointconnect.io', 'CenterPoint API URL', 'SERVICES', 'all', false),
@@ -83,7 +83,7 @@ INSERT INTO env_master (key, value, description, category, project, is_sensitive
 -- Other Services
 ('NOTION_API_KEY', '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', 'Notion API key', 'SERVICES', 'all', true),
 ('CLICKUP_API_KEY', 'pk_87973158_072HQ07UJ40CGO1EI9BY5SGK2IZHADL4', 'ClickUp API key', 'SERVICES', 'all', true),
-('GITHUB_TOKEN', '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', 'GitHub personal access token', 'SERVICES', 'all', true),
+('GITHUB_TOKEN', '<GITHUB_TOKEN_REDACTED>', 'GitHub personal access token', 'SERVICES', 'all', true),
 ('SENTRY_DSN', 'https://992d4db49f680aa437e79c137466a083@o4509510470860800.ingest.us.sentry.io/4509510476300288', 'Sentry error tracking', 'SERVICES', 'all', false),
 
 -- Security

@@ -27,7 +27,7 @@ The service at `https://weathercraft-api.onrender.com` is returning 404 for all 
    - Or: `docker.io/mwwoodworth/weathercraft-api:v113.0.0`
 4. Add environment variables:
    ```
-   DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres
+   DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
    JWT_SECRET_KEY=your-secret-key-change-this-in-production
    OPENAI_API_KEY=(your key)
    ANTHROPIC_API_KEY=(your key)

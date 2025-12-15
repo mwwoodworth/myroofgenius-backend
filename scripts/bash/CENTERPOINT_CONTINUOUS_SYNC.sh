@@ -14,7 +14,7 @@ while true; do
     
     # Run with 5 minute timeout
     cd /home/mwwoodworth/code/weathercraft-erp
-    DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' \
+    DATABASE_URL='postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require' \
         timeout 300 npx tsx scripts/COMPLETE_CENTERPOINT_SYNC_V2.ts
     
     EXIT_CODE=$?

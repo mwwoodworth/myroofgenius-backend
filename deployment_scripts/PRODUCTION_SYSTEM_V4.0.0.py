@@ -137,7 +137,7 @@ class SystemConfig:
     db_port: int = 5432
     db_name: str = "postgres"
     db_user: str = "postgres"
-    db_password: str = "Brain0ps2O2S"
+    db_password: str = "<DB_PASSWORD_REDACTED>"
     
     # APIs
     backend_url: str = "https://brainops-backend-prod.onrender.com"
@@ -148,7 +148,7 @@ class SystemConfig:
     
     # Supabase
     supabase_url: str = "https://yomagoqdmxszqtdwuhab.supabase.co"
-    supabase_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+    supabase_key: str = "<JWT_REDACTED>"
     
     # Monitoring
     check_interval: int = 300  # 5 minutes
@@ -672,7 +672,7 @@ class LangGraphOrchestrator:
     async def save_experience(self, experience: Dict):
         """Save learning experience to database"""
         try:
-            conn_str = f"postgresql://{self.config.db_user}:{self.config.db_password}@{self.config.db_host}/{self.config.db_name}"
+            conn_str = f"postgresql://{self.config.db_user}:<DB_PASSWORD_REDACTED>@{self.config.db_host}/{self.config.db_name}"
             
             async with asyncpg.connect(conn_str) as conn:
                 await conn.execute("""

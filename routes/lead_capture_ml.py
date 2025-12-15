@@ -33,7 +33,7 @@ except ImportError:
             port=os.getenv("DB_PORT", "5432"),
             database=os.getenv("DB_NAME", "postgres"),
             user=os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-            password=os.getenv("DB_PASSWORD", "Brain0ps2O2S"),
+            password=os.getenv("DB_PASSWORD", "<DB_PASSWORD_REDACTED>"),
             cursor_factory=RealDictCursor
         )
         try:

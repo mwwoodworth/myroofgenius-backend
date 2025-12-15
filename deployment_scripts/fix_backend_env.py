@@ -10,7 +10,7 @@ for line in lines:
     # Update DB URLs
     if line.startswith('DB_URL=') or line.startswith('DATABASE_URL=') or line.startswith('SUPABASE_DB_URL='):
         if 'Mww00dw0rth%402O1S%24' in line:
-            line = line.replace('Mww00dw0rth%402O1S%24', 'Brain0ps2O2S')
+            line = line.replace('Mww00dw0rth%402O1S%24', '<DB_PASSWORD_REDACTED>')
     
     updated_lines.append(line)
 

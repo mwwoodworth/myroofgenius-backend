@@ -24,7 +24,7 @@ DB_CONFIG = {
     'port': 6543,
     'database': 'postgres',
     'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': 'Brain0ps2O2S'
+    'password': '<DB_PASSWORD_REDACTED>'
 }
 
 # Centerpoint API configuration (placeholder - update with real endpoints)

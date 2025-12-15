@@ -9,7 +9,7 @@ echo "================================================="
 echo ""
 
 # Configuration
-export PGPASSWORD='Brain0ps2O2S'
+export PGPASSWORD='<DB_PASSWORD_REDACTED>'
 DB_HOST="db.yomagoqdmxszqtdwuhab.supabase.co"
 DB_USER="postgres"
 DB_NAME="postgres"
@@ -22,8 +22,8 @@ AIOS_URL="https://brainops-aios-ops.vercel.app"
 
 # Supabase Configuration
 export NEXT_PUBLIC_SUPABASE_URL="https://yomagoqdmxszqtdwuhab.supabase.co"
-export NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.G4g4KXKR3P0iRpfSGzMCLza3J9oqv79wfCF8khASFJI"
-export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+export NEXT_PUBLIC_SUPABASE_ANON_KEY="<JWT_REDACTED>"
+export SUPABASE_SERVICE_ROLE_KEY="<JWT_REDACTED>"
 
 # Colors for output
 RED='\033[0;31m'
@@ -246,7 +246,7 @@ if [ -d "/home/mwwoodworth/code/weathercraft-app" ]; then
     # Ensure proper configuration
     cat > .env.production << 'EOF'
 NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.G4g4KXKR3P0iRpfSGzMCLza3J9oqv79wfCF8khASFJI
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
 NEXT_PUBLIC_APP_URL=https://weathercraft-app.vercel.app
 EOF
     

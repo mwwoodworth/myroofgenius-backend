@@ -8,7 +8,7 @@ echo ""
 
 # 1. Create database tables for revenue system
 echo "📊 Creating revenue system tables..."
-DATABASE_URL="postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL="postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 psql "$DATABASE_URL" -f CREATE_REVENUE_SYSTEM_TABLES.sql || echo "Some tables may already exist"
 
 # 2. Login to Docker Hub

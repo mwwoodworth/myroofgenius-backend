@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
 # Database connection
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 class AutonomousRevenueEngine:
     def __init__(self):

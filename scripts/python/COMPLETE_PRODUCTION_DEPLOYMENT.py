@@ -82,12 +82,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
 
 # Database configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 )
 
 # Global database
@@ -517,7 +517,7 @@ async def trigger_centerpoint_sync(background_tasks: BackgroundTasks):
 async def create_payment_intent(amount_cents: int, currency: str = "usd"):
     """Create Stripe payment intent"""
     try:
-        if stripe.api_key and not stripe.api_key.startswith("sk_test_placeholder"):
+        if stripe.api_key and not stripe.api_key.startswith("<STRIPE_KEY_REDACTED>"):
             intent = stripe.PaymentIntent.create(
                 amount=amount_cents,
                 currency=currency,

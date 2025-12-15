@@ -72,7 +72,7 @@ test_endpoint "BrainOps AIOS" "https://brainops-aios-ops.vercel.app" "200"
 echo ""
 echo "3️⃣ DATABASE CONNECTIVITY"
 echo "------------------------"
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Test database connection
 echo -n "Database Connection: "

@@ -108,21 +108,21 @@ $$ LANGUAGE plpgsql;
 -- Insert critical environment variables
 INSERT INTO master_env_vars (key, value, service, environment, description, is_secret) VALUES
 -- Database
-('DATABASE_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require', 'global', 'production', 'Main PostgreSQL database connection string', true),
-('DIRECT_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 'global', 'production', 'Direct database connection for migrations', true),
+('DATABASE_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require', 'global', 'production', 'Main PostgreSQL database connection string', true),
+('DIRECT_URL', 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 'global', 'production', 'Direct database connection for migrations', true),
 
 -- Supabase
 ('NEXT_PUBLIC_SUPABASE_URL', 'https://yomagoqdmxszqtdwuhab.supabase.co', 'global', 'production', 'Supabase project URL', false),
-('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE', 'global', 'production', 'Supabase anonymous key', false),
-('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ', 'global', 'production', 'Supabase service role key', true),
+('NEXT_PUBLIC_SUPABASE_ANON_KEY', '<JWT_REDACTED>', 'global', 'production', 'Supabase anonymous key', false),
+('SUPABASE_SERVICE_ROLE_KEY', '<JWT_REDACTED>', 'global', 'production', 'Supabase service role key', true),
 
 -- API Keys
-('OPENAI_API_KEY', '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', 'global', 'production', 'OpenAI API key', true),
-('ANTHROPIC_API_KEY', 'sk-ant-api03-uqVZwSyeAl88DDxRRGhg6d93FpNs9S1PqdXm6YBKbj7f5dEw7TjODYQ37jXyC3bOZzjgzOF-ivJRMQAA', 'global', 'production', 'Anthropic Claude API key', true),
-('GOOGLE_GENERATIVE_AI_API_KEY', 'AIzaSyBzXh9nF8HLJjMxWqZwf8vqUsp5xpzgHHc', 'global', 'production', 'Google Gemini API key', true),
+('OPENAI_API_KEY', '<OPENAI_API_KEY_REDACTED>', 'global', 'production', 'OpenAI API key', true),
+('ANTHROPIC_API_KEY', '<ANTHROPIC_API_KEY_REDACTED>', 'global', 'production', 'Anthropic Claude API key', true),
+('GOOGLE_GENERATIVE_AI_API_KEY', '<GOOGLE_API_KEY_REDACTED>', 'global', 'production', 'Google Gemini API key', true),
 
 -- Stripe
-('STRIPE_SECRET_KEY', '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', 'global', 'production', 'Stripe secret key', true),
+('STRIPE_SECRET_KEY', '<STRIPE_KEY_REDACTED>', 'global', 'production', 'Stripe secret key', true),
 ('STRIPE_PUBLISHABLE_KEY', 'pk_live_51QeWdBKXziJdvOrvD8eGx6UQlJWOUoJ1l7DvqPmMRdHBCK2VJrrcMQ6ILWnxVeSJZznqoNrOZdcTRJwlHoyNyKIY00wPxUbmU8', 'global', 'production', 'Stripe publishable key', false),
 ('STRIPE_WEBHOOK_SECRET', 'whsec_production_secret', 'global', 'production', 'Stripe webhook secret', true),
 

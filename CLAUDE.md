@@ -115,7 +115,7 @@ Add these environment variables in Render:
 - **Storage**: Deleted 9 duplicate repos, saved ~6GB
 - **Scripts**: Centralized 220+ scripts into organized folders
 - **Credentials**: Single source of truth in `.env.production`
-- **Database**: Verified correct password (Brain0ps2O2S) everywhere
+- **Database**: Verified correct password (<DB_PASSWORD_REDACTED> everywhere
 - **Documentation**: All systems documented and audited
 - **Status**: ALL PRODUCTION SYSTEMS OPERATIONAL ✅
 
@@ -422,13 +422,13 @@ Removed 9 duplicate repositories saving ~6GB:
 - brainops-ai (old version)
 
 ## Database Credentials (CRITICAL - DO NOT LOSE)
-- **Password**: `Brain0ps2O2S`
+- **Password**: `<DB_PASSWORD_REDACTED>
 - **Connection Strings**:
-  - Primary: `postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
-  - Pooler: `postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
+  - Primary: `postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
+  - Pooler: `postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
 - **Supabase Keys**:
-  - Anon Key: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE`
-  - Service Role Key: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ`
+  - Anon Key: `<JWT_REDACTED>`
+  - Service Role Key: `<JWT_REDACTED>`
 
 ## Critical Commands
 ### Backend Development

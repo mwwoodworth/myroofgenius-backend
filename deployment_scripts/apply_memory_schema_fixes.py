@@ -13,7 +13,7 @@ import sys
 # Database connection
 DB_PASSWORD = "Mww00dw0rth@2O1S$"
 DB_PASSWORD_ENCODED = urllib.parse.quote(DB_PASSWORD)
-CONN_STRING = f"postgresql://postgres.yomagoqdmxszqtdwuhab:{DB_PASSWORD_ENCODED}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+CONN_STRING = f"postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 
 def apply_schema_fixes():
     """Apply schema fixes to the database"""

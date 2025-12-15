@@ -11,7 +11,7 @@ import json
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
+DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
 
 class NeuralOSIntelligence:
     """Neural OS with access to comprehensive system knowledge"""

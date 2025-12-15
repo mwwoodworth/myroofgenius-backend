@@ -26,12 +26,12 @@ CONFIG = {
         "port": 5432,
         "database": "postgres",
         "user": "postgres",
-        "password": "Brain0ps2O2S"
+        "password": "<DB_PASSWORD_REDACTED>"
     },
     "supabase": {
         "url": "https://yomagoqdmxszqtdwuhab.supabase.co",
-        "anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.G4g4KXKR3P0iRpfSGzMCLza3J9oqv79wfCF8khASFJI",
-        "service_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+        "anon_key": "<JWT_REDACTED>",
+        "service_key": "<JWT_REDACTED>"
     }
 }
 

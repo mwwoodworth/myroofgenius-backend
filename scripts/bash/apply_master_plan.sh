@@ -23,8 +23,8 @@ DB_HOST="${DATABASE_HOST:-db.yomagoqdmxszqtdwuhab.supabase.co}"
 DB_PORT="${DATABASE_PORT:-5432}"
 DB_NAME="${DATABASE_NAME:-postgres}"
 DB_USER="${DATABASE_USER:-postgres}"
-DB_PASS="${DATABASE_PASSWORD:-Brain0ps2O2S}"
-DATABASE_URL="${DATABASE_URL:-postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}}"
+DB_PASS="${DATABASE_PASSWORD:-<DB_PASSWORD_REDACTED>"
+DATABASE_URL="${DATABASE_URL:-postgresql://${DB_USER}:<DB_PASSWORD_REDACTED>@${DB_HOST}:${DB_PORT}/${DB_NAME}}"
 
 # Function to log messages
 log() {

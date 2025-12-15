@@ -266,7 +266,7 @@ INSERT INTO cns_system_documentation (system_name, component, doc_type, title, c
     "port": 5432,
     "database": "postgres",
     "user": "postgres.yomagoqdmxszqtdwuhab",
-    "password": "Brain0ps2O2S"
+    "password": "<DB_PASSWORD_REDACTED>"
 }'::jsonb),
 ('BrainOps', 'Deployment', 'api', 'Render API', '{
     "api_key": "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx",

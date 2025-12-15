@@ -1,7 +1,7 @@
 import os
 
 # Ensure required environment variables are present for import-time validation.
-os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/testdb")
+os.environ.setdefault("DATABASE_URL", "postgresql://user:<DB_PASSWORD_REDACTED>@localhost:5432/testdb")
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role")

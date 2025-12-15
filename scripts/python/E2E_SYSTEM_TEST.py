@@ -9,7 +9,7 @@ import json
 import psycopg2
 from datetime import datetime
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 def test_complete_system():
     print("\n" + "="*60)
@@ -127,7 +127,7 @@ def test_complete_system():
     # Stripe
     try:
         r = requests.get("https://api.stripe.com/v1/products", 
-                        auth=("sk_test_placeholder", ""))
+                        auth=("<STRIPE_KEY_REDACTED>", ""))
         if r.status_code == 401:  # Expected with test key
             results["integrations"]["stripe"] = "🔑 Needs real key"
             print("   🔑 Stripe: Needs production key")

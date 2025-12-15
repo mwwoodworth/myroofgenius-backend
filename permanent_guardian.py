@@ -28,7 +28,7 @@ class BrainOpsGuardian:
     
     def __init__(self):
         self.base_url = "https://brainops-backend-prod.onrender.com"
-        self.db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+        self.db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         self.critical_endpoints = [
             "/api/v1/health",
             "/api/v1/auth/login",

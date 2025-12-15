@@ -8,7 +8,7 @@ echo ""
 
 # Step 1: Create Task OS database schema
 echo "📋 Step 1: Creating Task OS database..."
-export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 psql "$DATABASE_URL" << 'EOF'
 -- Create AI Task OS tables
@@ -141,7 +141,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv('DATABASE_URL', 
-    'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require')
+    'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require')
 
 class AITaskOS:
     def __init__(self):
@@ -322,7 +322,7 @@ WorkingDirectory=/home/mwwoodworth/code
 ExecStart=/usr/bin/python3 /home/mwwoodworth/code/task_os_service.py
 Restart=always
 RestartSec=10
-Environment="DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+Environment="DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 [Install]
 WantedBy=multi-user.target

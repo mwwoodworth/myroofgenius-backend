@@ -75,7 +75,7 @@ GRANT EXECUTE ON FUNCTION get_backend_env_vars TO public;
 
 -- Update some critical values to ensure they're correct
 UPDATE env_master 
-SET value = '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'
+SET value = '<STRIPE_KEY_REDACTED>'
 WHERE key = 'STRIPE_SECRET_KEY';
 
 UPDATE env_master 
@@ -89,7 +89,7 @@ WHERE key = 'FRONTEND_URL';
 -- Add missing Stripe test key for development
 INSERT INTO env_master (key, value, description, category, project, is_sensitive, environment)
 VALUES 
-('STRIPE_TEST_KEY', 'sk_test_51PXs5fRw7K3sXkUXCHhxVqbRGKmNL8yBjNpHLxd4D5jRYaGLwmW', 'Stripe Test Secret Key', 'API_KEYS', 'all', true, 'development')
+('STRIPE_TEST_KEY', '<STRIPE_KEY_REDACTED>', 'Stripe Test Secret Key', 'API_KEYS', 'all', true, 'development')
 ON CONFLICT (key, project, environment) DO NOTHING;
 
 SELECT 'Environment master table permissions fixed!' as status;

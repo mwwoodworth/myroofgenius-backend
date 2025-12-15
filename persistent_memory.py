@@ -20,7 +20,7 @@ class PersistentMemory:
     """
     
     def __init__(self):
-        self.db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db.wvkoiekcybvhpqvgqvtc.supabase.co:5432/postgres")
+        self.db_url = os.getenv("DATABASE_URL", "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.wvkoiekcybvhpqvgqvtc.supabase.co:5432/postgres")
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.initialize_schema()
         

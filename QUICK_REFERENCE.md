@@ -2,7 +2,7 @@
 **Updated**: 2025-08-19 (Post-Consolidation)
 
 ## 🔑 Database Password
-**CORRECT PASSWORD**: `Brain0ps2O2S`
+**CORRECT PASSWORD**: `<DB_PASSWORD_REDACTED>
 - This is the ONLY database password
 - Used in all connection strings
 - Verified working in production

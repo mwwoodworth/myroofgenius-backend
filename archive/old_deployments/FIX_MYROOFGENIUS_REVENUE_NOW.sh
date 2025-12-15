@@ -35,7 +35,7 @@ import json
 router = APIRouter(prefix="/api/v1/revenue", tags=["revenue"])
 
 # Stripe configuration
-stripe.api_key = "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"
+stripe.api_key = "<STRIPE_KEY_REDACTED>"
 
 # Pricing tiers
 PRICING_TIERS = {

@@ -17,7 +17,7 @@ class ForwardOnlyAutomation:
     """Ensure we NEVER step backwards - only forward progress"""
     
     def __init__(self):
-        self.db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+        self.db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         self.backend_url = "https://brainops-backend-prod.onrender.com"
         self.frontend_url = "https://myroofgenius.com"
         self.weathercraft_path = "/home/mwwoodworth/code/weathercraft-erp"

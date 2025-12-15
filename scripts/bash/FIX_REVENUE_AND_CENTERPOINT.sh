@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 if not STRIPE_SECRET_KEY:
     # Fallback to live key if env not set
-    STRIPE_SECRET_KEY = "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"
+    STRIPE_SECRET_KEY = "<STRIPE_KEY_REDACTED>"
     
 stripe.api_key = STRIPE_SECRET_KEY
 

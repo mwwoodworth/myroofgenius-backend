@@ -27,7 +27,7 @@ class BrainOpsNotionSystem:
             "host": "aws-0-us-east-2.pooler.supabase.com",
             "database": "postgres",
             "user": "postgres.yomagoqdmxszqtdwuhab",
-            "password": "Brain0ps2O2S",
+            "password": "<DB_PASSWORD_REDACTED>",
             "port": 5432
         }
 
@@ -159,7 +159,7 @@ class BrainOpsNotionSystem:
 
         env_vars = {
             "DATABASE_URL": {
-                "value": "postgresql://postgres.yomagoqdmxszqtdwuhab:***@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
+                "value": "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
                 "status": "Set",
                 "category": "Database",
                 "notes": "Supabase PostgreSQL connection"

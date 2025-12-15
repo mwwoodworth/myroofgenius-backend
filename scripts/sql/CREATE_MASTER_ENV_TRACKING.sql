@@ -26,7 +26,7 @@ INSERT INTO env_master (key, value, service, category, is_secret, description, l
  'Stripe webhook secret - CHECK RENDER', CURRENT_TIMESTAMP),
 
 -- Database
-('DATABASE_URL', 'postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 
+('DATABASE_URL', 'postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres', 
  'render', 'database', true, 'Primary database connection', CURRENT_TIMESTAMP),
 
 -- CenterPoint Integration

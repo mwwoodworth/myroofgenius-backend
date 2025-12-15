@@ -112,7 +112,7 @@ import requests
 class CloudPersistence:
     def __init__(self):
         self.url = "https://yomagoqdmxszqtdwuhab.supabase.co"
-        self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+        self.key = "<JWT_REDACTED>"
         self.headers = {
             "apikey": self.key,
             "Authorization": f"Bearer {self.key}",

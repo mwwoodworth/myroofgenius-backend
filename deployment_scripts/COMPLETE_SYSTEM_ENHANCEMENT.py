@@ -15,7 +15,7 @@ import asyncpg
 MYROOFGENIUS_URL = "https://www.myroofgenius.com"
 WEATHERCRAFT_ERP_URL = "https://weathercraft-erp.vercel.app"  
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
-DATABASE_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 class SystemEnhancer:
     """

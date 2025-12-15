@@ -22,7 +22,7 @@ DB_USER="${DB_USER}"
 DB_NAME="${DB_NAME}"
 
 # Using pooler connection for better reliability
-POOLER_URL="postgresql://${DB_USER}:${PGPASSWORD}@${DB_HOST}:6543/${DB_NAME}?sslmode=require"
+POOLER_URL="postgresql://${DB_USER}:<DB_PASSWORD_REDACTED>@${DB_HOST}:6543/${DB_NAME}?sslmode=require"
 
 echo "📊 Step 1: Creating env_master table and loading environment variables..."
 psql "$POOLER_URL" -f CREATE_ENV_MASTER_PRODUCTION.sql

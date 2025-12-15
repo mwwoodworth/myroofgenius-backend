@@ -13,7 +13,7 @@ import psycopg2
 from datetime import datetime
 
 # Configuration
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 DOCKER_USERNAME = "mwwoodworth"
 DOCKER_PAT = "dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho"
 RENDER_DEPLOY_HOOK = "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
@@ -69,11 +69,11 @@ logger = logging.getLogger(__name__)
 # Database configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 )
 
 # Stripe configuration
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
 
 # Global database engine
 db_engine = None

@@ -8,7 +8,7 @@ echo "================================================"
 echo "Time: $(date)"
 
 # Set environment variables
-export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 export DOCKER_PAT="dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho"
 
 # Function to check if service is running

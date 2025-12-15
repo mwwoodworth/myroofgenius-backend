@@ -10,7 +10,7 @@ from datetime import datetime
 import os
 
 # Use pooler connection for reliability
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
 
 def execute_sql(query, params=None):
     """Execute SQL with psql command"""
@@ -33,7 +33,7 @@ def update_operational_context():
         "reality_check": {
             "consolidated_directories": "7 (from 23) - 70% reduction",
             "deleted_repos": "9 duplicate repos deleted, saved 6GB",
-            "database_password": "Brain0ps2O2S (verified working)",
+            "database_password": "<DB_PASSWORD_REDACTED> (verified working)",
             "docker_version": "v8.8 (NOT v2.0)",
             "actual_revenue": "$0 (target $100-500/month)",
             "deployment_method": "Docker Hub → Render (NOT direct GitHub)",
@@ -103,8 +103,8 @@ def update_operational_context():
             "docker_pat": "dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho",
             "render_service": "srv-d1tfs4idbo4c73di6k00",
             "render_hook": "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM",
-            "database_password": "Brain0ps2O2S",
-            "supabase_anon": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE"}'::jsonb,
+            "database_password": "<DB_PASSWORD_REDACTED>",
+            "supabase_anon": "<JWT_REDACTED>"}'::jsonb,
            'https://brainops-backend-prod.onrender.com/api/v1/health',
            'https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM',
            '["Docker Hub", "Render", "Supabase"]'::jsonb)

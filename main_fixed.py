@@ -32,7 +32,7 @@ from sqlalchemy.pool import QueuePool
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+    "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 )
 
 # Create engine with connection pooling

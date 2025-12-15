@@ -1,5 +1,5 @@
 # CRITICAL
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
+DATABASE_URL=postgresql://<user>:<DB_PASSWORD_REDACTED>@<host>:<port>/<database>
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_ANON_KEY=<supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>

@@ -18,7 +18,7 @@ BASE_URL = "https://brainops-backend-prod.onrender.com"
 
 # 1. Verify Stripe is configured
 print("\n✅ STRIPE KEYS STATUS:")
-print("- Live key: sk_live_51RHXCuFs5YLnaPiW... (configured)")
+print("- Live key: <STRIPE_KEY_REDACTED>... (configured)")
 print("- Webhook: whsec_2NdWoNYo3VqDbvWJ2h... (configured)")
 
 # 2. Test creating a Stripe checkout session

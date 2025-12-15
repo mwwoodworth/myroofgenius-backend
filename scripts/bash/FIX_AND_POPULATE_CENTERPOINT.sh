@@ -4,7 +4,7 @@ echo "🔧 FIXING DATABASE AND POPULATING CENTERPOINT DATA"
 echo "==================================================="
 echo ""
 
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Step 1: Fix database schema
 echo "1️⃣ FIXING DATABASE SCHEMA..."

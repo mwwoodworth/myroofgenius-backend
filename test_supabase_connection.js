@@ -4,8 +4,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 // Your Supabase credentials
 const supabaseUrl = 'https://yomagoqdmxszqtdwuhab.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.bxlLdnJ1YKYUNlIulSO2E6iM4wyUSrPFtNcONg-vwPY';
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfc3JvbGUiLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ';
+const supabaseAnonKey = '<JWT_REDACTED>';
+const supabaseServiceKey = '<JWT_REDACTED>';
 
 async function testConnection() {
   console.log('Testing Supabase connection...\n');
@@ -42,8 +42,8 @@ async function testConnection() {
 
   // Test database connection URL
   console.log('\n3. Testing database connection...');
-  const dbUrl = 'postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres';
-  console.log('Database URL:', dbUrl.replace('Brain0ps2O2S', '***'));
+  const dbUrl = 'postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres';
+  console.log('Database URL:', dbUrl.replace('<DB_PASSWORD_REDACTED>', '***'));
   
   // Test memory system tables
   console.log('\n4. Testing memory system tables...');

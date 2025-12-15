@@ -28,7 +28,7 @@ async def get_ai_board_status(current_user: dict = Depends(get_current_user)) ->
     """Get AI Board operational status"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -81,7 +81,7 @@ async def get_ai_agents(current_user: dict = Depends(get_current_user)) -> Dict[
     """Get list of AI agents and their status"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -136,7 +136,7 @@ async def get_recent_memories(
     """Get recent AI memories"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -176,7 +176,7 @@ async def store_memory(
     """Store a new memory"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -228,7 +228,7 @@ async def get_products(
     """Get marketplace products (public endpoint)"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -277,7 +277,7 @@ async def get_product(product_id: str) -> Dict[str, Any]:
     """Get a specific product"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -331,7 +331,7 @@ async def list_agents(current_user: dict = Depends(get_current_user)) -> List[Di
     """Get list of all agents"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -370,7 +370,7 @@ async def agents_status(current_user: dict = Depends(get_current_user)) -> Dict[
     """Get agents system status"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -427,7 +427,7 @@ async def get_workflows(current_user: dict = Depends(get_current_user)) -> List[
     """Get all LangGraph workflows"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -464,7 +464,7 @@ async def execute_workflow(
     """Execute a LangGraph workflow"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         
@@ -521,7 +521,7 @@ async def get_executions(
     """Get recent workflow executions"""
     try:
         conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         )
         cur = conn.cursor()
         

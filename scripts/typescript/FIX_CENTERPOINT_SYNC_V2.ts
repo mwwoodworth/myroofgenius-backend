@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 import postgres from 'postgres';
 
-const DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require';
+const DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require';
 const CENTERPOINT_BASE_URL = 'https://api.centerpointconnect.io';
 const BEARER_TOKEN = 'eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6ImM4ZDdiMDIyNGQ4NDQ5OGI5M2MwYzY4MTc0NWU5M2Y0IiwiaCI6Im11cm11cjEyOCJ9';
 const TENANT_ID = '97f82b360baefdd73400ad342562586';

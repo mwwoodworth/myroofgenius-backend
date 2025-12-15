@@ -15,8 +15,8 @@ INSERT INTO copilot_messages (title, content, memory_type, role, is_pinned, tags
 - **Docker**: mwwoodworth/brainops-backend:latest
 
 ## DATABASE CONNECTION STRINGS
-- Primary: postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
-- Pooler: postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+- Primary: postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
+- Pooler: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
 
 ## DEPLOYMENT PIPELINE
 1. Code changes → git push origin main
@@ -54,9 +54,9 @@ INSERT INTO copilot_messages (title, content, memory_type, role, is_pinned, tags
 - Login: docker login -u mwwoodworth -p dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho
 
 ## SUPABASE
-- Password: Brain0ps2O2S
-- Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE
-- Service Role: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ
+- Password: <DB_PASSWORD_REDACTED>
+- Anon Key: <JWT_REDACTED>
+- Service Role: <JWT_REDACTED>
 
 ## RENDER
 - API Key: rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx
@@ -143,7 +143,7 @@ INSERT INTO copilot_messages (title, content, memory_type, role, is_pinned, tags
 ('CENTERPOINT DATA SYNC PROCEDURES', E'# CENTERPOINT SYNC OPERATIONS
 
 ## MANUAL SYNC COMMAND
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" npx tsx scripts/centerpoint-complete-sync.ts
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" npx tsx scripts/centerpoint-complete-sync.ts
 
 ## SYNC SCRIPTS AVAILABLE
 - scripts/centerpoint-complete-sync.ts

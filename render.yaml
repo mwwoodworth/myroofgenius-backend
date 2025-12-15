@@ -7,10 +7,21 @@ services:
     envVars:
       - key: PORT
         value: "10000"
+      # Set secrets in the Render dashboard (never commit them here).
       - key: DATABASE_URL
-        value: postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres
+        sync: false
       - key: SUPABASE_PROJECT_REF
         value: yomagoqdmxszqtdwuhab
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
       - key: ENVIRONMENT
         value: production
       - key: LOG_LEVEL

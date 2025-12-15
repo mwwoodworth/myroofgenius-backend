@@ -13,7 +13,7 @@ You demanded **REAL revenue generation**, not demos or concepts. Here's what has
 - Real value proposition: saves contractors hours of manual estimation
 
 ### 2️⃣ **Stripe Payment Processing** (`routes/stripe_revenue.py`)
-- **Live key ready**: `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`
+- **Live key ready**: `<STRIPE_KEY_REDACTED>`
 - Checkout sessions with immediate payment capture
 - Subscription management (Basic/Pro/Enterprise tiers)
 - Webhook handling for payment events

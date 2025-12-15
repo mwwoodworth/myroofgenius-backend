@@ -7,7 +7,7 @@ import psycopg2
 from psycopg2 import sql
 
 # Database connection
-DB_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DB_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 def fix_app_users_table():
     """Add missing columns to app_users table"""

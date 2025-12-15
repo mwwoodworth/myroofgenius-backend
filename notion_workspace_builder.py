@@ -280,7 +280,7 @@ class NotionWorkspaceBuilder:
             {
                 "Service": {"title": [{"text": {"content": "Supabase Database"}}]},
                 "Username": {"rich_text": [{"text": {"content": "postgres"}}]},
-                "Password/Token": {"rich_text": [{"text": {"content": "Brain0ps2O2S"}}]},
+                "Password/Token": {"rich_text": [{"text": {"content": "<DB_PASSWORD_REDACTED>"}}]},
                 "URL": {"url": "https://supabase.com/dashboard/project/yomagoqdmxszqtdwuhab"},
                 "Category": {"select": {"name": "Database"}},
                 "Status": {"select": {"name": "Active"}}

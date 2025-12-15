@@ -7,7 +7,7 @@ import asyncpg
 import asyncio
 from datetime import datetime, timedelta
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
 
 async def test_revenue_status():
     """Test revenue status from production database"""

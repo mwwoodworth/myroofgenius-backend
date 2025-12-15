@@ -37,7 +37,7 @@ Working endpoints at `https://brainops-backend-prod.onrender.com`:
 
 ### Live Stripe Keys Configured:
 ```bash
-STRIPE_SECRET_KEY=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
+STRIPE_SECRET_KEY=<STRIPE_KEY_REDACTED>
 STRIPE_PUBLISHABLE_KEY=pk_live_51Q5Pn1RxscTmSupaSVYV38vVIKcHWxnJoQRUP5uhS92Q7YFmWOp4EQNYwNMFBnjPzAjKKwvpNPpLqzjXBNBH0Hnk00z9PbLFGH
 ```
 

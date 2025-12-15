@@ -15,17 +15,17 @@ print(f"\n📝 Correct Database Password: {DB_PASSWORD}")
 print(f"📝 URL-encoded Password: {DB_PASSWORD_ENCODED}")
 
 print("\n🔗 Correct DATABASE_URL formats:")
-print(f"1. Pooler: postgresql://postgres.yomagoqdmxszqtdwuhab:{DB_PASSWORD_ENCODED}@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
-print(f"2. Direct: postgresql://postgres:{DB_PASSWORD_ENCODED}@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres")
+print(f"1. Pooler: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
+print(f"2. Direct: postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres")
 
 print("\n⚡ Environment Variables to set in Render:")
-print(f"DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:{DB_PASSWORD_ENCODED}@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
+print(f"DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
 print(f"SUPABASE_DB_PASSWORD={DB_PASSWORD}")
 print(f"FALLBACK_DB_PASSWORD={DB_PASSWORD}")
 print(f"ENCODED_DB_PASSWORD={DB_PASSWORD_ENCODED}")
 
 print("\n📋 Copy this DATABASE_URL for Render:")
-print(f"postgresql://postgres.yomagoqdmxszqtdwuhab:{DB_PASSWORD_ENCODED}@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
+print(f"postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
 
 print("\n⚠️  IMPORTANT: Update these in Render Dashboard immediately!")
 print("1. Go to https://dashboard.render.com")
@@ -41,8 +41,8 @@ try:
         content = f.read()
     
     # Replace old password with new one
-    old_db_url = "DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Matt%402018Rock@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-    new_db_url = f"DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:{DB_PASSWORD_ENCODED}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    old_db_url = "DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    new_db_url = f"DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
     
     content = content.replace(old_db_url, new_db_url)
     content = content.replace("SUPABASE_DB_PASSWORD=Matt@2018Rock", f"SUPABASE_DB_PASSWORD={DB_PASSWORD}")

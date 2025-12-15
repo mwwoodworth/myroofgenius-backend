@@ -18197,7 +18197,7 @@
                                         },
                                         {
                                             "attributes": {
-                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg\u0026scale=2\u0026size=360x235\u0026maptype=satellite\u0026zoom=18\u0026center=51.5072178,-0.1275862\u0026format=png",
+                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>\u0026scale=2\u0026size=360x235\u0026maptype=satellite\u0026zoom=18\u0026center=51.5072178,-0.1275862\u0026format=png",
                                                 "buildingDivisionId": 83528,
                                                 "createdAt": "2024-09-26T07:41:17+00:00",
                                                 "customOutline": {
@@ -18567,7 +18567,7 @@
                                         },
                                         {
                                             "attributes": {
-                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg\u0026scale=2\u0026size=360x235\u0026maptype=satellite\u0026zoom=18\u0026center=51.5072178,-0.1275862\u0026format=png",
+                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>\u0026scale=2\u0026size=360x235\u0026maptype=satellite\u0026zoom=18\u0026center=51.5072178,-0.1275862\u0026format=png",
                                                 "buildingDivisionId": 83529,
                                                 "createdAt": "2024-10-03T11:17:21+00:00",
                                                 "customOutline": {
@@ -26899,7 +26899,7 @@
                                                         "deletedAt": null
                                                     }
                                                 ],
-                                                "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
+                                                "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
                                                 "name": "A/C - Condensate Drains on Roof",
                                                 "units": "EA",
                                                 "unitCost": 0,
@@ -27076,7 +27076,7 @@
                                                     "deletedAt": null
                                                 }
                                             ],
-                                            "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
+                                            "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
                                             "name": "A/C - Drain Pan Leaking",
                                             "units": "EA",
                                             "unitCost": 0,
@@ -27171,7 +27171,7 @@
                                                     "deletedAt": null
                                                 }
                                             ],
-                                            "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
+                                            "staticMapUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=82.004116%2C79.559724&format=png&markers=icon%3Ahttps%3A%2F%2Fstorage.googleapis.com%2Fbucket-centerpoint-001%2Fsystem%2Fmap-icon-red2-24.png%7C33.836141293441784%2C-81.16364671593858&signature=eWKGeM71PiFthhBOEk6DPpp_imY=",
                                             "name": "A/C - Drain Pan Leaking",
                                             "units": "EA",
                                             "unitPrice": 0,
@@ -28309,7 +28309,7 @@
                                                     "label": []
                                                 },
                                                 "label": "1",
-                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
+                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
                                                 "createdAt": "2024-10-10T11:26:59+00:00",
                                                 "updatedAt": "2024-10-10T11:26:59+00:00",
                                                 "deletedAt": null
@@ -28467,7 +28467,7 @@
                                                 "label": []
                                             },
                                             "label": "1",
-                                            "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
+                                            "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
                                             "createdAt": "2024-11-15T10:29:25+00:00",
                                             "updatedAt": "2024-11-15T10:29:25+00:00",
                                             "deletedAt": null
@@ -28528,7 +28528,7 @@
                                                 "label": []
                                             },
                                             "label": "1",
-                                            "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png"
+                                            "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png"
                                         },
                                         "relationships": {}
                                     }
@@ -28790,7 +28790,7 @@
                                                     "label": []
                                                 },
                                                 "label": "1",
-                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOKhwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
+                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
                                                 "createdAt": "2024-10-10T11:26:59+00:00",
                                                 "updatedAt": "2024-10-10T11:26:59+00:00",
                                                 "deletedAt": null
@@ -29277,7 +29277,7 @@
                                                     "label": []
                                                 },
                                                 "label": "1",
-                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=AIzaSyBHuvaHLH_X2-f2CKpz0a0bDOK1hwif3iSg&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
+                                                "aerialUrl": "https://maps.googleapis.com/maps/api/staticmap?key=<GOOGLE_API_KEY_REDACTED>&scale=2&size=360x235&maptype=satellite&zoom=18&center=51.5072178,-0.1275862&format=png",
                                                 "createdAt": "2024-10-10T11:26:59+00:00",
                                                 "updatedAt": "2024-10-10T11:26:59+00:00",
                                                 "deletedAt": null

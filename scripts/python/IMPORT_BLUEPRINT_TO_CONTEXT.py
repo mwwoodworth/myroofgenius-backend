@@ -12,7 +12,7 @@ import uuid
 import re
 
 # Database connection
-DB_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DB_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 def parse_blueprint_sections():
     """Parse the blueprint into structured sections"""

@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # Use the correct live secret key
-stripe.api_key = "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"
+stripe.api_key = "<STRIPE_KEY_REDACTED>"
 
 # Product definitions
 PRODUCTS = [

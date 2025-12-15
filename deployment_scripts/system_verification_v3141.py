@@ -5,9 +5,11 @@ Comprehensive check of all BrainOps v3.1.141 systems
 """
 import requests
 import json
+import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 import os
+import httpx
 
 class SystemVerifier:
     def __init__(self):
@@ -18,7 +20,7 @@ class SystemVerifier:
             "checks": {}
         }
     
-    def verify_all_systems(self):
+    async def verify_all_systems(self):
         """Run all system verification checks"""
         print("🔍 Starting BrainOps System Verification...")
         
@@ -45,6 +47,11 @@ class SystemVerifier:
         
         # Generate report
         await self.generate_verification_report()
+
+
+if __name__ == "__main__":
+    verifier = SystemVerifier()
+    asyncio.run(verifier.verify_all_systems())
     
     async def check_public_endpoints(self):
         """Check all public endpoints"""

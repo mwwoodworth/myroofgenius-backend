@@ -12,7 +12,7 @@ import uuid
 
 # Database connection
 conn = psycopg2.connect(
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 )
 cur = conn.cursor(cursor_factory=RealDictCursor)
 

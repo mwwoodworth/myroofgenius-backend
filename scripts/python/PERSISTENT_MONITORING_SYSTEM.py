@@ -25,7 +25,7 @@ logging.basicConfig(
 
 class PersistentMonitor:
     def __init__(self):
-        self.db_url = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+        self.db_url = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
         self.systems = {
             'backend_api': {
                 'url': 'https://brainops-backend-prod.onrender.com/api/v1/health',

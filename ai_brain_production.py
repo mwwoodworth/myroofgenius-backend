@@ -24,7 +24,7 @@ class AIBrainProduction:
     """Production AI Brain orchestrating 34 agents with full neural network"""
     
     def __init__(self):
-        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
         self.agents = {}
         self.neural_pathways = {}
         self.active_tasks = {}

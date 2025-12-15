@@ -8,7 +8,7 @@ import psycopg2
 from datetime import datetime
 import json
 
-DB_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DB_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 def fix_revenue_endpoints():
     """Fix all revenue-related issues"""

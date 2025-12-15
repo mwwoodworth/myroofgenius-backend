@@ -9,7 +9,7 @@ DB_PARAMS = {
     'host': 'db.yomagoqdmxszqtdwuhab.supabase.co',
     'database': 'postgres',
     'user': 'postgres',
-    'password': 'Brain0ps2O2S',
+    'password': '<DB_PASSWORD_REDACTED>',
     'port': '5432'
 }
 

@@ -55,7 +55,7 @@ def create_notion_import_file():
                     {
                         "service": "Supabase Database",
                         "username": "postgres",
-                        "password": "Brain0ps2O2S",
+                        "password": "<DB_PASSWORD_REDACTED>",
                         "url": "https://supabase.com/dashboard/project/yomagoqdmxszqtdwuhab",
                         "category": "Database",
                         "status": "Active"
@@ -84,7 +84,7 @@ def create_notion_import_file():
                     },
                     {
                         "service": "Stripe",
-                        "api_key": "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",
+                        "api_key": "<STRIPE_KEY_REDACTED>",
                         "url": "https://dashboard.stripe.com",
                         "category": "Payment",
                         "status": "Active"

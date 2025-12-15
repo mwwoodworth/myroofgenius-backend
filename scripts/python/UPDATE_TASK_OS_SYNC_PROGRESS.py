@@ -8,7 +8,7 @@ import psycopg2
 from datetime import datetime
 
 # Database connection
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 
 # Task OS API
 TASK_OS_API = "https://brainops-backend-prod.onrender.com/api/v1/task-os"

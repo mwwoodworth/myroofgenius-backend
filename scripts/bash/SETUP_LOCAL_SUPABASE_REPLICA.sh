@@ -48,7 +48,7 @@ supabase start
 
 # 5. Create production dump
 echo "📥 Creating production database dump..."
-PGPASSWORD='Brain0ps2O2S' pg_dump \
+PGPASSWORD='<DB_PASSWORD_REDACTED>' pg_dump \
     -h db.yomagoqdmxszqtdwuhab.supabase.co \
     -U postgres \
     -d postgres \
@@ -80,8 +80,8 @@ import time
 from datetime import datetime
 
 # Database connections
-PROD_DB = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-LOCAL_DB = "postgresql://postgres:postgres@localhost:54322/postgres"
+PROD_DB = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+LOCAL_DB = "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:54322/postgres"
 
 def sync_databases():
     """Sync production changes to local"""
@@ -174,7 +174,7 @@ import psycopg2
 import json
 from datetime import datetime
 
-LOCAL_DB = "postgresql://postgres:postgres@localhost:54322/postgres"
+LOCAL_DB = "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:54322/postgres"
 
 class ContextManager:
     def __init__(self):

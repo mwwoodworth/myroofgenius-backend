@@ -65,23 +65,23 @@
 #### **Core Platform Access**
 - **ClickUp**: `pk_87973158_KUBY5368PSS5RBEXG224FVCWAWZT8LMI` (Personal Workspace)
 - **Notion**: `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` (Admin Access)
-- **GitHub**: `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`
+- **GitHub**: `<GITHUB_TOKEN_REDACTED>`
 - **Docker**: `dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho` (Username: mwwoodworth)
 
 #### **AI & API Services**
-- **OpenAI**: `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`
-- **Claude/Anthropic**: `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`
-- **Gemini**: `AIzaSyAdw66Wfnx2RCuxyzuOMOWH9s9Yk5a-s2s`
+- **OpenAI**: `<OPENAI_API_KEY_REDACTED>`
+- **Claude/Anthropic**: `<ANTHROPIC_API_KEY_REDACTED>`
+- **Gemini**: `<GOOGLE_API_KEY_REDACTED>`
 - **Perplexity**: `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`
 
 #### **Database & Infrastructure**
 - **Supabase URL**: `https://yomagoqdmxszqtdwuhab.supabase.co`
-- **Supabase Anon Key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.bxlLdnJ1YKYUNlIulSO2E6iM4wyUSrPFtNcONg-vwPY`
+- **Supabase Anon Key**: `<JWT_REDACTED>`
 - **Database Password**: `Mww00dw0rth@2O1S$`
 - **Render API**: `rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx`
 
 #### **Payment & Business**
-- **Stripe Live Secret**: `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`
+- **Stripe Live Secret**: `<STRIPE_KEY_REDACTED>`
 - **Stripe Live Publishable**: `pk_live_51RHXCuFs5YLnaPiWkafx5348uNTKn2b5iUT0gKalb9lFgdVZt8lESg2MqDkZHjRPYto8uGtMnzUJJP3BV9ziff1H00VuIKLyPG`
 
 ---
@@ -127,7 +127,7 @@
 
 ### Live Database Info:
 - **Provider**: Supabase PostgreSQL
-- **Instance**: Brain0ps2O2S
+- **Instance**: <DB_PASSWORD_REDACTED>
 - **Total Tables**: 316+
 - **Status**: Connected and Operational
 - **Performance**: Optimal with indexes
@@ -142,9 +142,9 @@
 7. **Monitoring** - Logs, metrics, health checks
 
 ### Connection Strings:
-- **Direct**: `postgresql://postgres:03Bd15sFJEFaabm1@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
-- **Transaction Pooler**: `postgres://postgres:03Bd15sFJEFaabm1@db.yomagoqdmxszqtdwuhab.supabase.co:6543/postgres`
-- **Session Pooler**: `postgresql://postgres.yomagoqdmxszqtdwuhab:03Bd15sFJEFaabm1@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
+- **Direct**: `postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
+- **Transaction Pooler**: `postgres://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:6543/postgres`
+- **Session Pooler**: `postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
 
 ---
 

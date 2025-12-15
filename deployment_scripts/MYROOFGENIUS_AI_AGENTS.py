@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Production credentials
-DATABASE_URL = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
 
 class AgentType(Enum):

@@ -15,7 +15,7 @@ echo ""
 
 # Configuration
 export NEXT_PUBLIC_SUPABASE_URL="https://yomagoqdmxszqtdwuhab.supabase.co"
-export NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.G4g4KXKR3P0iRpfSGzMCLza3J9oqv79wfCF8khASFJI"
+export NEXT_PUBLIC_SUPABASE_ANON_KEY="<JWT_REDACTED>"
 
 # ============================================
 # PHASE 1: BRUTAL FUNCTIONAL AUDIT
@@ -145,7 +145,7 @@ class BrutalAuditor:
             host='db.yomagoqdmxszqtdwuhab.supabase.co',
             database='postgres',
             user='postgres',
-            password='Brain0ps2O2S'
+            password='<DB_PASSWORD_REDACTED>'
         )
         
         try:

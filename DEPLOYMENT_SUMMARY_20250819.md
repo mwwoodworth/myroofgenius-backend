@@ -135,7 +135,7 @@
 ## 🚨 Critical Information
 
 ### Database Password
-**Confirmed**: `Brain0ps2O2S` (verified everywhere)
+**Confirmed**: `<DB_PASSWORD_REDACTED> (verified everywhere)
 
 ### Docker Credentials
 - Username: `mwwoodworth`

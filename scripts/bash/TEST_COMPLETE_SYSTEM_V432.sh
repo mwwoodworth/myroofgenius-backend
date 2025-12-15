@@ -51,7 +51,7 @@ echo "3️⃣ DATABASE & SYNC"
 echo "------------------"
 # Test database connection
 echo -n "Database Connection: "
-if DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
+if DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
     WORKING=$((WORKING + 1))
     TOTAL=$((TOTAL + 1))
     echo "✅ Connected"
@@ -84,7 +84,7 @@ echo ""
 echo "5️⃣ DATA INTEGRITY CHECK"
 echo "-----------------------"
 echo "Checking CenterPoint data..."
-DATA_CHECK=$(DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" psql "$DATABASE_URL" -t -c "
+DATA_CHECK=$(DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" psql "$DATABASE_URL" -t -c "
 SELECT 
     'Customers: ' || COUNT(*) || ' (CP: ' || COUNT(CASE WHEN external_id LIKE 'CP-%' THEN 1 END) || ')'
 FROM customers

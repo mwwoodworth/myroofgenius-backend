@@ -76,7 +76,7 @@ class BrainOpsDevOpsSuite:
                 environment={
                     "POSTGRES_DB": "brainops",
                     "POSTGRES_USER": "postgres",
-                    "POSTGRES_PASSWORD": "Brain0ps2O2S"
+                    "POSTGRES_PASSWORD": "<DB_PASSWORD_REDACTED>"
                 },
                 volumes=[
                     "brainops-postgres-data:/var/lib/postgresql/data",
@@ -111,7 +111,7 @@ class BrainOpsDevOpsSuite:
                 image="mwwoodworth/brainops-backend:latest",
                 ports={"8000": 8000},
                 environment={
-                    "DATABASE_URL": "postgresql://postgres:Brain0ps2O2S@brainops-postgres:5432/brainops",
+                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
                     "REDIS_URL": "redis://brainops-redis:6379",
                     "ENV": "development",
                     "SYNC_WITH_PROD": "true",
@@ -194,7 +194,7 @@ class BrainOpsDevOpsSuite:
                 ports={},
                 environment={
                     "NOTION_TOKEN": "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",
-                    "DATABASE_URL": "postgresql://postgres:Brain0ps2O2S@brainops-postgres:5432/brainops",
+                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
                     "SYNC_INTERVAL": "300"  # 5 minutes
                 },
                 volumes=[
@@ -216,7 +216,7 @@ class BrainOpsDevOpsSuite:
                 image="python:3.11-slim",
                 ports={"8001": 8001},
                 environment={
-                    "DATABASE_URL": "postgresql://postgres:Brain0ps2O2S@brainops-postgres:5432/brainops",
+                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
                     "REDIS_URL": "redis://brainops-redis:6379",
                     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
                     "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
@@ -261,7 +261,7 @@ class BrainOpsDevOpsSuite:
             "host": "aws-0-us-east-2.pooler.supabase.com",
             "database": "postgres",
             "user": "postgres.yomagoqdmxszqtdwuhab",
-            "password": "Brain0ps2O2S",
+            "password": "<DB_PASSWORD_REDACTED>",
             "port": "6543"
         }
 
@@ -401,7 +401,7 @@ class BrainOpsDevOpsSuite:
                     "database": "brainops",
                     "user": "postgres",
                     "secureJsonData": {
-                        "password": "Brain0ps2O2S"
+                        "password": "<DB_PASSWORD_REDACTED>"
                     }
                 }
             ]
@@ -518,7 +518,7 @@ class BrainOpsDevOpsSuite:
                 host="localhost",
                 database="brainops",
                 user="postgres",
-                password="Brain0ps2O2S",
+                password="<DB_PASSWORD_REDACTED>",
                 port=5432
             )
 

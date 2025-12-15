@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Database connection
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
 
 print("🔐 Verifying Full Database Ownership...")
 print("=" * 60)

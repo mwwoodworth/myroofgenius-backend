@@ -178,10 +178,10 @@ async def get_customers(
 **Environment Variables (from BrainOps.env):**
 ```bash
 SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMzNzY3NzcsImV4cCI6MjA0ODk1Mjc3N30.5tL0ms5Bs9PqQs_RdkBj8Xq_QhqoUvMKZTML3MCXbFw
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ
+SUPABASE_ANON_KEY=<JWT_REDACTED>
+SUPABASE_SERVICE_ROLE_KEY=<JWT_REDACTED>
 SUPABASE_PROJECT_REF=yomagoqdmxszqtdwuhab
-SUPABASE_DB_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres
+SUPABASE_DB_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
 SUPABASE_STORAGE_BUCKET=roof-images
 ```
 

@@ -4,7 +4,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Database connection
-conn_str = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+conn_str = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 try:
     conn = psycopg2.connect(conn_str)

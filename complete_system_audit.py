@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from typing import Dict, List, Any
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
 
 class SystemAuditor:
     def __init__(self):
@@ -288,7 +288,7 @@ class SystemAuditor:
                 ("credentials", "database", "supabase", {
                     "host": "aws-0-us-east-2.pooler.supabase.com",
                     "user": "postgres.yomagoqdmxszqtdwuhab",
-                    "password": "Brain0ps2O2S",
+                    "password": "<DB_PASSWORD_REDACTED>",
                     "database": "postgres",
                     "port": 5432
                 }, "Supabase database credentials"),

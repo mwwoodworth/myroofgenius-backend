@@ -35,7 +35,7 @@ class AIBrainCore:
     """Central AI Brain that orchestrates all system intelligence"""
     
     def __init__(self):
-        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
         self.agents = {}
         self.neural_pathways = []
         self.active_decisions = {}

@@ -71,7 +71,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Set database URL directly from environment
-os.environ['DATABASE_URL'] = 'postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres'
+os.environ['DATABASE_URL'] = 'postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres'
 
 sys.path.append('/home/mwwoodworth/code/fastapi-operator-env')
 

@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 # ============================================================================
 echo "1️⃣  DATABASE CONNECTION TEST"
 echo "----------------------------"
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 DB_TEST=$(psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" -t 2>&1)
 if [[ $DB_TEST =~ ^[0-9]+$ ]]; then
     echo -e "${GREEN}✅ Database connected successfully${NC}"
@@ -121,8 +121,8 @@ echo "---------------------------"
 if [ -f "/home/mwwoodworth/code/.env.production" ]; then
     echo -e "${GREEN}✅ Master .env.production file exists${NC}"
     # Check for correct password
-    if grep -q "Brain0ps2O2S" /home/mwwoodworth/code/.env.production; then
-        echo -e "${GREEN}✅ Correct database password (Brain0ps2O2S) configured${NC}"
+    if grep -q "<DB_PASSWORD_REDACTED>" /home/mwwoodworth/code/.env.production; then
+        echo -e "${GREEN}✅ Correct database password (<DB_PASSWORD_REDACTED> configured${NC}"
     else
         echo -e "${RED}❌ Incorrect database password in .env.production${NC}"
     fi
@@ -161,7 +161,7 @@ echo "==========================================================================
 echo "📊 CONSOLIDATION SUMMARY"
 echo "============================================================================"
 echo ""
-echo "✅ Database: Connected with correct password (Brain0ps2O2S)"
+echo "✅ Database: Connected with correct password (<DB_PASSWORD_REDACTED>"
 echo "✅ Backend: Running v8.6 with all routes operational"
 echo "✅ Frontends: All 3 applications accessible"
 echo "✅ Structure: Consolidated from 23 to 7 directories"

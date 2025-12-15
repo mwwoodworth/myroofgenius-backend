@@ -22,7 +22,7 @@ import hashlib
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://wvkoiekcybvhpqvgqvtc.supabase.co")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost/weathercraft_erp")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost/weathercraft_erp")
 
 class RAGQuery(BaseModel):
     query: str

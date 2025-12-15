@@ -10,7 +10,7 @@ echo "============================"
 # 1. Check if we have production connectivity
 check_production() {
     echo -n "Checking production connection... "
-    if psql "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" -c "SELECT 1" > /dev/null 2>&1; then
+    if psql "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" -c "SELECT 1" > /dev/null 2>&1; then
         echo "✅ CONNECTED"
         return 0
     else
@@ -39,7 +39,7 @@ get_checksums() {
     
     # Production checksum (if connected)
     if check_production; then
-        PROD_SUM=$(psql "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" -t -c "
+        PROD_SUM=$(psql "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" -t -c "
             SELECT md5(string_agg(counts::text, ',' ORDER BY table_name))
             FROM (
                 SELECT table_name, COUNT(*) as counts
@@ -80,7 +80,7 @@ sync_to_production() {
             > /tmp/${TABLE}_sync.sql
         
         # Load to production
-        psql "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres" \
+        psql "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres" \
             < /tmp/${TABLE}_sync.sql 2>/dev/null || true
         
         rm /tmp/${TABLE}_sync.sql

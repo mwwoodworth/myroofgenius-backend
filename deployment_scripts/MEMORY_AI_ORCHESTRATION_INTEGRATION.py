@@ -19,9 +19,9 @@ sys.path.append('/home/mwwoodworth/code/fastapi-operator-env/apps/backend')
 
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "sk-ant-api03-MJY3PF2BfTNmr...")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-proj-_C3KKJQW53VmOp33HF8...")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAHlPJBr5HH1xKvVoKR8C6BHvMZh3G_kik")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "<ANTHROPIC_API_KEY_REDACTED>...")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "<OPENAI_API_KEY_REDACTED>...")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "<GOOGLE_API_KEY_REDACTED>")
 
 logger = logging.getLogger("MemoryAIOrchestration")
 

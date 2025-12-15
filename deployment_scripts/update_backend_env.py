@@ -9,14 +9,14 @@ with open('/home/mwwoodworth/code/fastapi-operator-env/.env', 'r') as f:
 # Define replacements
 replacements = {
     # Update database URLs with correct password
-    r'postgresql://postgres\.yomagoqdmxszqtdwuhab:Mww00dw0rth%402O1S\$@': 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@',
+    r'postgresql://postgres\.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@': 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@',
     
     # Update SUPABASE_DB_PASSWORD
-    r'SUPABASE_DB_PASSWORD=Mww00dw0rth@2O1S\$': 'SUPABASE_DB_PASSWORD=Brain0ps2O2S',
+    r'SUPABASE_DB_PASSWORD=Mww00dw0rth@2O1S\$': 'SUPABASE_DB_PASSWORD=<DB_PASSWORD_REDACTED>',
     
     # Update SUPABASE_SERVICE_ROLE_KEY
     r'SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzA1ODk1MjAwLCJleHAiOjIwNjI2MTkyMDB9\.Tq5YfA5r8VqMEz_k7sYPcdmwhBVq0wGZBxq7Q3RXrAo': 
-    'SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ'
+    'SUPABASE_SERVICE_ROLE_KEY=<JWT_REDACTED>'
 }
 
 # Apply replacements

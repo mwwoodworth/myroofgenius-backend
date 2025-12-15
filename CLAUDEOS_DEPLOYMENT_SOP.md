@@ -95,8 +95,8 @@ curl https://myroofgenius.com
 
 ### Supabase
 - Project Ref: `yomagoqdmxszqtdwuhab`
-- Database Password: `Brain0ps2O2S`
-- Connection: `postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
+- Database Password: `<DB_PASSWORD_REDACTED>
+- Connection: `postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres`
 
 ---
 

@@ -470,15 +470,15 @@ INSERT INTO ui_specifications (
 INSERT INTO system_configurations (
     config_key, config_value, component, environment, category, is_secret, is_required
 ) VALUES
-    ('DATABASE_URL', '{"value": "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"}'::jsonb, 'backend', 'production', 'database', true, true),
+    ('DATABASE_URL', '{"value": "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"}'::jsonb, 'backend', 'production', 'database', true, true),
     ('SUPABASE_URL', '{"value": "https://yomagoqdmxszqtdwuhab.supabase.co"}'::jsonb, 'all', 'production', 'database', false, true),
-    ('SUPABASE_ANON_KEY', '{"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.gKC0PybkqPTLlzDWIdS8a6KFVXZ1PQaNcQr2ekroxzE"}'::jsonb, 'frontend', 'production', 'auth', true, true),
-    ('SUPABASE_SERVICE_KEY', '{"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"}'::jsonb, 'backend', 'production', 'auth', true, true),
+    ('SUPABASE_ANON_KEY', '{"value": "<JWT_REDACTED>"}'::jsonb, 'frontend', 'production', 'auth', true, true),
+    ('SUPABASE_SERVICE_KEY', '{"value": "<JWT_REDACTED>"}'::jsonb, 'backend', 'production', 'auth', true, true),
     ('DOCKER_USERNAME', '{"value": "mwwoodworth"}'::jsonb, 'deployment', 'production', 'deployment', false, true),
     ('DOCKER_PAT', '{"value": "dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho"}'::jsonb, 'deployment', 'production', 'deployment', true, true),
     ('RENDER_DEPLOY_HOOK', '{"value": "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"}'::jsonb, 'deployment', 'production', 'deployment', true, true),
     ('STRIPE_PUBLISHABLE_KEY', '{"value": "pk_live_51PnM0CIWpMBRJ2y3pE5L9mnLT0d7KN0KkHHBRl2qTELGubivgKHraXfRKxvZCOLTNfIvqICysHIyQLqVQxrrK0oB00ctBfxRhZ"}'::jsonb, 'frontend', 'production', 'payment', false, true),
-    ('STRIPE_SECRET_KEY', '{"value": "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"}'::jsonb, 'backend', 'production', 'payment', true, true);
+    ('STRIPE_SECRET_KEY', '{"value": "<STRIPE_KEY_REDACTED>"}'::jsonb, 'backend', 'production', 'payment', true, true);
 
 -- ============================================================================
 -- CRITICAL PERSISTENT MEMORIES

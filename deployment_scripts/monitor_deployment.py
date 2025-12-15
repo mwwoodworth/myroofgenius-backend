@@ -1,4 +1,4 @@
-#\!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Deployment Monitor for MyRoofGenius v3.1.159
 Monitors the deployment progress and verifies all systems are operational
@@ -44,14 +44,14 @@ async def check_deployment_status():
                     print(f"  Status: {data.get('status', 'unknown')}")
                     
                     # Check for version change
-                    if previous_version and previous_version \!= current_version:
+                    if previous_version and previous_version != current_version:
                         print(f"\n🎉 VERSION CHANGED: {previous_version} → {current_version}")
                     
                     previous_version = current_version
                     
                     # Check if v3.1.159 is deployed
                     if current_version == "3.1.159":
-                        print("\n✅ v3.1.159 SUCCESSFULLY DEPLOYED\!")
+                        print("\n✅ v3.1.159 SUCCESSFULLY DEPLOYED!")
                         
                         # Run quick verification
                         print("\nRunning verification checks...")
@@ -83,7 +83,7 @@ async def check_deployment_status():
                         print(f"\nEndpoint Success Rate: {success_rate:.1f}%")
                         
                         if success_rate >= 80:
-                            print("\n🎉 DEPLOYMENT VERIFIED - SYSTEM OPERATIONAL\!")
+                            print("\n🎉 DEPLOYMENT VERIFIED - SYSTEM OPERATIONAL!")
                         else:
                             print("\n⚠️  Some endpoints not responding - check configuration")
                         
@@ -119,4 +119,3 @@ async def check_deployment_status():
 
 if __name__ == "__main__":
     asyncio.run(check_deployment_status())
-EOF < /dev/null

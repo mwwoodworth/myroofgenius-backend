@@ -23,7 +23,7 @@ import os
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
 SUPABASE_URL = "https://yomagoqdmxszqtdwuhab.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+SUPABASE_KEY = "<JWT_REDACTED>"
 
 # Ensure log directory exists
 LOG_DIR = Path("/home/mwwoodworth/code/logs")

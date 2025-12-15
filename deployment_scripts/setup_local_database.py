@@ -14,10 +14,10 @@ import uuid
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'fastapi-operator-env', 'apps', 'backend'))
 
 # Local database connection
-LOCAL_DB_URL = "postgresql://postgres:postgres@localhost:54322/postgres"
+LOCAL_DB_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:54322/postgres"
 
 # Production database connection (from .env)
-PROD_DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:Mww00dw0rth%402O1S%24@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
+PROD_DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require"
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""

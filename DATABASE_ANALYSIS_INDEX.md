@@ -229,7 +229,7 @@
 
 ```bash
 # Production database access
-PGPASSWORD=Brain0ps2O2S psql \
+PGPASSWORD=<DB_PASSWORD_REDACTED> psql \
   -h aws-0-us-east-2.pooler.supabase.com \
   -U postgres.yomagoqdmxszqtdwuhab \
   -d postgres

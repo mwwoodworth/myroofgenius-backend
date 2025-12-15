@@ -3,7 +3,7 @@
 echo "🚀 POPULATING PRODUCTION DATABASE"
 echo "=================================="
 
-DATABASE_URL="postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL="postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
 
 # Create all revenue and production tables
 psql "$DATABASE_URL" << 'SQL'

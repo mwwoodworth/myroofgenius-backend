@@ -19,7 +19,7 @@ DB_CONFIG = {
     'port': 6543,
     'database': 'postgres',
     'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': 'Brain0ps2O2S'
+    'password': '<DB_PASSWORD_REDACTED>'
 }
 
 CENTERPOINT_CONFIG = {
@@ -159,7 +159,7 @@ services:
     image: prometheuscommunity/postgres-exporter
     container_name: brainops-pg-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@host.docker.internal:6543/postgres?sslmode=require"
+      DATA_SOURCE_NAME: "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@host.docker.internal:6543/postgres?sslmode=require"
     ports:
       - "9187:9187"
     restart: unless-stopped
@@ -269,7 +269,7 @@ DB_CONFIG = {
     'port': 6543,
     'database': 'postgres',
     'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': 'Brain0ps2O2S'
+    'password': '<DB_PASSWORD_REDACTED>'
 }
 
 def aggregate_logs():
@@ -538,7 +538,7 @@ DB_CONFIG = {
     'port': 6543,
     'database': 'postgres',
     'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': 'Brain0ps2O2S'
+    'password': '<DB_PASSWORD_REDACTED>'
 }
 
 class MetricsHandler(BaseHTTPRequestHandler):

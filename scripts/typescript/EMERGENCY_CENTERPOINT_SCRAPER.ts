@@ -7,7 +7,7 @@
 import puppeteer from 'puppeteer';
 import postgres from 'postgres';
 
-const sql = postgres(process.env.DATABASE_URL || 'postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require');
+const sql = postgres(process.env.DATABASE_URL || 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require');
 
 const CENTERPOINT_URL = 'https://app.centerpointconnect.com';
 const USERNAME = 'matthew@weathercraft.net';

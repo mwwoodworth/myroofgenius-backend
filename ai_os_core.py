@@ -153,7 +153,7 @@ class AIOS:
             
             # PostgreSQL for persistent storage
             self.pg_pool = await asyncpg.create_pool(
-                os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost/ai_os'),
+                os.getenv('DATABASE_URL', 'postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost/ai_os'),
                 min_size=5,
                 max_size=20
             )

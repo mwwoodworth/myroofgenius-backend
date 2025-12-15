@@ -12,7 +12,7 @@ import stripe
 
 # Configuration
 BASE_URL = "https://brainops-backend-prod.onrender.com"
-STRIPE_KEY = "sk_test_51PXs5fRw7K3sXkUXCHhxVqbRGKmNL8yBjNpHLxd4D5jRYaGLwmW"
+STRIPE_KEY = "<STRIPE_KEY_REDACTED>"
 
 # Initialize Stripe
 stripe.api_key = STRIPE_KEY

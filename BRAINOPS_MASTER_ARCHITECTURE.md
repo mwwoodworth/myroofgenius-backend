@@ -127,7 +127,7 @@ graph.add_edge("code_analyzer", "error_resolver")
 
 ### Critical Services Status
 ```yaml
-✅ Database: Connected (Brain0ps2O2S)
+✅ Database: Connected (<DB_PASSWORD_REDACTED>
 ✅ Supabase: Configured
 ✅ GitHub: Token active
 ✅ Stripe: Live keys configured
@@ -245,7 +245,7 @@ TypeScript: ❌ Errors present
 ### Passwords & Keys
 ```bash
 Sudo: Mww00dw0rth@2O1S$
-Database: Brain0ps2O2S
+Database: <DB_PASSWORD_REDACTED>
 Docker PAT: dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho
 Notion (Correct): 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
 ```

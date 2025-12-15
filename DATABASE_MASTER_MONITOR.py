@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 class DatabaseMasterMonitor:
     def __init__(self):
         # Direct connection to master DB (not pooler)
-        self.master_conn_str = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+        self.master_conn_str = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
         # Pooler connection for regular queries
-        self.pooler_conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+        self.pooler_conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
         
     def connect_master(self):
         """Connect to master database for full visibility"""

@@ -17,14 +17,14 @@ from sqlalchemy.orm import sessionmaker
 # Database connection
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
 )
 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
 # Stripe configuration
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "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")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
 stripe.api_key = STRIPE_SECRET_KEY
 
 def fix_database_tables():

@@ -128,7 +128,7 @@ Thanks!
 ### Monitor These Metrics:
 ```bash
 # Check signups (run every few hours)
-psql "postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" \
+psql "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" \
   -c "SELECT COUNT(*) as signups, SUM(price_cents)/100 as revenue FROM subscriptions WHERE created_at > NOW() - INTERVAL '24 hours';"
 ```
 

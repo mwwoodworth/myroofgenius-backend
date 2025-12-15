@@ -29,7 +29,7 @@ except Exception as e:
 print("\n💾 DATABASE STATUS:")
 print("-" * 40)
 try:
-    conn = psycopg2.connect("postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require")
+    conn = psycopg2.connect("postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require")
     cur = conn.cursor()
     
     cur.execute("""

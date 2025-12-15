@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 
 class PersistentMemoryClient:
     def __init__(self):
-        self.db_url = "postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+        self.db_url = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
     
     def connect(self):
         return psycopg2.connect(self.db_url)

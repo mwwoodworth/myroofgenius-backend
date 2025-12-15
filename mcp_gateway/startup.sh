@@ -3,7 +3,7 @@
 echo "🚀 Starting BrainOps MCP Gateway..."
 
 # Set environment variables from config if not already set
-export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres}"
+export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres}"
 export MCP_CONFIG="${MCP_CONFIG:-/app/config.json}"
 export NODE_ENV="${NODE_ENV:-production}"
 

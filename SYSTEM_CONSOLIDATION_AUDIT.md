@@ -38,7 +38,7 @@
 
 ### Primary Database (Supabase)
 - **Host**: db.yomagoqdmxszqtdwuhab.supabase.co
-- **Password**: Brain0ps2O2S (CONFIRMED - this is correct)
+- **Password**: <DB_PASSWORD_REDACTED> (CONFIRMED - this is correct)
 - **Tables**: 329+ tables
 - **Status**: ACTIVE
 
@@ -48,7 +48,7 @@
   - fastapi-operator-env/apps/backend/.env
   - brainops-ai-assistant/.env (OLD)
   - weathercraft-erp/scripts/check-db-schema.ts
-- **Action**: UPDATE these to use Brain0ps2O2S
+- **Action**: UPDATE these to use <DB_PASSWORD_REDACTED>
 
 ## 🔄 CONSOLIDATION PLAN
 
@@ -67,7 +67,7 @@ rm -rf /home/mwwoodworth/code/claudeops
 ```
 
 ### Phase 2: Consolidate Configurations
-1. **Standardize all DB connections to Brain0ps2O2S**
+1. **Standardize all DB connections to <DB_PASSWORD_REDACTED>
 2. **Move all scripts to central scripts/ folder**
 3. **Consolidate all .env files to use same credentials**
 
@@ -88,13 +88,13 @@ rm -rf /home/mwwoodworth/code/claudeops
 ### Master Credentials (PRODUCTION)
 ```env
 # Database
-DATABASE_URL=postgresql://postgres:Brain0ps2O2S@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
 SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MzMyNzYsImV4cCI6MjA2NTQwOTI3Nn0.bxlLdnJ1YKYUNlIulSO2E6iM4wyUSrPFtNcONg-vwPY
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ
+SUPABASE_ANON_KEY=<JWT_REDACTED>
+SUPABASE_SERVICE_ROLE_KEY=<JWT_REDACTED>
 
 # Stripe (LIVE)
-STRIPE_SECRET_KEY=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
+STRIPE_SECRET_KEY=<STRIPE_KEY_REDACTED>
 STRIPE_PUBLISHABLE_KEY=pk_live_51RHXCuFs5YLnaPiWkafx5348uNTKn2b5iUT0gKalb9lFgdVZt8lESg2MqDkZHjRPYto8uGtMnzUJJP3BV9ziff1H00VuIKLyPG
 
 # Docker Hub
@@ -107,7 +107,7 @@ RENDER_SERVICE_ID=srv-d1tfs4idbo4c73di6k00
 RENDER_DEPLOY_HOOK=https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM
 
 # GitHub
-GITHUB_PAT=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
+GITHUB_PAT=<GITHUB_TOKEN_REDACTED>
 
 # CenterPoint
 CENTERPOINT_BASE_URL=https://api.centerpointconnect.io
@@ -115,9 +115,9 @@ CENTERPOINT_BEARER_TOKEN=eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6ImM
 CENTERPOINT_TENANT_ID=97f82b360baefdd73400ad342562586
 
 # AI Services
-ANTHROPIC_API_KEY=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
-GEMINI_API_KEY=AIzaSyAdw66Wfnx2RCuxyzuOMOWH9s9Yk5a-s2s
-OPENAI_API_KEY=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
+ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY_REDACTED>
+GEMINI_API_KEY=<GOOGLE_API_KEY_REDACTED>
+OPENAI_API_KEY=<OPENAI_API_KEY_REDACTED>
 PERPLEXITY_API_KEY=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
 
 # Integrations
@@ -132,7 +132,7 @@ AIRTABLE_API_KEY=patyrDjxgtFvI3f56.f3f01b843a9c521401d83c525f07f645758b7af46eb5d
 ### 1. Single Source of Truth
 - **ONE backend API** (fastapi-operator-env)
 - **THREE frontend apps** (MyRoofGenius, WeatherCraft ERP, Task OS)
-- **ONE database** (Supabase with Brain0ps2O2S)
+- **ONE database** (Supabase with <DB_PASSWORD_REDACTED>
 - **ONE deployment pipeline** (Docker → Render for backend, Git → Vercel for frontends)
 
 ### 2. Centralized Scripts
@@ -197,7 +197,7 @@ BrainOps Unified System
 ├── Frontend 1: myroofgenius-app
 ├── Frontend 2: weathercraft-erp
 ├── Frontend 3: brainops-task-os
-├── Database: Supabase (Brain0ps2O2S)
+├── Database: Supabase (<DB_PASSWORD_REDACTED>
 ├── Deployment: Docker/Render + Vercel
 └── Scripts: Centralized utility library
 ```

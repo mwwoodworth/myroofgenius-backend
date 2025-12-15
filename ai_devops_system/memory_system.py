@@ -70,7 +70,7 @@ class VectorStore:
     def _init_postgres(self):
         """Initialize PostgreSQL with pgvector"""
         try:
-            engine = create_engine('postgresql://postgres:postgres@localhost:5432/ai_memory')
+            engine = create_engine('postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:5432/ai_memory')
             with engine.connect() as conn:
                 # Create database if it doesn't exist
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

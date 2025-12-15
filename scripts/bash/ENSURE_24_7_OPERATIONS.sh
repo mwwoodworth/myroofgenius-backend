@@ -144,7 +144,7 @@ cat > /tmp/new_crontab << 'EOF'
 */30 * * * * /home/mwwoodworth/code/CLAUDEOS_AUTOFIX.sh > /tmp/claudeos_health.log 2>&1
 
 # WeatherCraft CenterPoint Sync - Every 15 minutes
-*/15 * * * * cd /home/mwwoodworth/code/weathercraft-erp && DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" /usr/bin/npx tsx scripts/centerpoint_incremental_sync.ts >> /tmp/centerpoint_incremental.log 2>&1
+*/15 * * * * cd /home/mwwoodworth/code/weathercraft-erp && DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require" /usr/bin/npx tsx scripts/centerpoint_incremental_sync.ts >> /tmp/centerpoint_incremental.log 2>&1
 
 # Persistent Monitoring - Check every 5 minutes that it's running
 */5 * * * * pgrep -f "PERSISTENT_MONITORING_SYSTEM.py" || nohup python3 /home/mwwoodworth/code/PERSISTENT_MONITORING_SYSTEM.py > /tmp/persistent_monitor.log 2>&1 &

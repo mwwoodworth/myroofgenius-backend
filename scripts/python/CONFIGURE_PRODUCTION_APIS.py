@@ -60,7 +60,7 @@ def set_render_env_var(key: str, value: str):
 # Critical API Keys and Configurations
 ENV_VARS = {
     # Stripe (Test keys for now - replace with live keys when ready)
-    "STRIPE_SECRET_KEY": "sk_test_51OKxJJBXO5wFPCFoHvXxGxKqzWLSpTFgYQdYr8LrPxYJxGxKqzWLSpTFgYQdYr8",
+    "STRIPE_SECRET_KEY": "<STRIPE_KEY_REDACTED>",
     "STRIPE_PUBLISHABLE_KEY": "pk_test_51OKxJJBXO5wFPCFoUWvRjNkMpLZSxGxKqzWLSpTFgYQdYr8",
     "STRIPE_WEBHOOK_SECRET": "whsec_test_BXO5wFPCFoHvXxGxKqzWLSpTFgYQdYr8",
     

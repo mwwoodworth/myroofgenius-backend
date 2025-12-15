@@ -24,7 +24,7 @@ DB_HOST="aws-0-us-east-2.pooler.supabase.com"
 DB_PORT="6543"
 DB_NAME="postgres"
 DB_USER="postgres.yomagoqdmxszqtdwuhab"
-export PGPASSWORD="Brain0ps2O2S"
+export PGPASSWORD="<DB_PASSWORD_REDACTED>"
 
 # Initialize
 mkdir -p "$DB_BACKUP_DIR" "$CODE_BACKUP_DIR" "$CONFIG_BACKUP_DIR"

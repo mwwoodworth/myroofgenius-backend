@@ -21,7 +21,7 @@ class ContextBridge:
         # Use existing Supabase connection
         self.supabase = create_client(
             "https://yomagoqdmxszqtdwuhab.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+            "<JWT_REDACTED>"
         )
         self.local_file = os.path.expanduser('~/.ai_context/current.json')
         

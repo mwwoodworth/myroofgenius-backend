@@ -8,8 +8,8 @@
 
 ### 1. ✅ CREDENTIALS VERIFIED
 All API keys are already present in Render:
-- ✅ Anthropic: `sk-ant-api03-MJY3PF2BfTNmr...`
-- ✅ OpenAI: `sk-proj-_C3KKJQW53VmOp33HF8...`
+- ✅ Anthropic: `<ANTHROPIC_API_KEY_REDACTED>...`
+- ✅ OpenAI: `<OPENAI_API_KEY_REDACTED>...`
 - ✅ ElevenLabs: `sk_a4be8c327484fa7d24eb94e8b16462827095939269fd6e49`
 - ✅ Slack: Webhook URL configured and tested
 

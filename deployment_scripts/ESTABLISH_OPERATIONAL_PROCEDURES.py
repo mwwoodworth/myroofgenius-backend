@@ -14,7 +14,7 @@ from typing import Dict, List
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
 SUPABASE_URL = "https://yomagoqdmxszqtdwuhab.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvbWFnb3FkbXhzenF0ZHd1aGFiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTgzMzI3NiwiZXhwIjoyMDY1NDA5Mjc2fQ.7C3guJ_0moYGkdyeFmJ9cd2BmduB5NnU00erIIxH3gQ"
+SUPABASE_KEY = "<JWT_REDACTED>"
 
 
 class OperationalProcedureEstablisher:
@@ -414,8 +414,7 @@ class OperationalProcedureEstablisher:
     async def create_enforcement_rules(self):
         """Create enforcement rules for procedures"""
         
-        print("
-👮 Creating Enforcement Rules...")
+        print("\n👮 Creating Enforcement Rules...")
         
         enforcement_rules = {
             "name": "Procedure Enforcement Rules",
@@ -496,8 +495,7 @@ class OperationalProcedureEstablisher:
     async def create_monitoring_procedures(self):
         """Create procedures for monitoring compliance"""
         
-        print("
-📊 Creating Monitoring Procedures...")
+        print("\n📊 Creating Monitoring Procedures...")
         
         monitoring_config = {
             "name": "Procedure Compliance Monitoring",
@@ -587,8 +585,7 @@ async def main():
         # Create monitoring procedures
         await establisher.create_monitoring_procedures()
         
-        print("
-🎆 All operational procedures, enforcement rules, and monitoring established!")
+        print("\n🎆 All operational procedures, enforcement rules, and monitoring established!")
         print("🤖 The system will now strictly adhere to these procedures.")
         print("📊 Continuous monitoring and improvement enabled.")
 

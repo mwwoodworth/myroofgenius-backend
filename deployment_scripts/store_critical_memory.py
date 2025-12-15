@@ -52,7 +52,7 @@ FRONTEND (Next.js):
 
 DATABASE (PostgreSQL):
 - Provider: Supabase
-- Password: Brain0ps2O2S
+- Password: <DB_PASSWORD_REDACTED>
 - Tables: 123 total
 - Health: 85% operational
 
