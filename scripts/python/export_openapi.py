@@ -42,6 +42,10 @@ def _count_operations(openapi: Dict[str, Any]) -> Tuple[int, int]:
 def main() -> int:
     out_path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 
+    # Ensure repository root wins module resolution (avoid scripts/python/main.py shadowing).
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
+
     os.environ.setdefault("FAST_TEST_MODE", "1")
     os.environ.setdefault("BRAINOPS_ALLOW_OFFLINE_AUTH", "true")
     os.environ.setdefault("DATABASE_URL", DEFAULT_DATABASE_URL)
@@ -65,4 +69,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

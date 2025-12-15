@@ -7,9 +7,6 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
 
-from workflows.estimate import EstimateWorkflow
-from workflows.state_manager import WorkflowStateManager
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/workflows", tags=["LangGraph Workflows"])
@@ -41,6 +38,15 @@ async def execute_estimate_workflow(
     **Time**: ~30 seconds (vs 45 minutes manual)
     """
     try:
+        try:
+            from workflows.estimate import EstimateWorkflow
+        except (ImportError, ModuleNotFoundError) as import_error:
+            logger.error("LangGraph workflow dependencies unavailable: %s", import_error)
+            raise HTTPException(
+                status_code=501,
+                detail="LangGraph workflows are not available in this deployment (missing dependencies).",
+            ) from import_error
+
         workflow = EstimateWorkflow(db_pool)
 
         result = await workflow.execute(
@@ -70,6 +76,15 @@ async def get_workflow_status(
     - Final results
     """
     try:
+        try:
+            from workflows.state_manager import WorkflowStateManager
+        except (ImportError, ModuleNotFoundError) as import_error:
+            logger.error("LangGraph workflow dependencies unavailable: %s", import_error)
+            raise HTTPException(
+                status_code=501,
+                detail="LangGraph workflows are not available in this deployment (missing dependencies).",
+            ) from import_error
+
         state_manager = WorkflowStateManager(db_pool)
         status = await state_manager.get_workflow_status(workflow_id)
         return status

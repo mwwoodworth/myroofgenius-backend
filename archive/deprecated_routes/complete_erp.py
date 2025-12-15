@@ -7,10 +7,9 @@ from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-from sqlalchemy import create_engine, text, and_, or_
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.pool import QueuePool
 from pydantic import BaseModel, Field
 import os
 import uuid
@@ -102,28 +101,8 @@ def calculate_traditional_lead_score(lead_dict: Dict) -> tuple:
     
     return score, grade, priority, factors
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=30,  # Increased for ERP operations
-    max_overflow=60,  # Handle burst traffic
-    pool_pre_ping=True,  # Verify connections before use
-    pool_recycle=1800,  # Recycle every 30 minutes
-    pool_timeout=30  # Timeout for pool acquisition
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Database session dependency (shared engine/pool)
+from database import get_db
 
 # ============================================================================
 # PYDANTIC MODELS

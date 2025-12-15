@@ -2,12 +2,13 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.23"
-__build__ = "2025-12-15T20:02:00Z"
+__version__ = "163.0.24"
+__build__ = "2025-12-15T20:15:00Z"
 __status__ = "production"
-# v163.0.23: Fix SQLAlchemy SSL context for Supabase pooler
-# - database.py now uses SSL context with disabled cert verification
-# - Fixes "Database temporarily unavailable" for ERP routes
+# v163.0.24: Remove invalid ssl_context from psycopg2 connect_args
+# - psycopg2 uses sslmode parameter, NOT ssl_context (that's for asyncpg)
+# - sslmode=require works correctly for Supabase pooler
+# v163.0.23: (broken) Attempted SSL context fix - invalid parameter
 # v163.0.22: Fix get_current_user to respect API key middleware auth
 # - get_current_user now checks request.state.user (set by APIKeyMiddleware) first
 # - Allows both JWT and API key authentication to work with route dependencies
