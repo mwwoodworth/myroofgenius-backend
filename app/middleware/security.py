@@ -66,6 +66,8 @@ DEFAULT_PUBLIC_PATHS: Sequence[str] = (
     "/api/v1/webhooks/render",
     "/api/v1/revenue/webhook",
     "/webhook/stripe",
+    "/api/v1/logs/vercel",  # Vercel log drain - no auth needed
+    "/api/v1/logs/render",  # Render log drain - no auth needed
 )
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
