@@ -24,23 +24,38 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
-SUPABASE_AVAILABLE = all([
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
-    SUPABASE_SERVICE_ROLE_KEY,
-    SUPABASE_JWT_SECRET,
-])
+# SECURITY: Strictly disable offline auth in production
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+if IS_PRODUCTION:
+    ALLOW_OFFLINE_AUTH = False
+else:
+    ALLOW_OFFLINE_AUTH = os.getenv("BRAINOPS_ALLOW_OFFLINE_AUTH", "").lower() in {"1", "true", "yes"}
+
+SUPABASE_AUTH_AVAILABLE = bool(SUPABASE_JWT_SECRET)
+SUPABASE_ANON_AVAILABLE = bool(SUPABASE_URL and SUPABASE_ANON_KEY)
+SUPABASE_SERVICE_AVAILABLE = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
 
 supabase_anon: Optional[Client] = None
 supabase_service: Optional[Client] = None
 
-if SUPABASE_AVAILABLE:
+if SUPABASE_ANON_AVAILABLE:
     supabase_anon = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+if SUPABASE_SERVICE_AVAILABLE:
     supabase_service = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-else:
-    logger.warning(
-        "Supabase configuration not detected. Authentication middleware will run in offline mode."
-    )
+
+if not SUPABASE_AUTH_AVAILABLE:
+    if ALLOW_OFFLINE_AUTH:
+        logger.warning(
+            "Supabase JWT secret not detected. Authentication will run in explicit offline mode "
+            "(BRAINOPS_ALLOW_OFFLINE_AUTH=true)."
+        )
+    else:
+        logger.error(
+            "Supabase JWT secret not detected. Refusing to authenticate requests without JWT validation. "
+            "Set SUPABASE_JWT_SECRET (and related SUPABASE_* env vars) or explicitly enable offline auth "
+            "with BRAINOPS_ALLOW_OFFLINE_AUTH=true for local-only testing."
+        )
 
 DEFAULT_OFFLINE_TENANT = os.getenv(
     "OFFLINE_TENANT_ID",
@@ -78,9 +93,13 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     Raises:
         HTTPException: If token is invalid or missing
     """
-    if not SUPABASE_AVAILABLE:
-        # Offline fallback: trust incoming request and return deterministic identity
-        return OFFLINE_USER_CONTEXT.copy()
+    if not SUPABASE_AUTH_AVAILABLE:
+        if ALLOW_OFFLINE_AUTH:
+            return OFFLINE_USER_CONTEXT.copy()
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication is misconfigured (missing SUPABASE_JWT_SECRET)",
+        )
 
     if not authorization:
         raise HTTPException(
@@ -170,8 +189,8 @@ async def get_supabase_client() -> Client:
     Returns:
         Client: Supabase client with service role privileges
     """
-    if not SUPABASE_AVAILABLE or not supabase_service:
-        raise RuntimeError("Supabase service client unavailable in offline mode.")
+    if not supabase_service:
+        raise RuntimeError("Supabase service client unavailable (missing SUPABASE_SERVICE_ROLE_KEY).")
     return supabase_service
 
 
@@ -274,5 +293,7 @@ __all__ = [
     "require_role",
     "supabase_anon",
     "supabase_service",
-    "SUPABASE_AVAILABLE",
+    "SUPABASE_AUTH_AVAILABLE",
+    "SUPABASE_ANON_AVAILABLE",
+    "SUPABASE_SERVICE_AVAILABLE",
 ]
