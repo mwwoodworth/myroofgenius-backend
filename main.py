@@ -332,72 +332,87 @@ app.add_middleware(
 )
 
 # Load all route modules dynamically
+dynamic_routes_loaded = False
 try:
     from routes.route_loader import load_all_routes
-    load_all_routes(app)
-    logger.info("✅ All routes loaded successfully")
+    loaded_count, failed_count = load_all_routes(app)
+    dynamic_routes_loaded = loaded_count > 0
+    logger.info("✅ Dynamic route loading complete: %d loaded, %d failed", loaded_count, failed_count)
 except Exception as e:
     logger.error(f"⚠️  Failed to load routes: {e}")
 
 # Products routes now loaded by load_all_routes with correct mapping
 # No need to load explicitly anymore
 
-try:
-    from routes.invoices import router as invoices_router
-    app.include_router(invoices_router)
-    logger.info("✅ Invoices routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load invoices routes: {e}")
+# In deployments where dynamic loading is intentionally skipped (or failed),
+# explicitly register a minimal set of critical routers.
+if not dynamic_routes_loaded:
+    try:
+        from routes.invoices import router as invoices_router
+        app.include_router(invoices_router)
+        logger.info("✅ Invoices routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load invoices routes (fallback): {e}")
 
-try:
-    from routes.jobs import router as jobs_router
-    app.include_router(jobs_router)
-    logger.info("✅ Jobs routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load jobs routes: {e}")
+    try:
+        from routes.jobs import router as jobs_router
+        app.include_router(jobs_router)
+        logger.info("✅ Jobs routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load jobs routes (fallback): {e}")
 
-try:
-    from routes.relationships import router as relationships_router
-    app.include_router(relationships_router)
-    logger.info("✅ Relationships routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load relationships routes: {e}")
+    try:
+        from routes.relationships import router as relationships_router
+        app.include_router(relationships_router)
+        logger.info("✅ Relationships routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load relationships routes (fallback): {e}")
 
-try:
-    from routes.customers import router as customers_router
-    app.include_router(customers_router)
-    logger.info("✅ Customers routes loaded")
-except Exception as e:
-    logger.error(f"⚠️ Failed to load customers routes: {e}")
+    try:
+        from routes.customers import router as customers_router
+        app.include_router(customers_router)
+        logger.info("✅ Customers routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load customers routes (fallback): {e}")
 
-# Load LangGraph workflow routes
-try:
-    from routes.workflows_langgraph import router as workflows_router
-    app.include_router(workflows_router)
-    logger.info("✅ LangGraph workflow routes loaded")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load workflow routes: {e}")
+    try:
+        from routes.workflows_langgraph import router as workflows_router
+        app.include_router(workflows_router)
+        logger.info("✅ LangGraph workflow routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load workflow routes (fallback): {e}")
 
-# Load Weathercraft ERP integration routes
-try:
-    from routes.weathercraft_integration import router as weathercraft_router
-    app.include_router(weathercraft_router)
-    # CONTRACT FIX: Alias /complete-erp to existing ERP routes to satisfy MRG frontend
-    app.include_router(weathercraft_router, prefix="/api/v1/complete-erp", tags=["Weathercraft ERP (Alias)"])
-    logger.info("✅ Weathercraft ERP integration routes loaded")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load Weathercraft integration routes: {e}")
+    try:
+        from routes.weathercraft_integration import router as weathercraft_router
+        app.include_router(weathercraft_router)
+        logger.info("✅ Weathercraft ERP integration routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load Weathercraft integration routes (fallback): {e}")
 
-# Load Relationship Awareness routes
-try:
-    from routes.relationship_aware import router as relationship_router
-    app.include_router(relationship_router)
-    logger.info("✅ Relationship Awareness routes loaded at /api/v1/aware")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load Relationship Awareness routes: {e}")
+    try:
+        from routes.relationship_aware import router as relationship_router
+        app.include_router(relationship_router)
+        logger.info("✅ Relationship Awareness routes loaded at /api/v1/aware (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load Relationship Awareness routes (fallback): {e}")
 
-# Load Elena Roofing AI routes
-if ELENA_AVAILABLE:
+    if ELENA_AVAILABLE:
+        try:
+            from routes.elena_roofing_agent import router as elena_router
+            app.include_router(elena_router)
+            logger.info("✅ Elena Roofing AI routes loaded at /api/v1/elena (fallback)")
+        except Exception as e:
+            logger.error(f"⚠️  Failed to load Elena routes (fallback): {e}")
+
+    try:
+        from routes.ai_agents import router as ai_agents_router
+        app.include_router(ai_agents_router)
+        logger.info("✅ AI Agents routes loaded at /api/v1/agents (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load AI Agents routes (fallback): {e}")
+
+# Load Elena Roofing AI routes (only when not using dynamic loader above)
+elif ELENA_AVAILABLE:
     try:
         from routes.elena_roofing_agent import router as elena_router
         app.include_router(elena_router)
@@ -406,12 +421,9 @@ if ELENA_AVAILABLE:
         logger.error(f"⚠️  Failed to load Elena routes: {e}")
 
 # Load AI Agents routes (CRITICAL - needed for all agent endpoints)
-try:
-    from routes.ai_agents import router as ai_agents_router
-    app.include_router(ai_agents_router)
-    logger.info("✅ AI Agents routes loaded at /api/v1/agents")
-except Exception as e:
-    logger.error(f"⚠️  Failed to load AI Agents routes: {e}")
+if dynamic_routes_loaded:
+    # Already loaded by routes.route_loader; keep this block for observability only.
+    logger.debug("AI Agents routes loaded via dynamic loader")
 
 # Load Gemini Estimation Engine
 try:

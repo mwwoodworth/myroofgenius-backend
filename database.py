@@ -33,6 +33,14 @@ engine = None
 SessionLocal = None
 
 if DATABASE_URL:
+    import ssl as ssl_module
+
+    # Create SSL context that doesn't verify certificates (required for Supabase pooler)
+    # Supabase poolers use self-signed certs which fail default verification
+    ssl_context = ssl_module.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl_module.CERT_NONE
+
     engine = create_engine(
         DATABASE_URL.replace("+asyncpg", ""),  # Remove async driver if present
         pool_size=int(os.getenv("DB_POOL_SIZE", "2")),
@@ -43,6 +51,7 @@ if DATABASE_URL:
         connect_args={
             "sslmode": os.getenv("DB_SSLMODE", "require"),
             "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
+            "ssl_context": ssl_context,
         },
     )
 
