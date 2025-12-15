@@ -24,12 +24,38 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
-# SECURITY: Strictly disable offline auth in production
-IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
-if IS_PRODUCTION:
-    ALLOW_OFFLINE_AUTH = False
-else:
-    ALLOW_OFFLINE_AUTH = os.getenv("BRAINOPS_ALLOW_OFFLINE_AUTH", "").lower() in {"1", "true", "yes"}
+def _resolve_runtime_environment() -> str:
+    return (
+        os.getenv("ENVIRONMENT")
+        or os.getenv("ENV")
+        or os.getenv("NODE_ENV")
+        or os.getenv("VERCEL_ENV")
+        or "development"
+    ).lower()
+
+def _is_deployed_runtime() -> bool:
+    # Render/Vercel/Fly/Cloud Run-style env markers. We treat any of these as "deployed",
+    # meaning offline auth must not be permitted.
+    return any(
+        os.getenv(key)
+        for key in (
+            "RENDER",
+            "RENDER_SERVICE_ID",
+            "RENDER_INSTANCE_ID",
+            "RENDER_EXTERNAL_URL",
+            "VERCEL",
+            "FLY_APP_NAME",
+            "K_SERVICE",
+        )
+    )
+
+# SECURITY: Strictly disable offline auth in production / deployed runtimes.
+_runtime_env = _resolve_runtime_environment()
+IS_PRODUCTION = _runtime_env in {"production", "prod"} or _is_deployed_runtime()
+ALLOW_OFFLINE_AUTH = (
+    (not IS_PRODUCTION)
+    and os.getenv("BRAINOPS_ALLOW_OFFLINE_AUTH", "").lower() in {"1", "true", "yes"}
+)
 
 SUPABASE_AUTH_AVAILABLE = bool(SUPABASE_JWT_SECRET)
 SUPABASE_ANON_AVAILABLE = bool(SUPABASE_URL and SUPABASE_ANON_KEY)

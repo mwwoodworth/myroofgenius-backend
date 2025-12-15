@@ -24,7 +24,7 @@ except Exception as exc:  # pragma: no cover - fallback for misconfigured enviro
     settings = None  # type: ignore[assignment]
     _settings_import_error = exc
 
-from app.core.exceptions import RateLimitError, AuthenticationError
+from app.core.exceptions import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,6 @@ class _CachedAPIKey:
 
 # Keep aligned with middleware.authentication.DEFAULT_EXEMPT_PATHS.
 DEFAULT_PUBLIC_PATHS: Sequence[str] = (
-    "/",
     "/health",
     "/api/v1/health",
     "/docs",
@@ -197,22 +196,36 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 request.state.api_key = api_key
                 request.state.api_key_id = cache_entry.key_id
                 request.state.authenticated = True
+                request.state.user = {
+                    "id": f"api_key:{cache_entry.key_id}",
+                    "role": "service",
+                    "tenant_id": None,
+                    "auth_type": "api_key",
+                }
+                request.state.user_id = cache_entry.key_id
             else:
-                raise AuthenticationError("Invalid API key")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid API key",
+                    headers={"WWW-Authenticate": "ApiKey"},
+                )
 
         return await call_next(request)
 
     def _extract_api_key(self, request: Request) -> Optional[str]:
         """Extract API key from request headers."""
-        # Check Authorization header for explicit ApiKey scheme
-        auth_header = request.headers.get("Authorization", "")
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization") or ""
         if auth_header.startswith("ApiKey "):
-            return auth_header[len("ApiKey "):].strip()
-        if auth_header.startswith("Bearer "):
-            return auth_header[len("Bearer "):].strip()
+            return auth_header[len("ApiKey ") :].strip()
 
-        # Check X-API-Key header
-        return request.headers.get("X-API-Key")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[len("Bearer ") :].strip()
+            # Treat JWT-ish Bearer tokens as user auth, not API keys.
+            if token.count(".") == 2:
+                return None
+            return token
+
+        return request.headers.get("X-API-Key") or request.headers.get("x-api-key")
 
     async def _validate_api_key(self, api_key: str, db_pool) -> Optional[_CachedAPIKey]:
         """Validate API key against database with caching."""

@@ -56,6 +56,10 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
+        # Allow upstream auth mechanisms (e.g., API key middleware) to satisfy auth.
+        if getattr(request.state, "user", None) or getattr(request.state, "authenticated", False):
+            return await call_next(request)
+
         if self._is_exempt(path):
             return await call_next(request)
 
@@ -75,5 +79,6 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         tenant_id = user.get("tenant_id")
         if tenant_id:
             request.state.tenant_id = tenant_id
+        request.state.user_id = user.get("id")
 
         return await call_next(request)

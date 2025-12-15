@@ -78,8 +78,6 @@ ROUTE_MAPPINGS = {
 }
 
 EXCLUDED_MODULES = {
-    # Replaced by routes.erp_core_runtime which provides resilient implementations
-    "complete_erp",
     # Heavy legacy modules replaced by lightweight runtime handlers
     "equipment_tracking",
     "inventory_management",
