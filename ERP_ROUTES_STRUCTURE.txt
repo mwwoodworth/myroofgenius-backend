@@ -1,0 +1,81 @@
+ERP ROUTES STRUCTURE - POST CONSOLIDATION
+==========================================
+
+ACTIVE ROUTES (Mounted):
+┌─────────────────────────────────────────────────────────────┐
+│ /api/v1/erp/*                                               │
+│ ├─ erp_complete.py (PRIMARY)                                │
+│ │  ├─ GET /customers        → Real DB + fallback           │
+│ │  ├─ GET /jobs             → Real DB + fallback           │
+│ │  ├─ GET /estimates        → Real DB + fallback           │
+│ │  ├─ GET /invoices         → Real DB + fallback           │
+│ │  ├─ GET /inventory        → Real DB + fallback           │
+│ │  ├─ GET /dashboard        → Real DB + fallback           │
+│ │  ├─ GET /dashboard/stats  → Real DB                      │
+│ │  └─ GET /schedule         → Real DB + fallback           │
+│ │                                                            │
+│ ├─ /weathercraft/*                                          │
+│ │  └─ weathercraft_integration.py                           │
+│ │     └─ (WeatherCraft-specific endpoints)                  │
+│ │                                                            │
+│ └─ /public/*                                                │
+│    └─ public_endpoints.py                                   │
+│       └─ (Public access, no auth)                           │
+└─────────────────────────────────────────────────────────────┘
+
+DEPENDENCY MODULES (Not Mounted):
+┌─────────────────────────────────────────────────────────────┐
+│ erp_core_runtime.py                                         │
+│ ├─ InMemoryERPStore class                                   │
+│ ├─ STORE instance (used as fallback)                        │
+│ ├─ Routes defined but EXCLUDED from loading                 │
+│ └─ Imported by: erp_complete.py                             │
+└─────────────────────────────────────────────────────────────┘
+
+ARCHIVED (Not Loaded):
+┌─────────────────────────────────────────────────────────────┐
+│ archive/deprecated_routes/complete_erp.py                   │
+│ ├─ 3330 lines of legacy code                                │
+│ ├─ No prefix defined                                        │
+│ └─ Functionality covered by erp_complete.py                 │
+└─────────────────────────────────────────────────────────────┘
+
+DATA FLOW:
+┌─────────────┐
+│   Request   │
+│ /api/v1/erp │
+└──────┬──────┘
+       │
+       v
+┌─────────────────┐
+│ erp_complete.py │
+└────────┬────────┘
+         │
+         ├─── Try Real DB (Supabase)
+         │    ├─ Success → Return data (status: operational)
+         │    └─ Fail (500, 503)
+         │         │
+         │         v
+         └─── Fallback to STORE
+              └─ erp_core_runtime.InMemoryERPStore
+                 └─ Return mock data (status: offline)
+
+ROUTE CONFLICT RESOLUTION:
+BEFORE:                          AFTER:
+├─ /api/v1/erp                   ├─ /api/v1/erp
+│  ├─ erp_complete.py ✓          │  └─ erp_complete.py ✓
+│  ├─ erp_core_runtime.py ✗      │
+│  └─ complete_erp.py ✗          ├─ /api/v1/erp/weathercraft
+│                                 │  └─ weathercraft_integration.py ✓
+├─ /api/v1/erp/weathercraft      │
+│  └─ weathercraft_integration   └─ /api/v1/erp/public
+│                                    └─ public_endpoints.py ✓
+└─ /api/v1/erp/public
+   └─ public_endpoints.py        DEPENDENCY (not mounted):
+                                 └─ erp_core_runtime.py
+                                    (importable but no routes)
+
+                                 ARCHIVED:
+                                 └─ archive/deprecated_routes/
+                                    └─ complete_erp.py
+

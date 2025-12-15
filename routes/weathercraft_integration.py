@@ -56,8 +56,8 @@ async def sync_customer(
         )
         return result
     except Exception as e:
-        logger.error(f"Customer sync error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Customer sync error")
+        raise HTTPException(status_code=500, detail="Customer sync failed") from e
 
 @router.get("/customers/{customer_id}/unified")
 async def get_unified_customer_view(
@@ -79,8 +79,8 @@ async def get_unified_customer_view(
         view = await integration.get_unified_customer_view(customer_id)
         return view
     except Exception as e:
-        logger.error(f"Unified view error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Unified view error")
+        raise HTTPException(status_code=500, detail="Unified customer view failed") from e
 
 # =========================================================================
 # WORKFLOW TRIGGER ENDPOINTS
@@ -111,8 +111,8 @@ async def generate_estimate_draft(
         )
         return result
     except Exception as e:
-        logger.error(f"Estimate draft generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Estimate draft generation error")
+        raise HTTPException(status_code=500, detail="Estimate draft generation failed") from e
 
 @router.get("/estimates/{estimate_id}/ai-analysis")
 async def get_estimate_ai_analysis(
@@ -135,8 +135,8 @@ async def get_estimate_ai_analysis(
         )
         return {"insights": insights}
     except Exception as e:
-        logger.error(f"Estimate analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Estimate analysis error")
+        raise HTTPException(status_code=500, detail="Estimate AI analysis failed") from e
 
 # =========================================================================
 # AI INSIGHTS ENDPOINTS
@@ -172,8 +172,8 @@ async def get_ai_insights(
         )
         return {"insights": insights, "count": len(insights)}
     except Exception as e:
-        logger.error(f"Get insights error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Get insights error")
+        raise HTTPException(status_code=500, detail="Failed to fetch insights") from e
 
 @router.post("/insights/{insight_id}/feedback")
 async def provide_insight_feedback(
@@ -198,8 +198,8 @@ async def provide_insight_feedback(
         )
         return {"status": "feedback_recorded", "insight_id": insight_id}
     except Exception as e:
-        logger.error(f"Insight feedback error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Insight feedback error")
+        raise HTTPException(status_code=500, detail="Failed to record insight feedback") from e
 
 # =========================================================================
 # SYNC STATUS ENDPOINTS
@@ -250,8 +250,8 @@ async def get_sync_status(
             "integration_active": True
         }
     except Exception as e:
-        logger.error(f"Sync status error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Sync status error")
+        raise HTTPException(status_code=500, detail="Failed to fetch sync status") from e
 
 @router.get("/health")
 async def integration_health():

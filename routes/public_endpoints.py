@@ -11,17 +11,10 @@ import uuid
 from datetime import datetime
 import logging
 
+from database import get_db
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/erp/public", tags=["Public"])
-
-def get_db():
-    """Get database session"""
-    from main import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 class EstimateRequest(BaseModel):
     customer_name: str
@@ -33,7 +26,7 @@ class EstimateRequest(BaseModel):
     notes: Optional[str] = None
 
 @router.post("/estimate-request")
-async def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_db)):
+def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_db)):
     """Create estimate from public website"""
     try:
         # Calculate estimate based on roof size and type

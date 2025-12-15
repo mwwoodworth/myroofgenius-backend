@@ -10,29 +10,13 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-# Add parent path for imports
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from database import SessionLocal as _SessionLocal
 
-# Import database session
-try:
-    from main import SessionLocal
-except ImportError:
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    try:
-        from config import get_database_url
-    except ImportError:
-        get_database_url = lambda: None  # type: ignore
-
-    DATABASE_URL = os.getenv("DATABASE_URL") or get_database_url()
-    if not DATABASE_URL:
-        # In test/offline scenarios we allow import to succeed without DB.
-        def SessionLocal():  # type: ignore
-            raise RuntimeError("DATABASE_URL must be configured for Stripe webhook handling.")
-    else:
-        engine = create_engine(DATABASE_URL)
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if _SessionLocal is None:  # pragma: no cover
+    def SessionLocal():  # type: ignore
+        raise RuntimeError("DATABASE_URL must be configured for Stripe webhook handling.")
+else:
+    SessionLocal = _SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +27,9 @@ if not stripe.api_key:
 
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-router = APIRouter(tags=["stripe-webhooks"])
+router = APIRouter(prefix="/api/v1/stripe", tags=["stripe-webhooks"])
 
-@router.post("/api/v1/stripe/webhook")
+@router.post("/webhook")
 async def handle_stripe_webhook(
     request: Request,
     stripe_signature: Optional[str] = Header(None)
@@ -401,7 +385,7 @@ async def handle_payment_method_attached(db: Session, data: dict):
         db.rollback()
 
 
-@router.get("/api/v1/stripe/webhook/test")
+@router.get("/webhook/test")
 async def test_webhook():
     """Test endpoint to verify webhook is accessible"""
     return {

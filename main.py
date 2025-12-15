@@ -13,6 +13,7 @@ CRITICAL FIX: AI AGENTS SERVICE AUTHENTICATION
 """
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -306,6 +307,64 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Consistent error envelope while preserving FastAPI's `detail` shape for compatibility.
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error": {
+                "type": "HTTPException",
+                "message": exc.detail,
+                "status_code": exc.status_code,
+                "path": request.url.path,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        headers=exc.headers or {},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors(),
+            "error": {
+                "type": "RequestValidationError",
+                "message": "Request validation failed",
+                "status_code": 422,
+                "path": request.url.path,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception for %s %s: %s", request.method, request.url.path, exc)
+    # Do not leak internal exception details outside dev environments.
+    if settings.environment.lower() in {"production", "prod"}:
+        detail: Any = "Internal server error"
+    else:
+        detail = str(exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": detail,
+            "error": {
+                "type": "InternalServerError",
+                "message": detail,
+                "status_code": 500,
+                "path": request.url.path,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -411,19 +470,9 @@ if not dynamic_routes_loaded:
     except Exception as e:
         logger.error(f"⚠️  Failed to load AI Agents routes (fallback): {e}")
 
-# Load Elena Roofing AI routes (only when not using dynamic loader above)
 elif ELENA_AVAILABLE:
-    try:
-        from routes.elena_roofing_agent import router as elena_router
-        app.include_router(elena_router)
-        logger.info("✅ Elena Roofing AI routes loaded at /api/v1/elena")
-    except Exception as e:
-        logger.error(f"⚠️  Failed to load Elena routes: {e}")
-
-# Load AI Agents routes (CRITICAL - needed for all agent endpoints)
-if dynamic_routes_loaded:
-    # Already loaded by routes.route_loader; keep this block for observability only.
-    logger.debug("AI Agents routes loaded via dynamic loader")
+    # Elena routes are loaded via the dynamic route loader.
+    logger.debug("Elena routes loaded via dynamic loader")
 
 # Load Gemini Estimation Engine
 try:

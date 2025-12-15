@@ -34,6 +34,7 @@ DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
     "/openapi/",
     "/static/",
     "/public/",
+    "/api/v1/erp/public",
 )
 
 

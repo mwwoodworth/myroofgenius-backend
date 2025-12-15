@@ -438,19 +438,6 @@ async def create_estimate_endpoint(payload: EstimateCreate) -> Dict[str, Any]:
     estimate = await STORE.create_estimate(payload)
     return {"success": True, "estimate": estimate}
 
-
-@router.get("/estimates")
-async def list_estimates_endpoint() -> Dict[str, Any]:
-    estimates = await STORE.list_estimates()
-    return {"success": True, "estimates": estimates, "total": len(estimates)}
-
-
-@router.get("/jobs")
-async def list_jobs_endpoint() -> Dict[str, Any]:
-    jobs = await STORE.list_jobs()
-    return {"success": True, "jobs": jobs, "total": len(jobs)}
-
-
 @router.get("/jobs/profitability")
 async def job_profitability_endpoint() -> Dict[str, Any]:
     data = await STORE.job_profitability()
@@ -488,13 +475,6 @@ async def create_invoice_endpoint(payload: InvoiceCreate) -> Dict[str, Any]:
     invoice = await STORE.create_invoice(payload)
     return {"success": True, "invoice": invoice}
 
-
-@router.get("/invoices")
-async def list_invoices_endpoint() -> Dict[str, Any]:
-    invoices = await STORE.list_invoices()
-    return {"success": True, "invoices": invoices, "total": len(invoices)}
-
-
 @router.post("/payments")
 async def create_payment_endpoint(payload: PaymentCreate) -> Dict[str, Any]:
     if payload.amount <= 0:
@@ -519,4 +499,3 @@ async def create_warranty_endpoint(payload: WarrantyCreate) -> Dict[str, Any]:
 async def service_dashboard_endpoint() -> Dict[str, Any]:
     dashboard = await STORE.service_dashboard()
     return {"success": True, **dashboard}
-

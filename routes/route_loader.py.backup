@@ -84,11 +84,6 @@ EXCLUDED_MODULES = {
     "estimate_management",
     # Placeholder shim endpoints; kept for reference but not mounted in production routing.
     "erp_fixes",
-    # Dependency modules - not mounted as routes but used by other modules
-    "erp_core_runtime",  # Provides STORE fallback for erp_complete.py
-    # Archived routes (moved to archive/deprecated_routes/ on 2025-12-15)
-    # - complete_erp: No prefix defined, caused routing conflicts with weathercraft alias
-    # Note: erp_complete.py is the active ERP implementation
 }
 
 def load_all_routes(app: FastAPI):
