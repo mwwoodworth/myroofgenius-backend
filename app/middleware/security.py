@@ -207,9 +207,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 }
                 request.state.user_id = cache_entry.key_id
             else:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid API key",
+                # Return JSONResponse directly - HTTPException from middleware may not
+                # reach app exception handlers, causing 500 instead of 401
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid API key"},
                     headers={"WWW-Authenticate": "ApiKey"},
                 )
 
@@ -222,11 +225,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return auth_header[len("ApiKey ") :].strip()
 
         if auth_header.startswith("Bearer "):
-            token = auth_header[len("Bearer ") :].strip()
-            # Treat JWT-ish Bearer tokens as user auth, not API keys.
-            if token.count(".") == 2:
-                return None
-            return token
+            # Bearer tokens should always be handled by AuthenticationMiddleware,
+            # not treated as API keys. This prevents non-JWT Bearer tokens from
+            # being incorrectly validated as API keys (causing 500 errors).
+            return None
 
         return request.headers.get("X-API-Key") or request.headers.get("x-api-key")
 
