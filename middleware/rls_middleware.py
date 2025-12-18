@@ -14,8 +14,18 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-min-32-chars-long-weathercraft")
+# Configuration - SECURITY: JWT_SECRET_KEY must be set in production
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    # In development, warn but allow startup with a dev-only key
+    if os.getenv("ENVIRONMENT", "development").lower() in ("development", "dev", "local"):
+        logger.warning("⚠️ JWT_SECRET_KEY not set - using development fallback. DO NOT USE IN PRODUCTION!")
+        SECRET_KEY = "dev-only-secret-key-min-32-chars-long-not-for-production"
+    else:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY environment variable must be set in production. "
+            "Generate a secure key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 class RLSMiddleware(BaseHTTPMiddleware):
