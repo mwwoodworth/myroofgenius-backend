@@ -16,7 +16,9 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from core.supabase_auth import get_authenticated_user
-from routes.erp_core_runtime import STORE
+
+# NOTE: STORE import removed 2025-12-18 - fake data fallback is dangerous
+# System should fail with 503 error, not return fake/mock data that misleads users
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/erp", tags=["ERP"])
@@ -57,7 +59,8 @@ async def get_erp_customers(
         return {"customers": customers, "total": total, "skip": skip, "limit": limit, "status": "operational"}
     except HTTPException as exc:
         if _should_fallback(exc):
-            return {"customers": [], "total": 0, "skip": skip, "limit": limit, "status": "offline"}
+            logger.error("ERP customers query failed with 5xx - returning 503")
+            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
         raise
 
 
@@ -104,22 +107,8 @@ async def get_erp_jobs(
         return {"jobs": jobs, "total": total, "skip": skip, "limit": limit, "status": "operational"}
     except HTTPException as exc:
         if _should_fallback(exc):
-            data = await STORE.list_jobs()
-            jobs = [
-                {
-                    "id": job.get("id"),
-                    "job_number": job.get("job_number"),
-                    "name": job.get("name"),
-                    "status": job.get("status"),
-                    "customer_id": (job.get("customer") or {}).get("id"),
-                    "start_date": job.get("start_date"),
-                    "end_date": job.get("end_date"),
-                    "created_at": job.get("created_at"),
-                    "updated_at": job.get("updated_at"),
-                }
-                for job in data
-            ]
-            return {"jobs": jobs, "total": len(jobs), "skip": skip, "limit": limit, "status": "offline"}
+            logger.error("ERP jobs query failed with 5xx - returning 503")
+            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
         raise
 
 
@@ -166,20 +155,8 @@ async def get_erp_estimates(
         return {"estimates": mapped, "total": total, "skip": skip, "limit": limit, "status": "operational"}
     except HTTPException as exc:
         if _should_fallback(exc):
-            data = await STORE.list_estimates()
-            mapped = [
-                {
-                    "id": est.get("id"),
-                    "estimate_number": est.get("estimate_number"),
-                    "customer_id": est.get("customer_id"),
-                    "status": est.get("status"),
-                    "total_amount": est.get("total") or 0,
-                    "created_at": est.get("created_at"),
-                    "updated_at": est.get("updated_at"),
-                }
-                for est in data
-            ]
-            return {"estimates": mapped, "total": len(mapped), "skip": skip, "limit": limit, "status": "offline"}
+            logger.error("ERP estimates query failed with 5xx - returning 503")
+            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
         raise
 
 
@@ -225,21 +202,8 @@ async def get_erp_invoices(
         return {"invoices": mapped, "total": total, "skip": skip, "limit": limit, "status": "operational"}
     except HTTPException as exc:
         if _should_fallback(exc):
-            data = await STORE.list_invoices()
-            mapped = [
-                {
-                    "id": inv.get("id"),
-                    "invoice_number": inv.get("invoice_number"),
-                    "customer_id": inv.get("customer_id"),
-                    "status": inv.get("status"),
-                    "total_amount": inv.get("amount") or 0,
-                    "due_date": inv.get("due_date"),
-                    "created_at": inv.get("issued_at"),
-                    "updated_at": inv.get("updated_at"),
-                }
-                for inv in data
-            ]
-            return {"invoices": mapped, "total": len(mapped), "skip": skip, "limit": limit, "status": "offline"}
+            logger.error("ERP invoices query failed with 5xx - returning 503")
+            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
         raise
 
 
@@ -256,28 +220,9 @@ async def get_erp_dashboard(
 
     db_pool = getattr(request.app.state, "db_pool", None)
     if not db_pool:
-        # Best-effort offline metrics from the runtime store.
-        jobs = await STORE.list_jobs()
-        estimates = await STORE.list_estimates()
-        invoices = await STORE.list_invoices()
-        active_jobs = sum(1 for job in jobs if (job.get("status") or "").lower() in {"scheduled", "in_progress"})
-        pending_invoices = sum(
-            1 for inv in invoices if (inv.get("status") or "").lower() in {"pending", "overdue"}
-        )
-        paid_total = sum(float(inv.get("amount") or 0) for inv in invoices if (inv.get("status") or "").lower() == "paid")
-        return {
-            "metrics": {
-                "total_jobs": len(jobs),
-                "total_estimates": len(estimates),
-                "total_invoices": len(invoices),
-                "total_customers": 0,
-                "active_jobs": active_jobs,
-                "pending_invoices": pending_invoices,
-                "revenue_mtd": paid_total,
-                "revenue_ytd": paid_total,
-            },
-            "status": "offline",
-        }
+        # No fake data fallback - fail properly so users know there's an issue
+        logger.error("ERP dashboard: db_pool not available - returning 503")
+        raise HTTPException(status_code=503, detail="Database connection not available")
 
     query = """
         SELECT
@@ -346,20 +291,8 @@ async def get_erp_inventory(
         return {"inventory": inventory, "total": total, "skip": skip, "limit": limit, "status": "operational"}
     except HTTPException as exc:
         if _should_fallback(exc):
-            levels = await STORE.inventory_levels()
-            inventory = [
-                {
-                    "id": item.get("item_id"),
-                    "name": item.get("item_name"),
-                    "sku": item.get("item_id"),
-                    "quantity": item.get("on_hand"),
-                    "unit": item.get("unit"),
-                    "reorder_point": item.get("reorder_point"),
-                    "unit_cost": 0,
-                }
-                for item in levels
-            ]
-            return {"inventory": inventory, "total": len(inventory), "skip": skip, "limit": limit, "status": "offline"}
+            logger.error("ERP inventory query failed with 5xx - returning 503")
+            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
         raise
 
 
@@ -375,9 +308,9 @@ async def get_erp_schedule(
 
     db_pool = getattr(request.app.state, "db_pool", None)
     if not db_pool:
-        calendar = await STORE.calendar(None)
-        events = calendar.get("events") or []
-        return {"schedule": events, "total": len(events), "status": "offline"}
+        # No fake data fallback - fail properly
+        logger.error("ERP schedule: db_pool not available - returning 503")
+        raise HTTPException(status_code=503, detail="Database connection not available")
 
     try:
         async with db_pool.acquire() as conn:
