@@ -52,10 +52,10 @@ async def get_tenants_stats_summary(
     request: Request,
     pool: asyncpg.Pool = Depends(get_db_pool)
 ):
-    """Get tenants statistics summary"""
+    """Get tenants statistics summary - optimized for performance"""
     try:
         async with pool.acquire() as conn:
-            # Get tenant counts
+            # Get tenant counts (fast query)
             stats = await conn.fetchrow("""
                 SELECT
                     COUNT(*) as total_tenants,
@@ -68,29 +68,22 @@ async def get_tenants_stats_summary(
 
             # Get plan breakdown (subscription_tier in schema)
             plans = await conn.fetch("""
-                SELECT subscription_tier as plan, COUNT(*) as count
+                SELECT COALESCE(subscription_tier, 'unknown') as plan, COUNT(*) as count
                 FROM tenants
                 WHERE status = 'active'
                 GROUP BY subscription_tier
             """)
 
-            # Get top tenants by customer count
+            # Get top tenants - simplified query without expensive JOINs
             top_tenants = await conn.fetch("""
                 SELECT
-                    t.id,
-                    t.name,
-                    t.company_name,
-                    t.subscription_tier as plan,
-                    COUNT(DISTINCT c.id) as customer_count,
-                    COUNT(DISTINCT j.id) as job_count,
-                    COALESCE(SUM(i.total_amount), 0) as total_revenue
-                FROM tenants t
-                LEFT JOIN customers c ON t.id = c.tenant_id
-                LEFT JOIN jobs j ON t.id = j.tenant_id
-                LEFT JOIN invoices i ON t.id = i.tenant_id AND (i.status = 'paid' OR i.payment_status = 'paid')
-                WHERE t.status = 'active'
-                GROUP BY t.id, t.name, t.company_name, t.subscription_tier
-                ORDER BY customer_count DESC
+                    id,
+                    name,
+                    company_name,
+                    COALESCE(subscription_tier, 'starter') as plan
+                FROM tenants
+                WHERE status = 'active'
+                ORDER BY created_at DESC
                 LIMIT 5
             """)
 
@@ -107,22 +100,22 @@ async def get_tenants_stats_summary(
                     "new_this_week": stats['new_this_week'] or 0
                 },
                 "by_plan": {
-                    row['plan']: row['count'] for row in plans
+                    (row['plan'] or 'unknown'): row['count'] for row in plans
                 },
                 "top_tenants": [
                     {
                         "id": str(t['id']),
                         "name": t['name'],
                         "company_name": t['company_name'],
-                        "plan": t['plan'],
-                        "customer_count": t['customer_count'],
-                        "job_count": t['job_count'],
-                        "total_revenue": float(t['total_revenue'] or 0)
+                        "plan": t['plan']
                     }
                     for t in top_tenants
                 ]
             }
         }
+    except asyncpg.exceptions.QueryCanceledError as e:
+        logger.error(f"Query timeout in tenant stats: {e}")
+        raise HTTPException(status_code=504, detail="Query timeout - please try again")
     except Exception as e:
         logger.error(f"Error getting tenant stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get tenant statistics: {str(e)}")
