@@ -66,12 +66,12 @@ async def get_tenants_stats_summary(
                 FROM tenants
             """)
 
-            # Get plan breakdown
+            # Get plan breakdown (subscription_tier in schema)
             plans = await conn.fetch("""
-                SELECT plan, COUNT(*) as count
+                SELECT subscription_tier as plan, COUNT(*) as count
                 FROM tenants
                 WHERE status = 'active'
-                GROUP BY plan
+                GROUP BY subscription_tier
             """)
 
             # Get top tenants by customer count
@@ -80,7 +80,7 @@ async def get_tenants_stats_summary(
                     t.id,
                     t.name,
                     t.company_name,
-                    t.plan,
+                    t.subscription_tier as plan,
                     COUNT(DISTINCT c.id) as customer_count,
                     COUNT(DISTINCT j.id) as job_count,
                     COALESCE(SUM(i.total_amount), 0) as total_revenue
@@ -89,7 +89,7 @@ async def get_tenants_stats_summary(
                 LEFT JOIN jobs j ON t.id = j.tenant_id
                 LEFT JOIN invoices i ON t.id = i.tenant_id AND (i.status = 'paid' OR i.payment_status = 'paid')
                 WHERE t.status = 'active'
-                GROUP BY t.id, t.name, t.company_name, t.plan
+                GROUP BY t.id, t.name, t.company_name, t.subscription_tier
                 ORDER BY customer_count DESC
                 LIMIT 5
             """)
@@ -137,7 +137,7 @@ async def get_all_tenants(
     try:
         async with pool.acquire() as conn:
             result = await conn.fetch("""
-                SELECT id, name, email, company_name, plan, status, created_at
+                SELECT id, name, owner_email, company_name, subscription_tier, status, created_at
                 FROM tenants
                 ORDER BY created_at DESC
             """)
@@ -146,9 +146,9 @@ async def get_all_tenants(
             {
                 "id": str(row['id']),
                 "name": row['name'],
-                "email": row['email'],
+                "email": row['owner_email'],
                 "company_name": row['company_name'],
-                "plan": row['plan'],
+                "plan": row['subscription_tier'],
                 "status": row['status'],
                 "created_at": row['created_at'].isoformat() if row['created_at'] else None
             }
@@ -179,12 +179,15 @@ async def create_tenant(
         tenant_id = str(uuid.uuid4())
 
         async with pool.acquire() as conn:
-            # Create tenant record
+            # Create tenant record (using actual schema columns)
+            # Required: subdomain, schema_name, owner_email, company_name
+            subdomain = tenant.email.split('@')[0].lower().replace('.', '-')[:50]
+            schema_name = f"tenant_{subdomain}"
             await conn.execute("""
-                INSERT INTO tenants (id, name, email, company_name, plan, phone, website, status, created_at)
+                INSERT INTO tenants (id, name, owner_email, company_name, subscription_tier, subdomain, schema_name, status, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', NOW())
             """, uuid.UUID(tenant_id), tenant.name, tenant.email, tenant.company_name,
-                tenant.plan, tenant.phone, tenant.website)
+                tenant.plan or 'professional', subdomain, schema_name)
 
             # Also create a customer record for this tenant
             customer_id = str(uuid.uuid4())
@@ -223,15 +226,13 @@ async def get_tenant(
         return {
             "id": str(result['id']),
             "name": result['name'],
-            "email": result['email'],
+            "email": result.get('owner_email'),
             "company_name": result['company_name'],
-            "plan": result['plan'],
-            "phone": result.get('phone'),
-            "website": result.get('website'),
-            "status": result['status'],
+            "plan": result.get('subscription_tier'),
+            "subdomain": result.get('subdomain'),
+            "status": result.get('status'),
             "stripe_customer_id": result.get('stripe_customer_id'),
             "stripe_subscription_id": result.get('stripe_subscription_id'),
-            "settings": result.get('settings') or {},
             "created_at": result['created_at'].isoformat() if result['created_at'] else None
         }
     except HTTPException:
@@ -266,18 +267,8 @@ async def update_tenant(
 
         if tenant.plan is not None:
             param_count += 1
-            update_fields.append(f"plan = ${param_count}")
+            update_fields.append(f"subscription_tier = ${param_count}")
             params.append(tenant.plan)
-
-        if tenant.phone is not None:
-            param_count += 1
-            update_fields.append(f"phone = ${param_count}")
-            params.append(tenant.phone)
-
-        if tenant.website is not None:
-            param_count += 1
-            update_fields.append(f"website = ${param_count}")
-            params.append(tenant.website)
 
         if tenant.status is not None:
             param_count += 1
