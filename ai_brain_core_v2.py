@@ -21,7 +21,9 @@ class AIBrainCore:
     """Simplified AI Brain that works with existing database schema"""
     
     def __init__(self):
-        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+        import os
+        db_password = os.getenv("DB_PASSWORD", "Brain0ps2O2S")
+        self.conn_str = f"postgresql://postgres.yomagoqdmxszqtdwuhab:{db_password}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
         self.agents = {}
         self.neural_pathways = {}  # Dict for pathways
         self.session_id = str(uuid.uuid4())

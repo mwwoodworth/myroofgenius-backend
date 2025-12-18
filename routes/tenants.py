@@ -1,34 +1,29 @@
-"""Tenants/Multi-tenant API Routes"""
-from fastapi import APIRouter, HTTPException, Depends, Header
+"""
+Tenants/Multi-tenant API Routes - v163.0.26
+Fixed to use asyncpg for proper async database operations
+"""
+from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-import os
-import sys
-import json
+import asyncpg
+import logging
 
-# Add parent path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-# Import database session
-try:
-    from main import SessionLocal
-except ImportError:
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    DATABASE_URL = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-    )
-
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["tenants"])
+
+# Database pool dependency - uses app state
+async def get_db_pool(request: Request) -> asyncpg.Pool:
+    """Get database pool from app state"""
+    pool = getattr(request.app.state, 'db_pool', None)
+    if pool is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available"
+        )
+    return pool
 
 class TenantCreate(BaseModel):
     name: str
@@ -49,283 +44,356 @@ class TenantUpdate(BaseModel):
 def get_current_tenant(x_tenant_id: Optional[str] = Header(None)):
     """Extract tenant ID from header"""
     if not x_tenant_id:
-        # For now, return a default tenant ID
         return "default"
     return x_tenant_id
 
-@router.get("/tenants")
-async def get_all_tenants():
+@router.get("/stats/summary")
+async def get_tenants_stats_summary(
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """Get tenants statistics summary"""
+    try:
+        async with pool.acquire() as conn:
+            # Get tenant counts
+            stats = await conn.fetchrow("""
+                SELECT
+                    COUNT(*) as total_tenants,
+                    COUNT(*) FILTER (WHERE status = 'active') as active_tenants,
+                    COUNT(*) FILTER (WHERE status = 'inactive') as inactive_tenants,
+                    COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '30 days') as new_this_month,
+                    COUNT(*) FILTER (WHERE created_at > CURRENT_DATE - INTERVAL '7 days') as new_this_week
+                FROM tenants
+            """)
+
+            # Get plan breakdown
+            plans = await conn.fetch("""
+                SELECT plan, COUNT(*) as count
+                FROM tenants
+                WHERE status = 'active'
+                GROUP BY plan
+            """)
+
+            # Get top tenants by customer count
+            top_tenants = await conn.fetch("""
+                SELECT
+                    t.id,
+                    t.name,
+                    t.company_name,
+                    t.plan,
+                    COUNT(DISTINCT c.id) as customer_count,
+                    COUNT(DISTINCT j.id) as job_count,
+                    COALESCE(SUM(i.total_amount), 0) as total_revenue
+                FROM tenants t
+                LEFT JOIN customers c ON t.id = c.tenant_id
+                LEFT JOIN jobs j ON t.id = j.tenant_id
+                LEFT JOIN invoices i ON t.id = i.tenant_id AND (i.status = 'paid' OR i.payment_status = 'paid')
+                WHERE t.status = 'active'
+                GROUP BY t.id, t.name, t.company_name, t.plan
+                ORDER BY customer_count DESC
+                LIMIT 5
+            """)
+
+        return {
+            "success": True,
+            "data": {
+                "total_tenants": stats['total_tenants'] or 0,
+                "by_status": {
+                    "active": stats['active_tenants'] or 0,
+                    "inactive": stats['inactive_tenants'] or 0
+                },
+                "growth": {
+                    "new_this_month": stats['new_this_month'] or 0,
+                    "new_this_week": stats['new_this_week'] or 0
+                },
+                "by_plan": {
+                    row['plan']: row['count'] for row in plans
+                },
+                "top_tenants": [
+                    {
+                        "id": str(t['id']),
+                        "name": t['name'],
+                        "company_name": t['company_name'],
+                        "plan": t['plan'],
+                        "customer_count": t['customer_count'],
+                        "job_count": t['job_count'],
+                        "total_revenue": float(t['total_revenue'] or 0)
+                    }
+                    for t in top_tenants
+                ]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting tenant stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tenant statistics: {str(e)}")
+
+@router.get("")
+@router.get("/")
+async def get_all_tenants(
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Get all tenants (admin only)"""
     try:
-        with SessionLocal() as db:
-            result = db.execute(text("""
+        async with pool.acquire() as conn:
+            result = await conn.fetch("""
                 SELECT id, name, email, company_name, plan, status, created_at
                 FROM tenants
                 ORDER BY created_at DESC
-            """))
+            """)
 
-            tenants = []
-            for row in result:
-                tenants.append({
-                    "id": str(row.id),
-                    "name": row.name,
-                    "email": row.email,
-                    "company_name": row.company_name,
-                    "plan": row.plan,
-                    "status": row.status,
-                    "created_at": row.created_at.isoformat() if row.created_at else None
-                })
-
-            return {
-                "tenants": tenants,
-                "total": len(tenants)
+        tenants = [
+            {
+                "id": str(row['id']),
+                "name": row['name'],
+                "email": row['email'],
+                "company_name": row['company_name'],
+                "plan": row['plan'],
+                "status": row['status'],
+                "created_at": row['created_at'].isoformat() if row['created_at'] else None
             }
+            for row in result
+        ]
+
+        return {
+            "tenants": tenants,
+            "total": len(tenants)
+        }
     except Exception as e:
-        # Return empty list on error (table might not exist)
+        logger.error(f"Error getting tenants: {e}")
         return {
             "tenants": [],
             "total": 0,
-            "error": str(e) if os.getenv("DEBUG") else "Database error"
+            "error": str(e)
         }
 
-@router.post("/tenants")
-async def create_tenant(tenant: TenantCreate):
+@router.post("")
+@router.post("/")
+async def create_tenant(
+    request: Request,
+    tenant: TenantCreate,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Create a new tenant"""
     try:
-        with SessionLocal() as db:
-            tenant_id = str(uuid.uuid4())
+        tenant_id = str(uuid.uuid4())
 
+        async with pool.acquire() as conn:
             # Create tenant record
-            result = db.execute(text("""
+            await conn.execute("""
                 INSERT INTO tenants (id, name, email, company_name, plan, phone, website, status, created_at)
-                VALUES (:id, :name, :email, :company_name, :plan, :phone, :website, 'active', NOW())
-                RETURNING id
-            """), {
-                "id": tenant_id,
-                "name": tenant.name,
-                "email": tenant.email,
-                "company_name": tenant.company_name,
-                "plan": tenant.plan,
-                "phone": tenant.phone,
-                "website": tenant.website
-            })
-            db.commit()
+                VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', NOW())
+            """, uuid.UUID(tenant_id), tenant.name, tenant.email, tenant.company_name,
+                tenant.plan, tenant.phone, tenant.website)
 
             # Also create a customer record for this tenant
-            db.execute(text("""
+            customer_id = str(uuid.uuid4())
+            await conn.execute("""
                 INSERT INTO customers (id, name, email, phone, company, tenant_id, created_at)
-                VALUES (:id, :name, :email, :phone, :company, :tenant_id, NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
                 ON CONFLICT DO NOTHING
-            """), {
-                "id": str(uuid.uuid4()),
-                "name": tenant.name,
-                "email": tenant.email,
-                "phone": tenant.phone,
-                "company": tenant.company_name,
-                "tenant_id": tenant_id
-            })
-            db.commit()
+            """, uuid.UUID(customer_id), tenant.name, tenant.email, tenant.phone,
+                tenant.company_name, uuid.UUID(tenant_id))
 
-            return {
-                "id": tenant_id,
-                "message": "Tenant created successfully",
-                "tenant": tenant.dict()
-            }
+        return {
+            "id": tenant_id,
+            "message": "Tenant created successfully",
+            "tenant": tenant.dict()
+        }
     except Exception as e:
-        # If tenants table doesn't exist, create it
-        if "relation \"tenants\" does not exist" in str(e):
-            try:
-                with SessionLocal() as db:
-                    db.execute(text("""
-                        CREATE TABLE IF NOT EXISTS tenants (
-                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                            name VARCHAR(255) NOT NULL,
-                            email VARCHAR(255) UNIQUE NOT NULL,
-                            company_name VARCHAR(255) NOT NULL,
-                            plan VARCHAR(50) DEFAULT 'starter',
-                            phone VARCHAR(50),
-                            website VARCHAR(255),
-                            status VARCHAR(50) DEFAULT 'active',
-                            stripe_customer_id VARCHAR(255),
-                            stripe_subscription_id VARCHAR(255),
-                            settings JSONB DEFAULT '{}',
-                            created_at TIMESTAMP DEFAULT NOW(),
-                            updated_at TIMESTAMP DEFAULT NOW()
-                        )
-                    """))
-                    db.commit()
-
-                    # Try again
-                    return await create_tenant(tenant)
-            except Exception as create_error:
-                raise HTTPException(status_code=500, detail=f"Failed to create tenants table: {str(create_error)}")
-
+        logger.error(f"Error creating tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tenants/{tenant_id}")
-async def get_tenant(tenant_id: str):
+@router.get("/{tenant_id}")
+async def get_tenant(
+    tenant_id: str,
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Get a specific tenant"""
     try:
-        with SessionLocal() as db:
-            result = db.execute(text("""
-                SELECT * FROM tenants WHERE id = :id
-            """), {"id": tenant_id}).first()
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow("""
+                SELECT * FROM tenants WHERE id = $1
+            """, uuid.UUID(tenant_id))
 
-            if not result:
-                raise HTTPException(status_code=404, detail="Tenant not found")
+        if not result:
+            raise HTTPException(status_code=404, detail="Tenant not found")
 
-            return {
-                "id": str(result.id),
-                "name": result.name,
-                "email": result.email,
-                "company_name": result.company_name,
-                "plan": result.plan,
-                "phone": result.phone,
-                "website": result.website if hasattr(result, 'website') else None,
-                "status": result.status,
-                "stripe_customer_id": result.stripe_customer_id if hasattr(result, 'stripe_customer_id') else None,
-                "stripe_subscription_id": result.stripe_subscription_id if hasattr(result, 'stripe_subscription_id') else None,
-                "settings": result.settings if hasattr(result, 'settings') else {},
-                "created_at": result.created_at.isoformat() if result.created_at else None
-            }
+        return {
+            "id": str(result['id']),
+            "name": result['name'],
+            "email": result['email'],
+            "company_name": result['company_name'],
+            "plan": result['plan'],
+            "phone": result.get('phone'),
+            "website": result.get('website'),
+            "status": result['status'],
+            "stripe_customer_id": result.get('stripe_customer_id'),
+            "stripe_subscription_id": result.get('stripe_subscription_id'),
+            "settings": result.get('settings') or {},
+            "created_at": result['created_at'].isoformat() if result['created_at'] else None
+        }
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error getting tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/tenants/{tenant_id}")
-async def update_tenant(tenant_id: str, tenant: TenantUpdate):
+@router.put("/{tenant_id}")
+async def update_tenant(
+    tenant_id: str,
+    tenant: TenantUpdate,
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Update a tenant"""
     try:
-        with SessionLocal() as db:
-            # Build update query dynamically
-            update_fields = []
-            params = {"id": tenant_id}
+        # Build update query dynamically
+        update_fields = []
+        params = []
+        param_count = 0
 
-            if tenant.name is not None:
-                update_fields.append("name = :name")
-                params["name"] = tenant.name
+        if tenant.name is not None:
+            param_count += 1
+            update_fields.append(f"name = ${param_count}")
+            params.append(tenant.name)
 
-            if tenant.company_name is not None:
-                update_fields.append("company_name = :company_name")
-                params["company_name"] = tenant.company_name
+        if tenant.company_name is not None:
+            param_count += 1
+            update_fields.append(f"company_name = ${param_count}")
+            params.append(tenant.company_name)
 
-            if tenant.plan is not None:
-                update_fields.append("plan = :plan")
-                params["plan"] = tenant.plan
+        if tenant.plan is not None:
+            param_count += 1
+            update_fields.append(f"plan = ${param_count}")
+            params.append(tenant.plan)
 
-            if tenant.phone is not None:
-                update_fields.append("phone = :phone")
-                params["phone"] = tenant.phone
+        if tenant.phone is not None:
+            param_count += 1
+            update_fields.append(f"phone = ${param_count}")
+            params.append(tenant.phone)
 
-            if tenant.website is not None:
-                update_fields.append("website = :website")
-                params["website"] = tenant.website
+        if tenant.website is not None:
+            param_count += 1
+            update_fields.append(f"website = ${param_count}")
+            params.append(tenant.website)
 
-            if tenant.status is not None:
-                update_fields.append("status = :status")
-                params["status"] = tenant.status
+        if tenant.status is not None:
+            param_count += 1
+            update_fields.append(f"status = ${param_count}")
+            params.append(tenant.status)
 
-            if not update_fields:
-                raise HTTPException(status_code=400, detail="No fields to update")
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
 
-            update_fields.append("updated_at = NOW()")
+        update_fields.append("updated_at = NOW()")
+        params.append(uuid.UUID(tenant_id))
 
-            query = f"""
-                UPDATE tenants
-                SET {', '.join(update_fields)}
-                WHERE id = :id
-                RETURNING id
-            """
+        query = f"""
+            UPDATE tenants
+            SET {', '.join(update_fields)}
+            WHERE id = ${len(params)}
+            RETURNING id
+        """
 
-            result = db.execute(text(query), params)
-            db.commit()
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow(query, *params)
 
-            if not result.scalar():
-                raise HTTPException(status_code=404, detail="Tenant not found")
+        if not result:
+            raise HTTPException(status_code=404, detail="Tenant not found")
 
-            return {
-                "id": tenant_id,
-                "message": "Tenant updated successfully",
-                "tenant": tenant.dict(exclude_unset=True)
-            }
+        return {
+            "id": tenant_id,
+            "message": "Tenant updated successfully",
+            "tenant": tenant.dict(exclude_unset=True)
+        }
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error updating tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/tenants/{tenant_id}")
-async def delete_tenant(tenant_id: str):
+@router.delete("/{tenant_id}")
+async def delete_tenant(
+    tenant_id: str,
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Delete a tenant (soft delete by setting status to inactive)"""
     try:
-        with SessionLocal() as db:
-            result = db.execute(text("""
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow("""
                 UPDATE tenants
                 SET status = 'inactive', updated_at = NOW()
-                WHERE id = :id
+                WHERE id = $1
                 RETURNING id
-            """), {"id": tenant_id})
-            db.commit()
+            """, uuid.UUID(tenant_id))
 
-            if not result.scalar():
-                raise HTTPException(status_code=404, detail="Tenant not found")
+        if not result:
+            raise HTTPException(status_code=404, detail="Tenant not found")
 
-            return {
-                "id": tenant_id,
-                "message": "Tenant deactivated successfully"
-            }
+        return {
+            "id": tenant_id,
+            "message": "Tenant deactivated successfully"
+        }
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error deleting tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tenants/{tenant_id}/stats")
-async def get_tenant_stats(tenant_id: str):
+@router.get("/{tenant_id}/stats")
+async def get_tenant_stats(
+    tenant_id: str,
+    request: Request,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
     """Get statistics for a specific tenant"""
     try:
-        with SessionLocal() as db:
+        async with pool.acquire() as conn:
             # Get customer count
-            customers = db.execute(text("""
-                SELECT COUNT(*) FROM customers WHERE tenant_id = :tenant_id
-            """), {"tenant_id": tenant_id}).scalar() or 0
+            customers = await conn.fetchval("""
+                SELECT COUNT(*) FROM customers WHERE tenant_id = $1
+            """, uuid.UUID(tenant_id))
 
             # Get job count
-            jobs = db.execute(text("""
-                SELECT COUNT(*) FROM jobs WHERE tenant_id = :tenant_id
-            """), {"tenant_id": tenant_id}).scalar() or 0
+            jobs = await conn.fetchval("""
+                SELECT COUNT(*) FROM jobs WHERE tenant_id = $1
+            """, uuid.UUID(tenant_id))
 
             # Get invoice stats
-            invoice_stats = db.execute(text("""
+            invoice_stats = await conn.fetchrow("""
                 SELECT
                     COUNT(*) as total_invoices,
                     COALESCE(SUM(total_amount), 0) as total_revenue,
-                    COUNT(CASE WHEN status = 'paid' OR payment_status = 'paid' THEN 1 END) as paid_invoices
+                    COUNT(*) FILTER (WHERE status = 'paid' OR payment_status = 'paid') as paid_invoices
                 FROM invoices
-                WHERE tenant_id = :tenant_id
-            """), {"tenant_id": tenant_id}).first()
+                WHERE tenant_id = $1
+            """, uuid.UUID(tenant_id))
 
-            return {
-                "tenant_id": tenant_id,
-                "customers": customers,
-                "jobs": jobs,
-                "invoices": {
-                    "total": invoice_stats[0] if invoice_stats else 0,
-                    "paid": invoice_stats[2] if invoice_stats else 0,
-                    "revenue": float(invoice_stats[1]) if invoice_stats else 0
-                },
-                "usage": {
-                    "api_calls": 0,  # Placeholder
-                    "storage_mb": 0,  # Placeholder
-                    "users": 1  # Placeholder
-                }
+        return {
+            "tenant_id": tenant_id,
+            "customers": customers or 0,
+            "jobs": jobs or 0,
+            "invoices": {
+                "total": invoice_stats['total_invoices'] or 0,
+                "paid": invoice_stats['paid_invoices'] or 0,
+                "revenue": float(invoice_stats['total_revenue'] or 0)
+            },
+            "usage": {
+                "api_calls": 0,
+                "storage_mb": 0,
+                "users": 1
             }
+        }
     except Exception as e:
-        # Return empty stats on error
+        logger.error(f"Error getting tenant stats: {e}")
         return {
             "tenant_id": tenant_id,
             "customers": 0,
             "jobs": 0,
             "invoices": {"total": 0, "paid": 0, "revenue": 0},
             "usage": {"api_calls": 0, "storage_mb": 0, "users": 0},
-            "error": str(e) if os.getenv("DEBUG") else "Database error"
+            "error": str(e)
         }
