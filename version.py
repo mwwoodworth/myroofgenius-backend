@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.24"
-__build__ = "2025-12-15T20:15:00Z"
+__version__ = "163.0.26"
+__build__ = "2025-12-18T16:30:00Z"
 __status__ = "production"
+# v163.0.26: Fix all async/await bugs and database connection issues
+# - Fixed job_analytics.py: Converted from SQLAlchemy sync to asyncpg
+# - Fixed admin_dashboard.py: Uses app.state.db_pool instead of new connections
+# - Fixed tenants.py: Converted to asyncpg, fixed route paths
+# - Fixed ai_brain_core_v2.py: Environment variable for DB password
 # v163.0.24: Remove invalid ssl_context from psycopg2 connect_args
 # - psycopg2 uses sslmode parameter, NOT ssl_context (that's for asyncpg)
 # - sslmode=require works correctly for Supabase pooler
