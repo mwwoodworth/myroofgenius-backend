@@ -9,27 +9,7 @@ import json
 import logging
 from datetime import datetime
 from uuid import uuid4
-# asyncpg not needed - using SQLAlchemy
-
-# Database setup (avoiding circular import from main)
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
-
-engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
 
 # These services might not be available yet
 try:

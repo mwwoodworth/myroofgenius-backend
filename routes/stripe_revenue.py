@@ -381,18 +381,85 @@ async def get_revenue_metrics():
         """))
         conv_row = conv_result.fetchone()
         conversion_rate = (conv_row[1] / conv_row[0] * 100) if conv_row[0] > 0 else 0
-        
+
+        # MRR (best-effort; never assume an average price)
+        mrr = None
+        mrr_source = None
+
+        # 1) Try database-native amounts if available
+        for query, source in (
+            (
+                "SELECT COALESCE(SUM(amount_cents), 0) / 100.0 FROM subscriptions WHERE status = 'active'",
+                "database.amount_cents",
+            ),
+            (
+                "SELECT COALESCE(SUM(amount), 0) FROM subscriptions WHERE status = 'active'",
+                "database.amount",
+            ),
+        ):
+            try:
+                mrr = conn.execute(text(query)).scalar()
+                mrr_source = source
+                break
+            except Exception:
+                mrr = None
+                mrr_source = None
+
+        # 2) If subscriptions store Stripe price IDs, derive MRR from Stripe Prices
+        if mrr is None and stripe.api_key:
+            try:
+                price_rows = conn.execute(
+                    text(
+                        """
+                        SELECT price_id, COUNT(*) AS cnt
+                        FROM subscriptions
+                        WHERE status = 'active'
+                          AND price_id IS NOT NULL
+                        GROUP BY price_id
+                        """
+                    )
+                ).fetchall()
+
+                total_mrr = 0.0
+                for row in price_rows:
+                    price_id = row[0]
+                    count = int(row[1] or 0)
+                    if not price_id or count <= 0:
+                        continue
+                    price = stripe.Price.retrieve(price_id)
+                    unit_amount = price.get("unit_amount")
+                    recurring = price.get("recurring") or {}
+                    interval = recurring.get("interval")
+                    interval_count = int(recurring.get("interval_count") or 1)
+
+                    if unit_amount is None:
+                        continue
+
+                    amount = float(unit_amount) / 100.0
+                    if interval == "month":
+                        monthly = amount / max(1, interval_count)
+                    elif interval == "year":
+                        monthly = amount / (12 * max(1, interval_count))
+                    else:
+                        continue
+
+                    total_mrr += monthly * count
+
+                mrr = total_mrr
+                mrr_source = "stripe.price"
+            except Exception as exc:
+                logger.warning("Failed to calculate MRR from Stripe prices: %s", exc)
+                mrr = None
+                mrr_source = None
+
         return {
             "today_revenue": today_revenue or 0,
             "month_revenue": month_revenue or 0,
             "active_subscriptions": active_subs or 0,
             "conversion_rate": round(conversion_rate, 2),
-            "mrr": (active_subs or 0) * 99.99,  # Assuming $99.99 average
-            "targets": {
-                "week_1": 2500,
-                "week_2": 7500,
-                "week_4": 25000
-            }
+            "mrr": mrr,
+            "mrr_source": mrr_source,
+            "targets": None,
         }
 
 @router.post("/cancel-subscription")
@@ -441,4 +508,4 @@ async def cancel_subscription(subscription_id: str, reason: Optional[str] = None
             })
             conn.commit()
         
-        return {"message": "Subscription canceled", "status": "canceled RETURNING * RETURNING * RETURNING *"}
+        return {"message": "Subscription canceled", "status": "canceled"}

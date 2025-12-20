@@ -7,160 +7,229 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from typing import Dict, Any, List
 from datetime import datetime, timedelta, date
-from sqlalchemy import create_engine, text
-import os
+from sqlalchemy import text
 import json
 
 router = APIRouter(tags=["Revenue Dashboard"])
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+def get_db_engine():
+    from database import engine as db_engine
 
-def get_db():
-    engine = create_engine(DATABASE_URL)
-    return engine
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 @router.get("/dashboard-metrics")
 async def get_dashboard_metrics():
     """
     Real-time revenue metrics and KPIs
     """
-    with get_db().connect() as conn:
+    with get_db_engine().connect() as conn:
         # Today's revenue
-        today_revenue = conn.execute(text("""
-            SELECT 
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers,
-                COUNT(*) as transactions
-            FROM revenue_tracking
-            WHERE DATE(created_at) = CURRENT_DATE
-        """)).fetchone()
-        
+        today_revenue = conn.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
+                    COUNT(DISTINCT customer_email) as customers,
+                    COUNT(*) as transactions
+                FROM revenue_tracking
+                WHERE DATE(created_at) = CURRENT_DATE
+                """
+            )
+        ).mappings().first() or {"revenue": 0, "customers": 0, "transactions": 0}
+
         # Week to date
-        week_revenue = conn.execute(text("""
-            SELECT 
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers
-            FROM revenue_tracking
-            WHERE created_at >= DATE_TRUNC('week', CURRENT_DATE)
-        """)).fetchone()
-        
+        week_revenue = conn.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
+                    COUNT(DISTINCT customer_email) as customers
+                FROM revenue_tracking
+                WHERE created_at >= DATE_TRUNC('week', CURRENT_DATE)
+                """
+            )
+        ).mappings().first() or {"revenue": 0, "customers": 0}
+
         # Month to date
-        month_revenue = conn.execute(text("""
-            SELECT 
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers
-            FROM revenue_tracking
-            WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
-        """)).fetchone()
-        
-        # MRR calculation
-        mrr = conn.execute(text("""
+        month_revenue = conn.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
+                    COUNT(DISTINCT customer_email) as customers
+                FROM revenue_tracking
+                WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
+                """
+            )
+        ).mappings().first() or {"revenue": 0, "customers": 0}
+
+        # MRR calculation (best-effort; no hardcoded tier pricing)
+        mrr = None
+        for mrr_query in (
+            """
             SELECT COALESCE(SUM(
-                CASE 
-                    WHEN plan_tier = 'basic' THEN 4999
-                    WHEN plan_tier = 'pro' THEN 9999
-                    WHEN plan_tier = 'enterprise' THEN 49900
-                    ELSE 0
+                CASE
+                    WHEN billing_cycle ILIKE 'year%%' THEN amount / 12.0
+                    WHEN billing_cycle ILIKE 'month%%' THEN amount
+                    ELSE amount
                 END
-            ) / 100.0, 0) as mrr
+            ), 0) as mrr
             FROM subscriptions
             WHERE status = 'active'
-        """)).scalar()
-        
+            """,
+            """
+            SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as mrr
+            FROM subscriptions
+            WHERE status = 'active'
+            """,
+            """
+            SELECT COALESCE(SUM(amount) , 0) as mrr
+            FROM subscriptions
+            WHERE status = 'active'
+            """,
+        ):
+            try:
+                mrr = conn.execute(text(mrr_query)).scalar()
+                break
+            except Exception:
+                mrr = None
+
         # Lead metrics
-        lead_metrics = conn.execute(text("""
-            SELECT 
-                COUNT(*) as total_leads,
-                COUNT(CASE WHEN segment = 'hot' THEN 1 END) as hot_leads,
-                COUNT(CASE WHEN converted = true THEN 1 END) as converted,
-                AVG(score) as avg_score
-            FROM leads
-            WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-        """)).fetchone()
-        
+        lead_metrics = conn.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*) as total_leads,
+                    COUNT(CASE WHEN segment = 'hot' THEN 1 END) as hot_leads,
+                    COUNT(CASE WHEN converted = true THEN 1 END) as converted,
+                    AVG(score) as avg_score
+                FROM leads
+                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
+                """
+            )
+        ).mappings().first()
+
         # Conversion funnel
-        funnel = conn.execute(text("""
-            SELECT 
-                COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN email END) as leads,
-                COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' AND score >= 60 THEN email END) as qualified,
-                COUNT(DISTINCT CASE WHEN status = 'trialing' THEN customer_email END) as trials,
-                COUNT(DISTINCT CASE WHEN status = 'active' THEN customer_email END) as paid
-            FROM (
-                SELECT email, score, NULL as customer_email, NULL as status, created_at FROM leads
-                UNION ALL
-                SELECT NULL, NULL, customer_email, status, created_at FROM subscriptions
-            ) combined
-        """)).fetchone()
-        
+        funnel = conn.execute(
+            text(
+                """
+                SELECT
+                    COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN email END) as leads,
+                    COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' AND score >= 60 THEN email END) as qualified,
+                    COUNT(DISTINCT CASE WHEN status = 'trialing' THEN customer_email END) as trials,
+                    COUNT(DISTINCT CASE WHEN status = 'active' THEN customer_email END) as paid
+                FROM (
+                    SELECT email, score, NULL as customer_email, NULL as status, created_at FROM leads
+                    UNION ALL
+                    SELECT NULL, NULL, customer_email, status, created_at FROM subscriptions
+                ) combined
+                """
+            )
+        ).mappings().first()
+
         # Revenue by source
-        revenue_sources = conn.execute(text("""
-            SELECT 
-                source,
-                COUNT(*) as transactions,
-                SUM(amount_cents) / 100.0 as revenue
-            FROM revenue_tracking
-            WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-            GROUP BY source
-            ORDER BY revenue DESC
-        """)).fetchall()
-        
-        # Calculate progress toward targets
-        days_into_week = (datetime.utcnow().weekday() + 1)
-        week_1_target = 2500
-        week_2_target = 7500
-        week_4_target = 25000
-        
-        current_week = (datetime.utcnow() - datetime(2025, 8, 18)).days // 7 + 1
-        
-        if current_week == 1:
-            target = week_1_target
-            progress = (week_revenue["revenue"] / target * 100) if target > 0 else 0
-        elif current_week == 2:
-            target = week_2_target
-            progress = (week_revenue["revenue"] / target * 100) if target > 0 else 0
-        else:
-            target = week_4_target
-            progress = (month_revenue["revenue"] / target * 100) if target > 0 else 0
-        
+        revenue_sources = conn.execute(
+            text(
+                """
+                SELECT
+                    source,
+                    COUNT(*) as transactions,
+                    SUM(amount_cents) / 100.0 as revenue
+                FROM revenue_tracking
+                WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY source
+                ORDER BY revenue DESC
+                """
+            )
+        ).mappings().all()
+
+        # Targets (from DB if revenue_goals exists)
+        target_amount = None
+        current_amount = None
+        period_start = None
+        period_end = None
+        days_remaining = None
+
+        try:
+            goal = conn.execute(
+                text(
+                    """
+                    SELECT period_start, period_end, target_cents
+                    FROM revenue_goals
+                    WHERE period_start <= CURRENT_DATE
+                      AND period_end >= CURRENT_DATE
+                    ORDER BY period_start DESC
+                    LIMIT 1
+                    """
+                )
+            ).mappings().first()
+            if goal:
+                period_start = goal["period_start"]
+                period_end = goal["period_end"]
+                target_amount = (goal["target_cents"] or 0) / 100.0 if goal.get("target_cents") is not None else None
+                current_amount = conn.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as revenue
+                        FROM revenue_tracking
+                        WHERE created_at >= :start_date
+                          AND created_at < (:end_date::date + INTERVAL '1 day')
+                        """
+                    ),
+                    {"start_date": period_start, "end_date": period_end},
+                ).scalar()
+                if period_end:
+                    days_remaining = max(0, (period_end - date.today()).days)
+        except Exception:
+            target_amount = None
+            current_amount = None
+
+        progress = None
+        remaining = None
+        daily_needed = None
+        if target_amount and current_amount is not None and target_amount > 0:
+            progress = round((current_amount / target_amount) * 100, 2)
+            remaining = max(0, target_amount - current_amount)
+            daily_needed = (remaining / days_remaining) if days_remaining and days_remaining > 0 else remaining
+
         return {
             "current_metrics": {
                 "today": {
                     "revenue": today_revenue["revenue"],
                     "customers": today_revenue["customers"],
                     "transactions": today_revenue["transactions"],
-                    "avg_order_value": today_revenue["revenue"] / today_revenue["transactions"] if today_revenue["transactions"] > 0 else 0
+                    "avg_order_value": (today_revenue["revenue"] / today_revenue["transactions"]) if today_revenue["transactions"] else 0,
                 },
-                "week_to_date": {
-                    "revenue": week_revenue["revenue"],
-                    "customers": week_revenue["customers"]
-                },
-                "month_to_date": {
-                    "revenue": month_revenue["revenue"],
-                    "customers": month_revenue["customers"]
-                },
-                "mrr": mrr
+                "week_to_date": {"revenue": week_revenue["revenue"], "customers": week_revenue["customers"]},
+                "month_to_date": {"revenue": month_revenue["revenue"], "customers": month_revenue["customers"]},
+                "mrr": mrr,
             },
             "targets": {
-                "current_week": current_week,
-                "target": target,
-                "progress": round(progress, 2),
-                "remaining": max(0, target - week_revenue["revenue"]),
-                "daily_needed": max(0, (target - week_revenue["revenue"]) / (7 - days_into_week)) if days_into_week < 7 else 0
+                "period_start": period_start.isoformat() if period_start else None,
+                "period_end": period_end.isoformat() if period_end else None,
+                "target": target_amount,
+                "current": current_amount,
+                "progress": progress,
+                "remaining": remaining,
+                "days_remaining": days_remaining,
+                "daily_needed": daily_needed,
             },
-            "lead_metrics": dict(lead_metrics._mapping) if lead_metrics else {},
-            "conversion_funnel": dict(funnel._mapping) if funnel else {},
-            "revenue_by_source": [dict(s._mapping) for s in revenue_sources],
-            "recommendations": generate_revenue_recommendations(week_revenue["revenue"], target, lead_metrics)
+            "lead_metrics": dict(lead_metrics) if lead_metrics else {},
+            "conversion_funnel": dict(funnel) if funnel else {},
+            "revenue_by_source": [dict(s) for s in revenue_sources],
+            "recommendations": generate_revenue_recommendations(current_amount or week_revenue["revenue"], target_amount, lead_metrics),
         }
 
 def generate_revenue_recommendations(current_revenue, target, lead_metrics):
     """Generate actionable recommendations based on performance"""
     recommendations = []
     
-    gap = target - current_revenue
+    if not target or target <= 0:
+        return recommendations
+
+    gap = target - (current_revenue or 0)
     if gap > 0:
         recommendations.append({
             "priority": "high",

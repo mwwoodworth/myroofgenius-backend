@@ -10,19 +10,14 @@ from typing import Optional, List, Dict, Any
 import json
 import os
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import httpx
 import hashlib
 
 router = APIRouter(tags=["Customer Pipeline"])
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
-
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
-SENDGRID_FROM_EMAIL = "matthew@brainstackstudio.com"
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "")
 
 class LeadCapture(BaseModel):
     email: EmailStr
@@ -43,8 +38,11 @@ class CustomerSegment(BaseModel):
     follow_up_days: int
 
 def get_db():
-    engine = create_engine(DATABASE_URL)
-    return engine
+    from database import engine as db_engine
+
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 async def send_email_sequence(email: str, sequence_type: str, data: Dict[str, Any]):
     """Send automated email sequences"""

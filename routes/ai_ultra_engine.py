@@ -14,31 +14,22 @@ from lib.ai_ultra_services import (
     optimize_revenue, 
     analyze_document,
     predict_business_trends,
-    AIAnalysisResult
+    AIAnalysisResult,
+    UltraAINotConfiguredError,
+    UltraAIProviderCallError,
 )
-# Use the same database setup as complete_erp
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
-import os
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+from core.supabase_auth import get_current_user
+from database import engine as db_engine
+from database import get_db as _get_db
 
-engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Simple auth bypass that returns proper format
-def get_current_user():
-    return {"id": "00000000-0000-0000-0000-000000000001", "email": "admin@brainops.com", "sub": "admin@brainops.com"}
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    yield from _get_db()
 
 import json
 from decimal import Decimal
@@ -83,7 +74,13 @@ async def ultra_lead_analysis(
         ai_result = await analyze_lead_intelligence(lead_data)
         
         # Update database with AI insights if lead_id provided
-        if 'lead_id' in lead_data and ai_result.confidence > 0.7:
+        lead_score = ai_result.metadata.get("lead_score")
+        try:
+            lead_score_num = float(lead_score) if lead_score is not None else None
+        except Exception:
+            lead_score_num = None
+
+        if 'lead_id' in lead_data and ai_result.confidence > 0.7 and lead_score_num is not None:
             db.execute(text("""
                 UPDATE leads 
                 SET lead_score = :score,
@@ -94,10 +91,8 @@ async def ultra_lead_analysis(
                     updated_at = NOW()
                 WHERE id = :lead_id
             """), {
-                "score": ai_result.metadata.get("lead_score", 75),
-                "grade": "A" if ai_result.metadata.get("lead_score", 75) >= 90 else 
-                        "B" if ai_result.metadata.get("lead_score", 75) >= 75 else
-                        "C" if ai_result.metadata.get("lead_score", 75) >= 60 else "D",
+                "score": lead_score_num,
+                "grade": "A" if lead_score_num >= 90 else "B" if lead_score_num >= 75 else "C" if lead_score_num >= 60 else "D",
                 "priority": ai_result.metadata.get("priority", "medium"),
                 "analysis": ai_result.analysis,
                 "lead_id": lead_data['lead_id']
@@ -120,6 +115,10 @@ async def ultra_lead_analysis(
             "timestamp": datetime.now().isoformat()
         }
         
+    except UltraAINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except UltraAIProviderCallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error(f"Ultra lead analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Ultra AI analysis failed: {str(e)}")
@@ -206,6 +205,10 @@ async def ultra_revenue_optimization(
             "timestamp": datetime.now().isoformat()
         }
         
+    except UltraAINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except UltraAIProviderCallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error(f"Ultra revenue optimization failed: {e}")
         raise HTTPException(status_code=500, detail=f"Revenue optimization failed: {str(e)}")
@@ -241,6 +244,12 @@ async def ultra_document_intelligence(
             "timestamp": datetime.now().isoformat()
         }
         
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except UltraAINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except UltraAIProviderCallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error(f"Ultra document intelligence failed: {e}")
         raise HTTPException(status_code=500, detail=f"Document analysis failed: {str(e)}")
@@ -362,6 +371,10 @@ async def ultra_predictive_analytics(
             "timestamp": datetime.now().isoformat()
         }
         
+    except UltraAINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except UltraAIProviderCallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error(f"Ultra predictive analytics failed: {e}")
         raise HTTPException(status_code=500, detail=f"Predictive analysis failed: {str(e)}")
@@ -504,6 +517,10 @@ async def ultra_workflow_automation(
             "timestamp": datetime.now().isoformat()
         }
         
+    except UltraAINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except UltraAIProviderCallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error(f"Ultra workflow automation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Workflow automation failed: {str(e)}")

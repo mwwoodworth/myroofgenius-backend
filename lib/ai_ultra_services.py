@@ -15,10 +15,17 @@ import anthropic
 import google.generativeai as genai
 from dataclasses import dataclass
 import base64
-from io import BytesIO
-import requests
 
 logger = logging.getLogger(__name__)
+
+
+class UltraAINotConfiguredError(RuntimeError):
+    pass
+
+
+class UltraAIProviderCallError(RuntimeError):
+    pass
+
 
 @dataclass
 class AIAnalysisResult:
@@ -40,7 +47,7 @@ class UltraAIEngine:
         self._initialize_clients()
     
     def _initialize_clients(self):
-        """Initialize AI clients with fallback handling"""
+        """Initialize AI clients from environment configuration only."""
         try:
             # OpenAI GPT-4
             openai_key = os.getenv("OPENAI_API_KEY")
@@ -61,15 +68,38 @@ class UltraAIEngine:
                 genai.configure(api_key=gemini_key)
                 self.gemini_model = genai.GenerativeModel('gemini-1.5-pro-002')
                 logger.info("✅ Google Gemini initialized")
-            
-            self.initialized = True
-            
+
         except Exception as e:
             logger.warning(f"AI client initialization partial: {e}")
+
+        self.initialized = bool(self.openai_client or self.anthropic_client or self.gemini_model)
+
+    def _require_provider(self) -> None:
+        if not (self.openai_client or self.anthropic_client or self.gemini_model):
+            raise UltraAINotConfiguredError(
+                "No AI providers configured. Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY and/or GEMINI_API_KEY."
+            )
+
+    def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            return json.loads(text[start : end + 1])
+        except Exception:
+            return None
     
     async def ultra_lead_intelligence(self, lead_data: Dict) -> AIAnalysisResult:
         """Ultra-intelligent lead analysis using multi-AI pipeline"""
         start_time = datetime.now()
+        self._require_provider()
         
         # Prepare comprehensive context
         context = f"""
@@ -96,6 +126,7 @@ class UltraAIEngine:
         
         # Try multiple AI providers for best result
         ai_responses = []
+        last_error: Exception | None = None
         
         # GPT-4 Analysis
         if self.openai_client:
@@ -103,6 +134,7 @@ class UltraAIEngine:
                 response = await self._gpt4_analysis(context)
                 ai_responses.append(("GPT-4", response))
             except Exception as e:
+                last_error = e
                 logger.warning(f"GPT-4 analysis failed: {e}")
         
         # Claude Analysis
@@ -111,6 +143,7 @@ class UltraAIEngine:
                 response = await self._claude_analysis(context)
                 ai_responses.append(("Claude", response))
             except Exception as e:
+                last_error = e
                 logger.warning(f"Claude analysis failed: {e}")
         
         # Gemini Analysis
@@ -119,28 +152,37 @@ class UltraAIEngine:
                 response = await self._gemini_analysis(context)
                 ai_responses.append(("Gemini", response))
             except Exception as e:
+                last_error = e
                 logger.warning(f"Gemini analysis failed: {e}")
         
-        # Synthesize results
-        if ai_responses:
+        if not ai_responses:
+            raise UltraAIProviderCallError("All configured AI providers failed") from last_error
+
+        # Synthesize results (no heuristic fallbacks)
+        if len(ai_responses) >= 2:
             synthesis = await self._synthesize_ai_responses(ai_responses, "lead_analysis")
-            confidence = 0.95 if len(ai_responses) >= 2 else 0.75
+            confidence = 0.95
         else:
-            # Intelligent fallback
-            synthesis = self._intelligent_lead_fallback(lead_data)
-            confidence = 0.60
+            parsed = self._extract_json(ai_responses[0][1])
+            synthesis = parsed or {"analysis": ai_responses[0][1], "recommendations": []}
+            confidence = 0.75
+
+        analysis = synthesis.get("analysis") or ""
+        recommendations = synthesis.get("recommendations") or []
+        if not isinstance(recommendations, list):
+            recommendations = [str(recommendations)]
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
         return AIAnalysisResult(
             confidence=confidence,
-            analysis=synthesis["analysis"],
-            recommendations=synthesis["recommendations"],
+            analysis=analysis,
+            recommendations=recommendations,
             metadata={
-                "lead_score": synthesis.get("score", 75),
-                "priority": synthesis.get("priority", "medium"),
-                "conversion_probability": synthesis.get("conversion_probability", 65),
-                "revenue_potential": synthesis.get("revenue_potential", "medium"),
+                "lead_score": synthesis.get("score") or synthesis.get("lead_score"),
+                "priority": synthesis.get("priority"),
+                "conversion_probability": synthesis.get("conversion_probability"),
+                "revenue_potential": synthesis.get("revenue_potential"),
                 "ai_providers_used": [name for name, _ in ai_responses],
                 "processed_at": datetime.now().isoformat()
             },
@@ -150,6 +192,7 @@ class UltraAIEngine:
     async def ultra_revenue_optimization(self, business_data: Dict) -> AIAnalysisResult:
         """Ultra-powerful revenue optimization with predictive analytics"""
         start_time = datetime.now()
+        self._require_provider()
         
         context = f"""
         Perform ultra-advanced revenue optimization analysis:
@@ -178,41 +221,52 @@ class UltraAIEngine:
         """
         
         ai_responses = []
+        last_error: Exception | None = None
         
         # Multi-AI analysis for revenue optimization
         if self.anthropic_client:
             try:
                 response = await self._claude_analysis(context)
                 ai_responses.append(("Claude", response))
-            except:
-                pass
+            except Exception as e:
+                last_error = e
+                logger.warning("Claude revenue optimization failed: %s", e)
         
         if self.openai_client:
             try:
                 response = await self._gpt4_analysis(context)
                 ai_responses.append(("GPT-4", response))
-            except:
-                pass
+            except Exception as e:
+                last_error = e
+                logger.warning("GPT-4 revenue optimization failed: %s", e)
         
-        # Synthesize results
-        if ai_responses:
+        if not ai_responses:
+            raise UltraAIProviderCallError("All configured AI providers failed") from last_error
+
+        if len(ai_responses) >= 2:
             synthesis = await self._synthesize_ai_responses(ai_responses, "revenue_optimization")
             confidence = 0.90
         else:
-            synthesis = self._intelligent_revenue_fallback(business_data)
-            confidence = 0.65
+            parsed = self._extract_json(ai_responses[0][1])
+            synthesis = parsed or {"analysis": ai_responses[0][1], "recommendations": []}
+            confidence = 0.75
+
+        analysis = synthesis.get("analysis") or ""
+        recommendations = synthesis.get("recommendations") or []
+        if not isinstance(recommendations, list):
+            recommendations = [str(recommendations)]
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
         return AIAnalysisResult(
             confidence=confidence,
-            analysis=synthesis["analysis"],
-            recommendations=synthesis["recommendations"],
+            analysis=analysis,
+            recommendations=recommendations,
             metadata={
-                "projected_growth": synthesis.get("projected_growth", 15),
-                "optimization_score": synthesis.get("optimization_score", 75),
-                "revenue_forecast": synthesis.get("revenue_forecast", {}),
-                "priority_actions": synthesis.get("priority_actions", []),
+                "projected_growth": synthesis.get("projected_growth"),
+                "optimization_score": synthesis.get("optimization_score"),
+                "revenue_forecast": synthesis.get("revenue_forecast"),
+                "priority_actions": synthesis.get("priority_actions"),
                 "processed_at": datetime.now().isoformat()
             },
             processing_time=processing_time
@@ -221,6 +275,8 @@ class UltraAIEngine:
     async def ultra_document_intelligence(self, document_data: bytes, document_type: str) -> AIAnalysisResult:
         """Ultra-powerful document analysis with GPT-4 Vision"""
         start_time = datetime.now()
+        if not self.openai_client:
+            raise UltraAINotConfiguredError("Document intelligence requires OpenAI (set OPENAI_API_KEY).")
         
         # Encode document for vision analysis
         document_b64 = base64.b64encode(document_data).decode()
@@ -239,48 +295,40 @@ class UltraAIEngine:
         
         Provide structured analysis with confidence scores.
         """
-        
+
+        doc_type = (document_type or "").lower()
+        if doc_type not in {"pdf", "jpg", "jpeg", "png", "webp"}:
+            raise ValueError(f"Unsupported document type for vision analysis: {document_type}")
+
         try:
-            # GPT-4 Vision analysis
-            if self.openai_client and document_type.lower() in ['pdf', 'image', 'jpg', 'png']:
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": analysis_prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{document_b64}"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=4000
-                )
-                
-                analysis = response.choices[0].message.content
-                confidence = 0.90
-                
-            else:
-                # Text-based analysis fallback
-                analysis = "Document analysis requires visual AI capabilities."
-                confidence = 0.30
-            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": analysis_prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{document_b64}"},
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=4000,
+            )
         except Exception as e:
-            logger.error(f"Document intelligence failed: {e}")
-            analysis = f"Document analysis error: {str(e)}"
-            confidence = 0.10
+            raise UltraAIProviderCallError(f"OpenAI document intelligence failed: {e}") from e
+
+        analysis = response.choices[0].message.content
+        confidence = 0.90
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
         return AIAnalysisResult(
             confidence=confidence,
             analysis=analysis,
-            recommendations=["Enable GPT-4 Vision for full document intelligence"],
+            recommendations=[],
             metadata={
                 "document_type": document_type,
                 "document_size": len(document_data),
@@ -293,6 +341,7 @@ class UltraAIEngine:
     async def ultra_predictive_analytics(self, historical_data: Dict) -> AIAnalysisResult:
         """Ultra-advanced predictive analytics for business forecasting"""
         start_time = datetime.now()
+        self._require_provider()
         
         context = f"""
         Perform ultra-advanced predictive analytics:
@@ -315,29 +364,56 @@ class UltraAIEngine:
         
         # Advanced AI analysis
         ai_responses = []
+        last_error: Exception | None = None
         
         if self.anthropic_client:
             try:
                 response = await self._claude_analysis(context)
                 ai_responses.append(("Claude", response))
-            except:
-                pass
+            except Exception as e:
+                last_error = e
+                logger.warning("Claude predictive analytics failed: %s", e)
+
+        if self.openai_client:
+            try:
+                response = await self._gpt4_analysis(context)
+                ai_responses.append(("GPT-4", response))
+            except Exception as e:
+                last_error = e
+                logger.warning("GPT-4 predictive analytics failed: %s", e)
+
+        if self.gemini_model:
+            try:
+                response = await self._gemini_analysis(context)
+                ai_responses.append(("Gemini", response))
+            except Exception as e:
+                last_error = e
+                logger.warning("Gemini predictive analytics failed: %s", e)
         
-        if ai_responses:
+        if not ai_responses:
+            raise UltraAIProviderCallError("All configured AI providers failed") from last_error
+
+        if len(ai_responses) >= 2:
             synthesis = await self._synthesize_ai_responses(ai_responses, "predictive_analytics")
             confidence = 0.85
         else:
-            synthesis = self._intelligent_predictive_fallback(historical_data)
-            confidence = 0.60
+            parsed = self._extract_json(ai_responses[0][1])
+            synthesis = parsed or {"analysis": ai_responses[0][1], "recommendations": []}
+            confidence = 0.75
+
+        analysis = synthesis.get("analysis") or ""
+        recommendations = synthesis.get("recommendations") or []
+        if not isinstance(recommendations, list):
+            recommendations = [str(recommendations)]
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
         return AIAnalysisResult(
             confidence=confidence,
-            analysis=synthesis["analysis"],
-            recommendations=synthesis["recommendations"],
+            analysis=analysis,
+            recommendations=recommendations,
             metadata={
-                "forecast_accuracy": synthesis.get("accuracy", 80),
+                "forecast_accuracy": synthesis.get("accuracy") or synthesis.get("forecast_accuracy"),
                 "prediction_horizon": "12_months",
                 "model_type": "multi_ai_ensemble",
                 "processed_at": datetime.now().isoformat()
@@ -405,124 +481,23 @@ class UltraAIEngine:
         Format as JSON with keys: analysis, recommendations, score, priority, etc.
         """
         
-        try:
-            if self.anthropic_client:
+        if self.anthropic_client:
+            try:
                 response = await self._claude_analysis(synthesis_prompt)
-                # Parse JSON from response
-                json_start = response.find('{')
-                json_end = response.rfind('}') + 1
-                if json_start >= 0 and json_end > json_start:
-                    return json.loads(response[json_start:json_end])
-        except:
-            pass
-        
-        # Fallback synthesis
-        return {
-            "analysis": "Multiple AI analysis completed successfully",
-            "recommendations": ["Enable full AI API access for optimal results"],
-            "score": 75,
-            "priority": "high"
-        }
-    
-    def _intelligent_lead_fallback(self, lead_data: Dict) -> Dict:
-        """Intelligent rule-based lead analysis fallback"""
-        score = 50  # Base score
-        
-        # Company name analysis
-        if lead_data.get('company_name'):
-            if any(word in lead_data['company_name'].lower() for word in ['corp', 'inc', 'llc', 'ltd']):
-                score += 10
-        
-        # Email domain analysis
-        if lead_data.get('email'):
-            domain = lead_data['email'].split('@')[-1].lower()
-            if domain not in ['gmail.com', 'yahoo.com', 'hotmail.com']:
-                score += 15
-        
-        # Value analysis
-        estimated_value = lead_data.get('estimated_value', 0)
-        if estimated_value > 50000:
-            score += 20
-        elif estimated_value > 20000:
-            score += 10
-        elif estimated_value > 10000:
-            score += 5
-        
-        # Urgency analysis
-        urgency = lead_data.get('urgency', '').lower()
-        if urgency == 'high':
-            score += 15
-        elif urgency == 'critical':
-            score += 25
-        
-        score = min(score, 100)
-        
-        priority = 'high' if score >= 80 else 'medium' if score >= 60 else 'low'
-        
-        return {
-            "analysis": f"Intelligent lead analysis completed. Score: {score}/100. Priority: {priority}.",
-            "recommendations": [
-                "Contact within 24 hours for high-priority leads",
-                "Prepare customized proposal based on estimated value", 
-                "Research company background before first contact",
-                "Set follow-up reminders based on urgency level"
-            ],
-            "score": score,
-            "priority": priority,
-            "conversion_probability": max(20, min(95, score - 10)),
-            "revenue_potential": "high" if estimated_value > 30000 else "medium"
-        }
-    
-    def _intelligent_revenue_fallback(self, business_data: Dict) -> Dict:
-        """Intelligent rule-based revenue optimization fallback"""
-        current_revenue = business_data.get('total_revenue', 0)
-        customer_count = business_data.get('customers', 0)
-        
-        # Calculate key metrics
-        if customer_count > 0:
-            revenue_per_customer = current_revenue / customer_count
-        else:
-            revenue_per_customer = 0
-        
-        # Growth projections
-        projected_growth = 15  # Base 15% growth
-        
-        if business_data.get('growth_rate', 0) > 0.10:  # >10% monthly
-            projected_growth = 25
-        elif business_data.get('growth_rate', 0) > 0.05:  # >5% monthly
-            projected_growth = 20
-        
-        return {
-            "analysis": f"Revenue optimization analysis: Current ${current_revenue:,} across {customer_count} customers. Projected growth: {projected_growth}%",
-            "recommendations": [
-                "Implement customer retention program to reduce churn",
-                "Develop upselling strategy for existing customers",
-                "Optimize pricing based on value delivered",
-                "Automate lead nurturing to improve conversion rates",
-                "Expand to adjacent market segments"
-            ],
-            "projected_growth": projected_growth,
-            "optimization_score": 70,
-            "revenue_forecast": {
-                "6_month": current_revenue * (1 + projected_growth/200),
-                "12_month": current_revenue * (1 + projected_growth/100)
-            }
-        }
-    
-    def _intelligent_predictive_fallback(self, historical_data: Dict) -> Dict:
-        """Intelligent rule-based predictive analytics fallback"""
-        return {
-            "analysis": "Predictive analytics using statistical modeling and trend analysis",
-            "recommendations": [
-                "Implement data collection for improved forecasting",
-                "Establish baseline metrics for trend analysis",
-                "Deploy machine learning models for advanced predictions",
-                "Create automated reporting dashboards",
-                "Develop scenario planning frameworks"
-            ],
-            "accuracy": 75
-        }
+                parsed = self._extract_json(response)
+                if parsed:
+                    return parsed
+            except Exception as e:
+                logger.warning("Synthesis via Claude failed: %s", e)
 
+        # Best-effort: if any provider already returned JSON, use it.
+        for _, response in responses:
+            parsed = self._extract_json(response)
+            if parsed:
+                return parsed
+
+        combined = "\n\n".join([f"=== {provider} ===\n{resp}" for provider, resp in responses])
+        return {"analysis": combined, "recommendations": []}
 # Global AI engine instance
 ultra_ai = UltraAIEngine()
 

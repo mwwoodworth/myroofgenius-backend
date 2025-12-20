@@ -16,32 +16,10 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Use SQLAlchemy from main app for connection pooling
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
-import os
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
-    pool_recycle=3600
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
 
 # Enums
 class LeadStatus(str, Enum):
@@ -794,14 +772,10 @@ async def track_lead_activity(lead_id: str, activity: str, user: str):
             return {"error": "Invalid ID format"}
     """Background task to track lead activities"""
     try:
-        conn = await asyncpg.connect(
-            host="aws-0-us-east-2.pooler.supabase.com",
-            port=5432,
-            user="postgres.yomagoqdmxszqtdwuhab",
-            password="<DB_PASSWORD_REDACTED>",
-            database="postgres"
-        )
-        try:
+        from database import get_db_connection
+
+        pool = await get_db_connection()
+        async with pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO lead_activities (
@@ -811,9 +785,7 @@ async def track_lead_activity(lead_id: str, activity: str, user: str):
                 uuid.UUID(lead_id),
                 "note",
                 activity,
-                user
+                user,
             )
-        finally:
-            await conn.close()
     except Exception as e:
         logger.error(f"Error tracking activity: {e}")

@@ -795,38 +795,25 @@ async def track_opportunity_stage_change(
     from_stage: Optional[str],
     to_stage: str,
     notes: Optional[str],
-    user: str
+    user: str,
+    pool: Optional[asyncpg.Pool] = None,
 ):
     """Background task to track stage changes"""
     try:
-        conn = await asyncpg.connect(
-            host="aws-0-us-east-2.pooler.supabase.com",
-            port=5432,
-            user="postgres.yomagoqdmxszqtdwuhab",
-            password="<DB_PASSWORD_REDACTED>",
-            database="postgres"
-        )
-        try:
+        if pool is None:
+            from database import get_db_connection
+
+            pool = await get_db_connection()
+
+        async with pool.acquire() as conn:
             # Get pipeline ID (use default)
             pipeline_id = await conn.fetchval(
                 "SELECT id FROM sales_pipelines WHERE is_default = true LIMIT 1"
             )
 
             if not pipeline_id:
-                # Create default pipeline if doesn't exist
-                pipeline_id = await conn.fetchval(
-                    """
-                    INSERT INTO sales_pipelines (
-                        pipeline_name, pipeline_type, is_default, stages
-                    ) VALUES (
-                        'Default Pipeline', 'standard', true, $1
-                    ) RETURNING id
-                    """,
-                    json.dumps([
-                        "prospecting", "qualification", "needs_analysis",
-                        "proposal", "negotiation", "closed_won", "closed_lost"
-                    ])
-                )
+                logger.warning("No default sales pipeline configured; skipping stage history insert")
+                return
 
             # Calculate duration in previous stage
             duration_days = None
@@ -858,7 +845,5 @@ async def track_opportunity_stage_change(
                 duration_days,
                 notes
             )
-        finally:
-            await conn.close()
     except Exception as e:
         logger.error(f"Error tracking stage change: {e}")

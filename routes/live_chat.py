@@ -113,15 +113,11 @@ async def websocket_endpoint(
             message_data = json.loads(data)
 
             # Save message to database
-            conn = await asyncpg.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port=5432,
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
-                database="postgres"
-            )
+            pool = getattr(websocket.app.state, "db_pool", None)
+            if pool is None:
+                raise RuntimeError("Database connection not available")
 
-            try:
+            async with pool.acquire() as conn:
                 query = """
                     INSERT INTO chat_messages (
                         session_id, sender_type, sender_id, message
@@ -148,9 +144,6 @@ async def websocket_endpoint(
                 }
 
                 await manager.send_to_session(json.dumps(response), session_id)
-
-            finally:
-                await conn.close()
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, session_id)

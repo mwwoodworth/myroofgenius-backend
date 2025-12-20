@@ -1,157 +1,133 @@
 """
 Complete System Routes
-All missing endpoints for 100% operation
+Replaces hardcoded demo payloads with real database-backed responses.
 """
 
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-import uuid
+from __future__ import annotations
+
 import json
 import logging
+from typing import Any, Dict, List, Optional
+
 import asyncpg
-import os
+from fastapi import APIRouter, HTTPException, Request
 
 logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1")
 
-# Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
 
-async def get_db_connection():
-    """Get database connection"""
-    return await asyncpg.connect(DATABASE_URL)
+def _get_pool(request: Request) -> asyncpg.Pool:
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+    return pool
 
-# PRODUCTS ENDPOINTS
+
 @router.get("/products/list")
-async def get_products():
-    """Get product list"""
-    try:
-        products = [
-            {
-                "id": "1",
-                "name": "Basic Roof Inspection",
-                "description": "AI-powered roof inspection with detailed report",
-                "price": 299,
-                "category": "inspection",
-                "features": ["Drone inspection", "AI analysis", "Detailed report", "Next-day service"]
-            },
-            {
-                "id": "2",
-                "name": "Emergency Roof Repair",
-                "description": "24/7 emergency repair service",
-                "price": 599,
-                "category": "repair",
-                "features": ["24/7 availability", "Same-day service", "Warranty included"]
-            },
-            {
-                "id": "3",
-                "name": "Complete Shingle Replacement",
-                "description": "Full roof replacement with premium shingles",
-                "price": 8500,
-                "category": "replacement",
-                "features": ["Premium materials", "10-year warranty", "Free inspection"]
-            },
-            {
-                "id": "4",
-                "name": "Metal Roof Installation",
-                "description": "Energy-efficient metal roofing",
-                "price": 12000,
-                "category": "replacement",
-                "features": ["50-year lifespan", "Energy efficient", "Storm resistant"]
-            },
-            {
-                "id": "5",
-                "name": "Annual Maintenance Plan",
-                "description": "Comprehensive annual maintenance",
-                "price": 999,
-                "category": "maintenance",
-                "features": ["Quarterly inspections", "Gutter cleaning", "Priority service"]
-            }
-        ]
-        return {"success": True, "data": products}
-    except Exception as e:
-        logger.error(f"Error fetching products: {e}")
-        return {"success": True, "data": []}
+async def get_products(request: Request) -> Dict[str, Any]:
+    """Get product list (DB-backed; returns empty list if table is missing)."""
+    pool = _get_pool(request)
+    async with pool.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, name, description, price, created_at
+                FROM products
+                WHERE is_active = true
+                ORDER BY name
+                """
+            )
+            products = []
+            for row in rows:
+                data = dict(row)
+                if data.get("price") is not None:
+                    data["price"] = float(data["price"])
+                data["id"] = str(data["id"])
+                products.append(data)
+            return {"success": True, "data": products}
+        except asyncpg.exceptions.UndefinedColumnError:
+            rows = await conn.fetch(
+                """
+                SELECT id, name, description, price_cents, created_at
+                FROM products
+                WHERE is_active = true
+                ORDER BY name
+                """
+            )
+            products = []
+            for row in rows:
+                data = dict(row)
+                cents = data.pop("price_cents", None)
+                data["price"] = (float(cents) / 100.0) if cents is not None else None
+                data["id"] = str(data["id"])
+                products.append(data)
+            return {"success": True, "data": products}
+        except asyncpg.exceptions.UndefinedTableError:
+            return {"success": True, "data": []}
 
-# WORKFLOWS ENDPOINT (Fixed)
+
 @router.get("/workflows")
-async def get_workflows():
-    """Get workflow definitions"""
-    try:
-        workflows = [
-            {
-                "id": "1",
-                "name": "Lead to Customer",
-                "description": "Automated lead conversion workflow",
-                "status": "active",
-                "steps": ["Lead capture", "Qualification", "Quote", "Follow-up", "Conversion"]
-            },
-            {
-                "id": "2",
-                "name": "Inspection to Repair",
-                "description": "Inspection and repair workflow",
-                "status": "active",
-                "steps": ["Schedule inspection", "Conduct inspection", "Generate report", "Quote", "Schedule repair"]
-            },
-            {
-                "id": "3",
-                "name": "Customer Onboarding",
-                "description": "New customer onboarding",
-                "status": "active",
-                "steps": ["Welcome email", "Account setup", "First inspection", "Maintenance plan"]
-            }
-        ]
-        return {"success": True, "data": workflows}
-    except Exception as e:
-        logger.error(f"Error fetching workflows: {e}")
-        return {"success": True, "data": []}
+async def get_workflows(request: Request) -> Dict[str, Any]:
+    """Get workflow definitions (DB-backed; returns empty list if table is missing)."""
+    pool = _get_pool(request)
+    async with pool.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, name, description, category, trigger_type, trigger_config, conditions, actions, is_active, created_at
+                FROM workflows
+                ORDER BY created_at DESC
+                LIMIT 200
+                """
+            )
+        except asyncpg.exceptions.UndefinedTableError:
+            return {"success": True, "data": []}
 
-# CUSTOMERS ENDPOINT (with optional auth)
+    workflows: List[Dict[str, Any]] = []
+    for row in rows:
+        workflow = dict(row)
+        workflow["id"] = str(workflow["id"])
+        for field in ("trigger_config", "conditions", "actions"):
+            value = workflow.get(field)
+            if isinstance(value, str):
+                try:
+                    workflow[field] = json.loads(value)
+                except Exception:
+                    workflow[field] = {} if field != "actions" else []
+        workflows.append(workflow)
+
+    return {"success": True, "data": workflows}
+
+
 @router.get("/customers")
-async def get_customers(limit: int = 100, offset: int = 0):
-    """Get customers (works without auth for dev)"""
-    conn = None
-    try:
-        conn = await get_db_connection()
+async def get_customers(
+    request: Request,
+    limit: int = 100,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Get customers (DB-backed)."""
+    pool = _get_pool(request)
+    async with pool.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, name, email, phone, address, city, state, zip, created_at
+                FROM customers
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+                """,
+                limit,
+                offset,
+            )
+        except asyncpg.exceptions.UndefinedTableError:
+            return {"success": True, "data": []}
 
-        query = """
-            SELECT
-                id, name, email, phone, address,
-                city, state, zip, created_at
-            FROM customers
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
-        """
+    customers: List[Dict[str, Any]] = []
+    for row in rows:
+        customer = dict(row)
+        customer["id"] = str(customer["id"]) if customer.get("id") else None
+        customer["created_at"] = customer["created_at"].isoformat() if customer.get("created_at") else None
+        customers.append(customer)
 
-        rows = await conn.fetch(query, limit, offset)
-        customers = []
-
-        for row in rows:
-            customer = {
-                'id': str(row['id']) if row['id'] else None,
-                'name': row['name'],
-                'email': row['email'],
-                'phone': row['phone'],
-                'address': row['address'],
-                'city': row['city'],
-                'state': row['state'],
-                'zip': row['zip'],
-                'created_at': row['created_at'].isoformat() if row['created_at'] else None
-            }
-            customers.append(customer)
-
-        return {"success": True, "data": customers}
-
-    except Exception as e:
-        logger.error(f"Error fetching customers: {e}", exc_info=True)
-        return {"success": True, "data": []}
-    finally:
-        if conn:
-            await conn.close()
-
-# NOTE: CRUD operations (POST/PUT/DELETE) are available in other endpoints
-# This module focuses on GET operations with async/await pattern
+    return {"success": True, "data": customers}

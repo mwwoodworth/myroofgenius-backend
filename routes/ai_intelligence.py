@@ -56,7 +56,7 @@ class AIResponse(BaseModel):
     success: bool
     analysis: Dict[str, Any]
     recommendations: List[str]
-    confidence: float
+    confidence: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
 
 class LeadScoringRequest(BaseModel):
@@ -132,7 +132,7 @@ async def analyze_roof(data: RoofAnalysisRequest, file: Optional[UploadFile] = N
             success=True,
             analysis=analysis,
             recommendations=recommendations[:5],  # Top 5 recommendations
-            confidence=analysis.get("confidence"),
+            confidence=analysis.get("confidence") if isinstance(analysis, dict) else None,
             metadata={
                 "analysis_id": analysis.get("analysis_id", f"ROOF-{datetime.now().strftime('%Y%m%d%H%M%S')}"),
                 "processing_time": analysis.get("processing_time"),
@@ -404,7 +404,7 @@ async def execute_automation(automation_type: str, background_tasks: BackgroundT
         detail="Automation execution requires a configured worker/queue and is not enabled on this server",
     )
 
-@router.post("/recommendations", response_model=AIResponse)
+@router.post("/recommendations")
 async def get_ai_recommendations(
     user_id: str = Body(..., embed=True),
     context: Optional[str] = Body("dashboard", embed=True)
