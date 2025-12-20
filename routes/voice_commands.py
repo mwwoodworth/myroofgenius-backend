@@ -3,14 +3,14 @@ Voice Commands System - Natural Language Control for WeatherCraft ERP
 "Hey WeatherCraft, schedule Johnson repair tomorrow" → Action executed
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 import openai
 import json
 import logging
 from typing import Dict, Any, List
 import re
 from datetime import datetime, timedelta
+import asyncpg
 # Optional speech recognition (would need pip install SpeechRecognition)
 try:
     import speech_recognition as sr
@@ -24,14 +24,13 @@ import os
 router = APIRouter(prefix="/api/v1/voice", tags=["Voice Commands"])
 logger = logging.getLogger(__name__)
 
-# Placeholder auth and database functions
-def get_db():
-    """Placeholder for database session"""
-    return None
+from core.supabase_auth import get_authenticated_user
 
-def get_current_user():
-    """Placeholder for current user"""
-    return {"sub": "anonymous"}
+async def get_db_pool(request: Request) -> asyncpg.Pool:
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return pool
 
 # Initialize OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -53,7 +52,7 @@ class VoiceCommandProcessor:
             "customer": r"customer\s+(.+)"
         }
 
-    async def process_command(self, command_text: str, user_id: str, db: Session) -> Dict[str, Any]:
+    async def process_command(self, command_text: str, user_id: str, conn: asyncpg.Connection, tenant_id: str) -> Dict[str, Any]:
         """Process voice command and return actionable response"""
 
         command_lower = command_text.lower().strip()
@@ -70,7 +69,7 @@ class VoiceCommandProcessor:
             }
 
         # Execute the command based on intent
-        result = await self.execute_command(intent_response, user_id, db)
+        result = await self.execute_command(intent_response, user_id, conn, tenant_id)
         return result
 
     async def analyze_command_intent(self, command_text: str) -> Dict[str, Any]:
@@ -118,7 +117,13 @@ class VoiceCommandProcessor:
                 "confidence": 0.0
             }
 
-    async def execute_command(self, intent_data: Dict[str, Any], user_id: str, db: Session) -> Dict[str, Any]:
+    async def execute_command(
+        self,
+        intent_data: Dict[str, Any],
+        user_id: str,
+        conn: asyncpg.Connection,
+        tenant_id: str,
+    ) -> Dict[str, Any]:
         """Execute the command based on analyzed intent"""
 
         intent = intent_data.get("intent", "").upper()
@@ -127,19 +132,19 @@ class VoiceCommandProcessor:
 
         try:
             if intent == "SCHEDULE":
-                return await self.handle_schedule_command(entity, parameters, user_id, db)
+                return await self.handle_schedule_command(entity, parameters, user_id, conn, tenant_id)
 
             elif intent == "SHOW":
-                return await self.handle_show_command(entity, parameters, user_id, db)
+                return await self.handle_show_command(entity, parameters, user_id, conn, tenant_id)
 
             elif intent == "CREATE":
-                return await self.handle_create_command(entity, parameters, user_id, db)
+                return await self.handle_create_command(entity, parameters, user_id, conn, tenant_id)
 
             elif intent == "SEND":
-                return await self.handle_send_command(entity, parameters, user_id, db)
+                return await self.handle_send_command(entity, parameters, user_id, conn, tenant_id)
 
             elif intent == "WEATHER":
-                return await self.handle_weather_command(parameters, user_id, db)
+                return await self.handle_weather_command(parameters, user_id, conn, tenant_id)
 
             else:
                 return {
@@ -157,8 +162,14 @@ class VoiceCommandProcessor:
                 "error": str(e)
             }
 
-    async def handle_schedule_command(self, entity: str, parameters: Dict, user_id: str, db: Session):
-        """Handle scheduling commands"""
+    async def handle_schedule_command(
+        self, entity: str, parameters: Dict, user_id: str, conn: asyncpg.Connection, tenant_id: str
+    ):
+        """Handle scheduling commands.
+
+        NOTE: We do not fabricate side effects. If scheduling tables are not available,
+        return a clear "not enabled" response.
+        """
 
         when = parameters.get("when", "tomorrow")
         time = parameters.get("time", "09:00")
@@ -168,56 +179,82 @@ class VoiceCommandProcessor:
             customer_name = parameters.get("customer", entity.replace("repair", "").strip())
 
             return {
-                "success": True,
+                "success": False,
                 "action": "SCHEDULE_REPAIR",
-                "message": f"✅ Scheduled repair for {customer_name} on {when} at {time}",
+                "message": "Scheduling via voice commands is not enabled on this server",
                 "details": {
                     "customer": customer_name,
                     "service_type": "repair",
                     "date": when,
                     "time": time
                 },
-                "next_steps": [
-                    "Added to calendar",
-                    "Crew notified",
-                    "Customer confirmation sent"
-                ]
+                "next_steps": [],
+                "available": False,
             }
 
         elif "estimate" in entity.lower():
             customer_name = parameters.get("customer", entity.replace("estimate", "").strip())
 
             return {
-                "success": True,
+                "success": False,
                 "action": "SCHEDULE_ESTIMATE",
-                "message": f"✅ Scheduled estimate for {customer_name} on {when}",
+                "message": "Scheduling via voice commands is not enabled on this server",
                 "details": {
                     "customer": customer_name,
                     "service_type": "estimate",
                     "date": when
-                }
+                },
+                "available": False,
             }
 
         return {
-            "success": True,
-            "message": f"Scheduled: {entity} for {when}",
-            "requires_confirmation": True
+            "success": False,
+            "message": "Scheduling via voice commands is not enabled on this server",
+            "requires_confirmation": False,
+            "available": False,
         }
 
-    async def handle_show_command(self, entity: str, parameters: Dict, user_id: str, db: Session):
+    async def handle_show_command(
+        self, entity: str, parameters: Dict, user_id: str, conn: asyncpg.Connection, tenant_id: str
+    ):
         """Handle show/display commands"""
 
         if "revenue" in entity.lower() or "profit" in entity.lower():
             period = parameters.get("period", "today")
 
-            # Mock revenue data - replace with actual database queries
-            revenue_data = {
-                "today": {"amount": 12500.00, "jobs": 5},
-                "week": {"amount": 85000.00, "jobs": 24},
-                "month": {"amount": 340000.00, "jobs": 89}
-            }
+            period_key = period.lower().strip()
+            if period_key in {"today", "day"}:
+                start_expr = "CURRENT_DATE"
+            elif period_key in {"week", "this week"}:
+                start_expr = "date_trunc('week', NOW())"
+            elif period_key in {"month", "this month"}:
+                start_expr = "date_trunc('month', NOW())"
+            else:
+                start_expr = "CURRENT_DATE"
 
-            data = revenue_data.get(period, revenue_data["today"])
+            amount = await conn.fetchval(
+                f"""
+                SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
+                FROM invoices
+                WHERE tenant_id = $1
+                  AND (status = 'paid' OR payment_status = 'paid')
+                  AND created_at >= {start_expr}
+                """,
+                tenant_id,
+            )
+
+            jobs = await conn.fetchval(
+                f"""
+                SELECT COUNT(*)
+                FROM jobs
+                WHERE tenant_id = $1
+                  AND status = 'completed'
+                  AND COALESCE(completed_date, created_at) >= {start_expr}
+                """,
+                tenant_id,
+            )
+
+            data = {"amount": float(amount or 0), "jobs": int(jobs or 0)}
 
             return {
                 "success": True,
@@ -230,31 +267,35 @@ class VoiceCommandProcessor:
         elif "job" in entity.lower():
             status = parameters.get("status", "active")
 
-            # Mock job data
-            job_counts = {
-                "active": 12,
-                "completed": 156,
-                "scheduled": 8
-            }
+            status_key = status.lower().strip()
+            if status_key in {"active", "in_progress"}:
+                where_clause = "status IN ('in_progress', 'scheduled')"
+            elif status_key == "completed":
+                where_clause = "status = 'completed'"
+            elif status_key == "scheduled":
+                where_clause = "status = 'scheduled'"
+            else:
+                where_clause = "TRUE"
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM jobs WHERE tenant_id = $1 AND {where_clause}",
+                tenant_id,
+            )
 
             return {
                 "success": True,
                 "action": "SHOW_JOBS",
-                "message": f"📋 {status.title()} jobs: {job_counts.get(status, 0)}",
-                "data": {"count": job_counts.get(status, 0), "status": status}
+                "message": f"📋 {status.title()} jobs: {int(count or 0)}",
+                "data": {"count": int(count or 0), "status": status}
             }
 
         elif "weather" in entity.lower():
             return {
-                "success": True,
+                "success": False,
                 "action": "SHOW_WEATHER",
-                "message": "🌤️ Today: 75°F, Clear skies. Perfect for roofing work!",
-                "data": {
-                    "temperature": 75,
-                    "conditions": "clear",
-                    "wind": "5 mph",
-                    "recommendation": "Excellent roofing conditions"
-                }
+                "message": "Weather data is not configured on this server",
+                "data": None,
+                "available": False,
             }
 
         return {
@@ -263,59 +304,63 @@ class VoiceCommandProcessor:
             "action": "SHOW_GENERIC"
         }
 
-    async def handle_create_command(self, entity: str, parameters: Dict, user_id: str, db: Session):
+    async def handle_create_command(
+        self, entity: str, parameters: Dict, user_id: str, conn: asyncpg.Connection, tenant_id: str
+    ):
         """Handle create commands"""
 
         if "estimate" in entity.lower():
             customer = parameters.get("customer", "")
 
             return {
-                "success": True,
+                "success": False,
                 "action": "CREATE_ESTIMATE",
-                "message": f"📝 Creating new estimate for {customer}",
-                "next_steps": ["Opening estimate form", "Pre-filling customer data"],
-                "redirect": "/estimates/new"
+                "message": "Creating estimates via voice commands is not enabled on this server",
+                "next_steps": [],
+                "redirect": None,
+                "available": False,
             }
 
         return {
-            "success": True,
-            "message": f"Creating: {entity}",
-            "action": "CREATE_GENERIC"
+            "success": False,
+            "message": "Create actions via voice commands are not enabled on this server",
+            "action": "CREATE_GENERIC",
+            "available": False,
         }
 
-    async def handle_send_command(self, entity: str, parameters: Dict, user_id: str, db: Session):
+    async def handle_send_command(
+        self, entity: str, parameters: Dict, user_id: str, conn: asyncpg.Connection, tenant_id: str
+    ):
         """Handle send commands"""
 
         recipient = parameters.get("recipient", "")
 
         if "invoice" in entity.lower():
             return {
-                "success": True,
+                "success": False,
                 "action": "SEND_INVOICE",
-                "message": f"📧 Sending invoice to {recipient}",
-                "status": "queued"
+                "message": "Sending invoices via voice commands is not enabled on this server",
+                "status": "not_enabled",
+                "available": False,
             }
 
         return {
-            "success": True,
-            "message": f"Sending {entity} to {recipient}",
-            "action": "SEND_GENERIC"
+            "success": False,
+            "message": "Send actions via voice commands are not enabled on this server",
+            "action": "SEND_GENERIC",
+            "available": False,
         }
 
-    async def handle_weather_command(self, parameters: Dict, user_id: str, db: Session):
+    async def handle_weather_command(
+        self, parameters: Dict, user_id: str, conn: asyncpg.Connection, tenant_id: str
+    ):
         """Handle weather-related commands"""
 
         return {
-            "success": True,
+            "success": False,
             "action": "WEATHER_CHECK",
-            "message": "🌤️ Weather looks great for roofing! 75°F, clear skies, light winds.",
-            "data": {
-                "temperature": 75,
-                "conditions": "clear",
-                "wind_speed": 5,
-                "precipitation": 0,
-                "recommendation": "Perfect roofing conditions"
-            },
+            "message": "Weather data is not configured on this server",
+            "data": None,
             "alerts": []
         }
 
@@ -324,17 +369,23 @@ voice_processor = VoiceCommandProcessor()
 
 @router.post("/command/text")
 async def process_text_command(
+    request: Request,
     command: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """
     🎤 PROCESS TEXT VOICE COMMAND
     Send text command: "Schedule Johnson repair tomorrow"
     """
 
-    user_id = current_user.get("sub", "anonymous")
-    result = await voice_processor.process_command(command, user_id, db)
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    user_id = current_user.get("id", "anonymous")
+    async with pool.acquire() as conn:
+        result = await voice_processor.process_command(command, user_id, conn, tenant_id)
 
     return {
         "command_processed": command,
@@ -345,9 +396,10 @@ async def process_text_command(
 
 @router.post("/command/audio")
 async def process_audio_command(
+    request: Request,
     audio_file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """
     🎤 PROCESS AUDIO VOICE COMMAND
@@ -358,13 +410,26 @@ async def process_audio_command(
         # Read audio file
         audio_data = await audio_file.read()
 
-        # Convert speech to text (would need speech recognition setup)
-        # For now, return placeholder
-        transcribed_text = "show today's revenue"  # Placeholder
+        if not SPEECH_RECOGNITION_AVAILABLE:
+            raise HTTPException(
+                status_code=501,
+                detail="Audio transcription is not available (missing SpeechRecognition dependency)",
+            )
+
+        recognizer = sr.Recognizer()
+        audio_bytes = io.BytesIO(audio_data)
+        with sr.AudioFile(audio_bytes) as source:
+            audio = recognizer.record(source)
+        transcribed_text = recognizer.recognize_google(audio)
 
         # Process the transcribed command
-        user_id = current_user.get("sub", "anonymous")
-        result = await voice_processor.process_command(transcribed_text, user_id, db)
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        user_id = current_user.get("id", "anonymous")
+        async with pool.acquire() as conn:
+            result = await voice_processor.process_command(transcribed_text, user_id, conn, tenant_id)
 
         return {
             "audio_processed": True,

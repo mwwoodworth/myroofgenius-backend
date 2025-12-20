@@ -61,6 +61,7 @@ class RealAISystem:
         provider = provider or self.default_provider
         providers_to_try = [provider] + [p for p in self.providers if p != provider]
         
+        last_error: Exception | None = None
         for p in providers_to_try:
             try:
                 logger.info(f"Using {p} for AI processing")
@@ -68,11 +69,15 @@ class RealAISystem:
                 if result:
                     return result
             except Exception as e:
+                last_error = e
                 logger.error(f"{p} failed: {e}, trying next provider")
                 continue
         
-        # If all fail, return intelligent fallback
-        return self._intelligent_fallback(prompt, context)
+        configured = [k for k in ("openai", "anthropic", "gemini") if globals().get(f"{k.upper()}_API_KEY")]
+        raise RuntimeError(
+            "All AI providers failed (configured: %s). Set OPENAI_API_KEY/ANTHROPIC_API_KEY/GEMINI_API_KEY."
+            % (", ".join(configured) or "none")
+        ) from last_error
     
     async def _call_openai(self, prompt: str, context: Dict[str, Any] = None) -> str:
         """Call OpenAI GPT-4"""
@@ -148,40 +153,8 @@ class RealAISystem:
             logger.error(f"Gemini error: {e}")
             raise
     
-    def _intelligent_fallback(self, prompt: str, context: Dict[str, Any] = None) -> str:
-        """Intelligent fallback when APIs are unavailable"""
-        # Parse the prompt for intent
-        prompt_lower = prompt.lower()
-        
-        if "estimate" in prompt_lower or "quote" in prompt_lower:
-            return self._estimate_fallback(prompt, context)
-        elif "analyze" in prompt_lower or "assessment" in prompt_lower:
-            return self._analysis_fallback(prompt, context)
-        elif "recommend" in prompt_lower or "suggest" in prompt_lower:
-            return self._recommendation_fallback(prompt, context)
-        else:
-            return f"Processing request: {prompt[:100]}... [AI services temporarily using rule-based processing]"
-    
-    def _estimate_fallback(self, prompt: str, context: Dict[str, Any]) -> str:
-        """Fallback for estimation requests"""
-        # Extract numbers from prompt
-        import re
-        numbers = re.findall(r'\d+', prompt)
-        
-        if numbers:
-            sqft = int(numbers[0])
-            estimate = sqft * 7.5  # Industry average
-            return f"Based on the {sqft} sq ft area, the estimated cost is ${estimate:,.2f}. This includes materials and labor."
-        
-        return "Please provide the square footage for an accurate estimate."
-    
-    def _analysis_fallback(self, prompt: str, context: Dict[str, Any]) -> str:
-        """Fallback for analysis requests"""
-        return "Analysis complete. Key findings: System operational, efficiency at optimal levels, no critical issues detected."
-    
-    def _recommendation_fallback(self, prompt: str, context: Dict[str, Any]) -> str:
-        """Fallback for recommendations"""
-        return "Recommended actions: 1) Continue monitoring system performance, 2) Schedule regular maintenance, 3) Consider upgrade options for enhanced efficiency."
+    # NOTE: No heuristic / rule-based AI fallbacks. If providers are unavailable,
+    # raise an error so callers can return a proper 503.
 
 
 class AIAgent:

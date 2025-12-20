@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 import base64
-import sys
 import os
+import sys
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -23,97 +23,27 @@ logger = logging.getLogger(__name__)
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import database dependency from main
-try:
-    from main import get_db
-except ImportError:
-    # Fallback: create a simple get_db function
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    
-    DATABASE_URL = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-    )
-    
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
-    def get_db():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+from database import get_db
 
 # Import REAL AI service with fallback
 try:
     # Import from ai_services directory
-    from ai_services.real_ai_integration import ai_service
+    from ai_services.real_ai_integration import (
+        ai_service,
+        AIServiceError,
+        AIServiceNotConfiguredError,
+        AIProviderCallError,
+    )
     logger.info("Successfully imported real AI service from ai_services")
 except ImportError as e:
-    logger.warning(f"Failed to import AI service: {e}")
-    # Try alternative import paths
-    import sys
-    import os
-    # Add parent directory to path
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, parent_dir)
-    try:
-        from real_ai_integration import ai_service
-        logger.info("Successfully imported real AI service from root")
-    except ImportError:
-        # Create a minimal fallback service
-        logger.warning("AI service module not found - creating fallback")
-        
-        class FallbackAIService:
-            async def analyze_roof_image(self, image_data, metadata):
-                return {
-                    "condition_score": 75,
-                    "damage_detected": [],
-                    "confidence": 0.8,
-                    "analysis_id": f"FALLBACK-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                    "processing_time": 2.5,
-                    "ai_provider": "Fallback Service",
-                    "error": "AI service not properly configured"
-                }
-            
-            async def score_lead(self, lead_data, signals):
-                return {
-                    "success": True,
-                    "score": 75,
-                    "scoring_method": "rule_based_fallback",
-                    "conversion_probability": 0.65
-                }
-            
-            async def predict_churn(self, customer_data):
-                return {
-                    "risk_score": 25,
-                    "risk_factors": {"engagement": "moderate"},
-                    "retention_strategy": {"tactics": ["Send engagement email"]},
-                    "predicted_ltv": 12000
-                }
-            
-            async def generate_content(self, topic, style):
-                return {
-                    "success": True,
-                    "title": f"Content about {topic}",
-                    "content": f"Professional content about {topic} in {style} style.",
-                    "generated_by": "Fallback"
-                }
-            
-            async def _calculate_rule_based_score(self, lead_data, signals):
-                return self.score_lead(lead_data, signals)
-            
-            async def _calculate_churn_risk(self, customer_data):
-                return self.predict_churn(customer_data)
-            
-            async def _get_fallback_content(self, topic):
-                return self.generate_content(topic, "professional")
-        
-        ai_service = FallbackAIService()
+    logger.error("AI service module not available: %s", e)
+    ai_service = None
+    AIServiceError = Exception  # type: ignore
+    AIServiceNotConfiguredError = Exception  # type: ignore
+    AIProviderCallError = Exception  # type: ignore
 
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Intelligence"])
+APP_START_TIME = datetime.utcnow()
 
 # AI Models
 class RoofAnalysisRequest(BaseModel):
@@ -164,6 +94,9 @@ async def analyze_roof(data: RoofAnalysisRequest, file: Optional[UploadFile] = N
         
         if not image_data:
             raise HTTPException(status_code=400, detail="No image provided for analysis")
+
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
         
         # Use REAL AI service for analysis
         metadata = {
@@ -195,25 +128,24 @@ async def analyze_roof(data: RoofAnalysisRequest, file: Optional[UploadFile] = N
                 elif damage.get("severity") == "moderate":
                     recommendations.append(f"Important: Address {damage['type']} within 30 days")
         
-        # Check if AI service is configured
-        if "error" in analysis:
-            logger.warning("AI service not fully configured - using intelligent defaults")
-            recommendations.append("💡 Configure AI API keys for enhanced analysis accuracy")
-        
         return AIResponse(
             success=True,
             analysis=analysis,
             recommendations=recommendations[:5],  # Top 5 recommendations
-            confidence=analysis.get("confidence", 0.85),
+            confidence=analysis.get("confidence"),
             metadata={
                 "analysis_id": analysis.get("analysis_id", f"ROOF-{datetime.now().strftime('%Y%m%d%H%M%S')}"),
-                "processing_time": analysis.get("processing_time", 3.5),
+                "processing_time": analysis.get("processing_time"),
                 "model_version": "3.0.0-REAL-AI",
-                "ai_provider": analysis.get("ai_provider", "Intelligent Rule Engine")
+                "ai_provider": analysis.get("ai_provider"),
             }
         )
     except Exception as e:
         logger.error(f"Real AI roof analysis error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
         raise HTTPException(status_code=500, detail=f"AI Analysis Error: {str(e)}")
 
 @router.post("/score-lead")
@@ -225,34 +157,23 @@ async def score_lead(data: LeadScoringRequest):
     try:
         lead_data = data.lead_data
         signals = data.behavior_signals or []
+
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
         
         # Use REAL AI service for intelligent lead scoring
         result = await ai_service.score_lead(lead_data, signals)
         
-        # Ensure we have all required fields
-        if "success" not in result:
-            result["success"] = True
-        
-        # Add additional insights if not present
-        if "insights" not in result:
-            result["insights"] = {
-                "ai_powered": True,
-                "analysis_method": result.get("scoring_method", "ai_enhanced"),
-                "confidence": 0.92
-            }
-        
-        # Log the scoring method used
-        logger.info(f"Lead scored using: {result.get('scoring_method', 'AI service')}")
-        
+        result.setdefault("success", True)
         return result
         
     except Exception as e:
         logger.error(f"Real AI lead scoring error: {str(e)}")
-        # Fallback to intelligent rule-based scoring
-        return await ai_service._calculate_rule_based_score(
-            data.lead_data, 
-            data.behavior_signals or []
-        )
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/optimize-revenue")
 async def optimize_revenue(data: RevenueOptimizationRequest):
@@ -260,71 +181,21 @@ async def optimize_revenue(data: RevenueOptimizationRequest):
     AI-driven revenue optimization with dynamic pricing
     """
     try:
-        # Base pricing logic
-        base_prices = {
-            "ai_roof_analysis": 29,
-            "emergency_analysis": 99,
-            "subscription_starter": 97,
-            "subscription_pro": 297,
-            "subscription_enterprise": 997
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
+
+        business_data = {
+            "customer_id": data.customer_id,
+            "product_id": data.product_id,
+            "market_data": data.market_data or {},
         }
-        
-        base_price = base_prices.get(data.product_id, 100)
-        
-        # Dynamic pricing factors
-        factors = {
-            "seasonal": 1.0,  # Default
-            "demand": 1.0,
-            "competition": 1.0,
-            "customer_value": 1.0
-        }
-        
-        # Seasonal adjustment
-        month = datetime.now().month
-        if 3 <= month <= 8:  # Peak roofing season
-            factors["seasonal"] = 1.15
-        elif 9 <= month <= 11:  # Storm season
-            factors["seasonal"] = 1.20
-        else:  # Off-season
-            factors["seasonal"] = 0.85
-        
-        # Market demand (simulated)
-        if data.market_data:
-            demand = data.market_data.get("demand_index", 1.0)
-            factors["demand"] = 0.9 + (demand * 0.2)  # ±10% based on demand
-        
-        # Calculate optimal price
-        multiplier = 1.0
-        for factor in factors.values():
-            multiplier *= factor
-        
-        optimal_price = round(base_price * multiplier)
-        
-        # Upsell recommendations
-        upsells = []
-        if data.product_id == "subscription_starter":
-            upsells.append({
-                "product": "subscription_pro",
-                "value_prop": "5x more AI analyses",
-                "discount": 10,
-                "monthly_savings": 50
-            })
-        
-        return {
-            "success": True,
-            "base_price": base_price,
-            "optimal_price": optimal_price,
-            "price_factors": factors,
-            "confidence": 0.87,
-            "upsell_opportunities": upsells,
-            "predicted_conversion": 0.65 if optimal_price < base_price * 1.1 else 0.45,
-            "revenue_impact": {
-                "monthly_increase": optimal_price * 10,  # Estimated new customers
-                "annual_projection": optimal_price * 10 * 12
-            }
-        }
+        return await ai_service.optimize_revenue(business_data)
     except Exception as e:
         logger.error(f"Revenue optimization error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/churn-prediction/{customer_id}")
@@ -333,69 +204,66 @@ async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
     REAL AI-powered churn prediction using actual customer data
     """
     try:
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
+
         # Get real customer data from database
         customer_data = {}
-        
-        try:
-            # Query actual customer metrics
-            query = text("""
-                SELECT 
-                    c.id,
-                    c.email,
-                    COUNT(DISTINCT DATE(s.created_at)) as days_active,
-                    COUNT(s.id) as total_sessions,
-                    MAX(s.created_at) as last_login,
-                    EXTRACT(DAY FROM NOW() - MAX(s.created_at)) as days_since_login,
-                    COUNT(DISTINCT i.id) as total_invoices,
-                    COUNT(DISTINCT CASE WHEN i.status = 'overdue' THEN i.id END) as overdue_invoices
-                FROM customers c
-                LEFT JOIN user_sessions s ON c.id = s.user_id
-                LEFT JOIN invoices i ON c.id = i.customer_id
-                WHERE c.id = :customer_id
-                GROUP BY c.id, c.email
-            """)
-            
-            result = db.execute(query, {"customer_id": customer_id}).first()
-            
-            if result:
-                customer_data = {
-                    "customer_id": result.id,
-                    "days_since_login": int(result.days_since_login) if result.days_since_login else 999,
-                    "total_sessions": result.total_sessions or 0,
-                    "monthly_usage": result.days_active or 0,
-                    "failed_payments": result.overdue_invoices or 0,
-                    "unresolved_tickets": 0  # Would query support tickets if available
-                }
-        except:
-            # If query fails, use sample data
-            customer_data = {
-                "customer_id": customer_id,
-                "days_since_login": 15,
-                "monthly_usage": 45,
-                "failed_payments": 0,
-                "unresolved_tickets": 1
-            }
+
+        query = text(
+            """
+            SELECT 
+                c.id,
+                c.email,
+                COUNT(DISTINCT DATE(s.created_at)) as days_active,
+                COUNT(s.id) as total_sessions,
+                MAX(s.created_at) as last_login,
+                EXTRACT(DAY FROM NOW() - MAX(s.created_at)) as days_since_login,
+                COUNT(DISTINCT i.id) as total_invoices,
+                COUNT(DISTINCT CASE WHEN i.status = 'overdue' THEN i.id END) as overdue_invoices
+            FROM customers c
+            LEFT JOIN user_sessions s ON c.id = s.user_id
+            LEFT JOIN invoices i ON c.id = i.customer_id
+            WHERE c.id = :customer_id
+            GROUP BY c.id, c.email
+            """
+        )
+
+        result = db.execute(query, {"customer_id": customer_id}).first()
+        if not result:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        customer_data = {
+            "customer_id": str(result.id),
+            "days_since_login": int(result.days_since_login) if result.days_since_login else None,
+            "total_sessions": int(result.total_sessions or 0),
+            "monthly_usage": int(result.days_active or 0),
+            "failed_payments": int(result.overdue_invoices or 0),
+            "unresolved_tickets": 0,
+        }
         
         # Use REAL AI service for churn prediction
         prediction = await ai_service.predict_churn(customer_data)
         
-        # Ensure response has all required fields
         return {
             "success": True,
             "customer_id": customer_id,
-            "churn_risk": prediction.get("risk_score", 0),
-            "risk_factors": prediction.get("risk_factors", {}),
-            "retention_strategy": prediction.get("retention_strategy", {}),
-            "predicted_ltv": prediction.get("predicted_ltv", 14000),
-            "recommended_actions": prediction.get("retention_strategy", {}).get("tactics", []),
+            "churn_risk": prediction.get("risk_score"),
+            "risk_factors": prediction.get("risk_factors"),
+            "retention_strategy": prediction.get("retention_strategy"),
+            "predicted_ltv": prediction.get("predicted_ltv"),
+            "recommended_actions": (prediction.get("retention_strategy") or {}).get("tactics", []),
             "ai_powered": True,
             "analysis_date": datetime.now().isoformat()
         }
         
     except Exception as e:
         logger.error(f"Real AI churn prediction error: {str(e)}")
-        # Fallback to intelligent analysis
-        return await ai_service._calculate_churn_risk({"customer_id": customer_id})
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-content")
 async def generate_marketing_content(topic: str = "roofing", style: str = "professional"):
@@ -404,102 +272,124 @@ async def generate_marketing_content(topic: str = "roofing", style: str = "profe
     Uses actual LLMs to create unique, high-quality content
     """
     try:
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
+
         # Use REAL AI service for content generation
         content_data = await ai_service.generate_content(topic, style)
-        
-        # Ensure we have all required fields
-        if "success" not in content_data:
-            content_data["success"] = True
-        
-        # Add metadata
-        content_data["metadata"] = {
-            "generated_at": datetime.now().isoformat(),
-            "topic": topic,
-            "style": style,
-            "ai_powered": True,
-            "engagement_score": 85  # Base score for AI content
-        }
-        
-        # Add engagement scoring based on content quality
-        if content_data.get("generated_by") == "AI":
-            content_data["metadata"]["engagement_score"] = 92
-            content_data["metadata"]["quality"] = "high"
-        
-        # Log the generation method
-        logger.info(f"Content generated for topic '{topic}' using: {content_data.get('generated_by', 'AI service')}")
-        
+        content_data.setdefault("success", True)
+        content_data["topic"] = topic
+        content_data["style"] = style
         return content_data
         
     except Exception as e:
         logger.error(f"Real AI content generation error: {str(e)}")
-        # Fallback to quality templates if AI fails
-        return await ai_service._get_fallback_content(topic)
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/system-health")
-async def get_system_health():
+async def get_system_health(db: Session = Depends(get_db)):
     """
     AI system health monitoring and self-management status
     NOW WITH REAL METRICS - Not random!
     """
     try:
-        # Calculate real metrics based on time of day
-        current_hour = datetime.now().hour
-        base_analyses = 1200
-        
-        # Simulate realistic daily pattern
-        if 9 <= current_hour <= 17:  # Business hours
-            daily_analyses = base_analyses + (current_hour - 9) * 50
-        elif 18 <= current_hour <= 22:  # Evening
-            daily_analyses = base_analyses + 300
-        else:  # Night/early morning
-            daily_analyses = base_analyses - 200
-        
-        health = {
-            "status": "healthy",
-            "uptime": 99.98,
-            "metrics": {
-                "ai_accuracy": 94.2,
-                "processing_speed": 2.3,
-                "daily_analyses": daily_analyses,  # Real calculation, not random
-                "success_rate": 99.8,
-                "model_version": "3.0.0-REAL-AI",
-                "ai_providers": {
-                    "openai": "configured" if os.getenv("OPENAI_API_KEY") else "not_configured",
-                    "anthropic": "configured" if os.getenv("ANTHROPIC_API_KEY") else "not_configured",
-                    "gemini": "configured" if os.getenv("GEMINI_API_KEY") else "not_configured"
-                }
-            },
-            "revenue_metrics": {
-                "mrr": 45280,
-                "growth_rate": 15.3,
-                "churn_rate": 2.1,
-                "arpu": 297,
-                "ltv": 14256
-            },
-            "automation_status": {
-                "active_campaigns": 4,
-                "leads_processing": 23,
-                "scheduled_tasks": 12,
-                "optimization_runs": 156
-            },
-            "recommendations": [
-                {
-                    "type": "optimization",
-                    "action": "Increase marketing spend by 20%",
-                    "impact": "high",
-                    "expected_roi": 3.2
-                },
-                {
-                    "type": "retention",
-                    "action": "Launch win-back campaign",
-                    "impact": "medium",
-                    "expected_roi": 2.5
-                }
-            ],
-            "last_updated": datetime.now().isoformat()
+        now = datetime.utcnow()
+        uptime_seconds = (now - APP_START_TIME).total_seconds()
+
+        ai_providers = {
+            "openai": "configured" if os.getenv("OPENAI_API_KEY") else "not_configured",
+            "anthropic": "configured" if os.getenv("ANTHROPIC_API_KEY") else "not_configured",
+            "gemini": "configured" if os.getenv("GEMINI_API_KEY") else "not_configured",
         }
-        
-        return health
+
+        daily_analyses = None
+        try:
+            roof_analyses = db.execute(
+                text("SELECT COUNT(*) FROM roof_analyses WHERE created_at >= CURRENT_DATE")
+            ).scalar()
+            daily_analyses = int(roof_analyses or 0)
+        except Exception:
+            daily_analyses = None
+
+        revenue_metrics = {"mrr": None, "growth_rate": None, "churn_rate": None, "arpu": None, "ltv": None}
+        try:
+            latest = db.execute(
+                text(
+                    """
+                    SELECT mrr, churn_rate, ltv
+                    FROM revenue_metrics
+                    ORDER BY metric_date DESC
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if latest:
+                revenue_metrics["mrr"] = float(latest.mrr) if latest.mrr is not None else None
+                revenue_metrics["churn_rate"] = float(latest.churn_rate) if latest.churn_rate is not None else None
+                revenue_metrics["ltv"] = float(latest.ltv) if latest.ltv is not None else None
+        except Exception:
+            pass
+
+        # Growth based on paid invoices (last 30 days vs prior 30 days).
+        try:
+            last_30 = float(
+                db.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
+                        FROM invoices
+                        WHERE status = 'paid'
+                          AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                        """
+                    )
+                ).scalar()
+                or 0
+            )
+            prior_30 = float(
+                db.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
+                        FROM invoices
+                        WHERE status = 'paid'
+                          AND created_at >= CURRENT_DATE - INTERVAL '60 days'
+                          AND created_at < CURRENT_DATE - INTERVAL '30 days'
+                        """
+                    )
+                ).scalar()
+                or 0
+            )
+            if prior_30 > 0:
+                revenue_metrics["growth_rate"] = round(((last_30 - prior_30) / prior_30) * 100, 2)
+        except Exception:
+            pass
+
+        # ARPU when MRR is available.
+        if revenue_metrics["mrr"] is not None:
+            try:
+                active_subs = db.execute(text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")).scalar()
+                if active_subs:
+                    revenue_metrics["arpu"] = round(revenue_metrics["mrr"] / float(active_subs), 2)
+            except Exception:
+                pass
+
+        return {
+            "status": "healthy",
+            "uptime_seconds": round(uptime_seconds, 2),
+            "metrics": {
+                "daily_analyses": daily_analyses,
+                "model_version": "3.0.0-REAL-AI",
+                "ai_providers": ai_providers,
+            },
+            "revenue_metrics": revenue_metrics,
+            "automation_status": {},
+            "recommendations": [],
+            "last_updated": now.isoformat(),
+        }
     except Exception as e:
         logger.error(f"System health error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -509,61 +399,10 @@ async def execute_automation(automation_type: str, background_tasks: BackgroundT
     """
     Execute automated growth and optimization tasks
     """
-    try:
-        automations = {
-            "lead_nurture": {
-                "name": "Lead Nurturing Campaign",
-                "targets": 45,
-                "expected_conversions": 8,
-                "timeline": "7_days"
-            },
-            "churn_prevention": {
-                "name": "Churn Prevention Outreach",
-                "targets": 12,
-                "expected_saves": 9,
-                "timeline": "immediate"
-            },
-            "upsell_campaign": {
-                "name": "Premium Upgrade Campaign",
-                "targets": 67,
-                "expected_upgrades": 15,
-                "timeline": "14_days"
-            },
-            "price_optimization": {
-                "name": "Dynamic Price Adjustment",
-                "products_affected": 5,
-                "expected_revenue_increase": 12,
-                "timeline": "immediate"
-            }
-        }
-        
-        automation = automations.get(
-            automation_type,
-            {
-                "name": "Custom Automation",
-                "status": "initialized",
-                "timeline": "24_hours"
-            }
-        )
-        
-        # Queue background task
-        async def run_automation():
-            await asyncio.sleep(2)  # Simulate processing
-            logger.info(f"Automation {automation_type} completed")
-        
-        background_tasks.add_task(run_automation)
-        
-        return {
-            "success": True,
-            "automation_id": f"AUTO-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-            "type": automation_type,
-            "details": automation,
-            "status": "queued",
-            "estimated_completion": (datetime.now() + timedelta(hours=1)).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Automation execution error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(
+        status_code=501,
+        detail="Automation execution requires a configured worker/queue and is not enabled on this server",
+    )
 
 @router.post("/recommendations", response_model=AIResponse)
 async def get_ai_recommendations(
@@ -574,75 +413,31 @@ async def get_ai_recommendations(
     Get AI-powered recommendations for a user
     """
     try:
-        # Use AI service if available
-        if ai_service:
-            # Generate personalized recommendations based on user context
-            recommendations = []
-            
-            # Dashboard recommendations
-            if context == "dashboard":
-                recommendations = [
-                    {
-                        "id": "rec_1",
-                        "title": "Optimize Your Pricing",
-                        "description": "AI analysis shows you could increase revenue by 15% with dynamic pricing",
-                        "action": "View Pricing Recommendations",
-                        "priority": "high",
-                        "potential_impact": "$12,000/month"
-                    },
-                    {
-                        "id": "rec_2", 
-                        "title": "Reduce Customer Churn",
-                        "description": "3 customers show high churn risk - immediate action recommended",
-                        "action": "View At-Risk Customers",
-                        "priority": "urgent",
-                        "potential_impact": "Save $8,000/month"
-                    },
-                    {
-                        "id": "rec_3",
-                        "title": "Automate Follow-ups",
-                        "description": "Enable AI-powered follow-up emails to increase conversion by 25%",
-                        "action": "Configure Automation",
-                        "priority": "medium",
-                        "potential_impact": "10 hours/week saved"
-                    }
-                ]
-            
-            return {
-                "success": True,
-                "result": {
-                    "recommendations": recommendations,
-                    "user_id": user_id,
-                    "context": context,
-                    "generated_at": datetime.now().isoformat()
-                },
-                "metadata": {
-                    "ai_provider": "real_ai_service",
-                    "model": "gpt-4",
-                    "processing_time": 1.2
-                }
-            }
-        else:
-            # Fallback recommendations
-            return {
-                "success": True,
-                "result": {
-                    "recommendations": [
-                        {
-                            "id": "fallback_1",
-                            "title": "Complete Your Profile",
-                            "description": "Add more information to get better AI recommendations",
-                            "priority": "low"
-                        }
-                    ],
-                    "user_id": user_id,
-                    "context": context
-                },
-                "metadata": {
-                    "ai_provider": "fallback",
-                    "processing_time": 0.1
-                }
-            }
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
+
+        prompt = (
+            "You are an assistant for a roofing ERP/SaaS product.\n\n"
+            f"User ID: {user_id}\n"
+            f"Context: {context}\n\n"
+            "Return JSON with key 'recommendations' as a list of 1-5 items. "
+            "Each item must include: id, title, description, action, priority, potential_impact."
+        )
+        result = await ai_service.generate_json(prompt)
+        return {
+            "success": True,
+            "result": {
+                **result,
+                "user_id": user_id,
+                "context": context,
+                "generated_at": datetime.now().isoformat(),
+            },
+            "metadata": {"ai_provider": result.get("ai_provider")},
+        }
     except Exception as e:
         logger.error(f"Recommendations error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))

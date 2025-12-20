@@ -3,7 +3,7 @@ Two-factor authentication Module - Auto-generated
 Part of complete ERP implementation
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
@@ -14,18 +14,15 @@ import json
 router = APIRouter()
 
 # Database connection
-async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
-    try:
+async def get_db(request: Request):
+    """Yield a database connection from the shared asyncpg pool."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
+    async with pool.acquire() as conn:
         yield conn
-    finally:
-        await conn.close()
+
 
 # Models
 class TwoFactorAuthBase(BaseModel):

@@ -21,15 +21,7 @@ from ai_core.real_ai_system import ai_system, ai_orchestrator, process_with_ai, 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["AI"])
-
-def get_db():
-    """Get database session"""
-    from main import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
 
 class AIRequest(BaseModel):
     prompt: str
@@ -141,7 +133,7 @@ async def ai_analyze(request: AIAnalysisRequest, db: Session = Depends(get_db)):
         result = {
             "type": request.type,
             "analysis": analysis,
-            "confidence": 0.92,  # Would be calculated based on AI response
+            "confidence": None,
             "recommendations": extract_recommendations(analysis),
             "key_findings": extract_key_findings(analysis),
             "timestamp": datetime.utcnow().isoformat()
@@ -306,7 +298,11 @@ def extract_key_findings(text: str) -> List[str]:
 async def store_workflow_result(workflow: str, result: Dict[str, Any]):
     """Store workflow result in background"""
     try:
-        from main import SessionLocal
+        from database import SessionLocal
+        if SessionLocal is None:
+            logger.error("DATABASE_URL not configured; cannot store workflow result")
+            return
+
         db = SessionLocal()
         
         db.execute(
@@ -325,4 +321,4 @@ async def store_workflow_result(workflow: str, result: Dict[str, Any]):
         db.close()
         
     except Exception as e:
-        logger.error(f"Error storing workflow result: {e} RETURNING * RETURNING * RETURNING * RETURNING *")
+        logger.error("Error storing workflow result: %s", e)

@@ -15,24 +15,8 @@ import os
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Monitoring"])
 
-# Database setup
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
-
-engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
+from version import __version__
 
 @router.get("/monitoring")
 async def get_system_monitoring(db: Session = Depends(get_db)):
@@ -70,12 +54,12 @@ async def get_system_monitoring(db: Session = Depends(get_db)):
         except Exception as e:
             logger.warning(f"Could not fetch database stats: {e}")
 
-        # Get API metrics
+        # API metrics require request instrumentation; do not fabricate values.
         api_metrics = {
-            'requests_per_minute': 0,  # Would need Redis or tracking for real metrics
-            'average_response_time': 0.125,  # Placeholder
-            'error_rate': 0.001,  # Placeholder
-            'uptime': '99.9%'
+            "instrumented": False,
+            "requests_per_minute": None,
+            "average_response_time_ms": None,
+            "error_rate": None,
         }
 
         # Get service health
@@ -83,7 +67,7 @@ async def get_system_monitoring(db: Session = Depends(get_db)):
             'backend_api': 'healthy',
             'database': 'healthy' if db_stats else 'degraded',
             'ai_agents': 'healthy',
-            'stripe': 'healthy',
+            'stripe': 'configured' if os.getenv("STRIPE_SECRET_KEY") else 'not_configured',
             'redis': 'not_configured'
         }
 
@@ -122,7 +106,7 @@ async def get_health_status():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'service': 'brainops-backend',
-        'version': '32.0.0'
+        'version': __version__
     }
 
 @router.get("/monitoring/metrics")
@@ -168,20 +152,69 @@ async def get_metrics(
         except Exception as e:
             logger.warning(f"Could not fetch job metrics: {e}")
 
-        # Get revenue metrics (placeholder)
-        revenue_metrics = {
-            'total_revenue': 0,
-            'new_customers': 0,
-            'conversion_rate': 0
-        }
+        # Revenue metrics from real tables
+        revenue_metrics: Dict[str, Any] = {}
+        try:
+            total_revenue = db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
+                    FROM invoices
+                    WHERE (status = 'paid' OR payment_status = 'paid')
+                      AND created_at >= :start_time
+                    """
+                ),
+                {"start_time": start_time},
+            ).scalar()
+            new_customers = db.execute(
+                text("SELECT COUNT(*) FROM customers WHERE created_at >= :start_time"),
+                {"start_time": start_time},
+            ).scalar()
+            revenue_metrics = {
+                "total_revenue": float(total_revenue or 0),
+                "new_customers": int(new_customers or 0),
+            }
+        except Exception as e:
+            logger.warning("Could not fetch revenue metrics: %s", e)
+            revenue_metrics = {"total_revenue": None, "new_customers": None}
 
-        # Get AI usage metrics (placeholder)
-        ai_metrics = {
-            'total_analyses': 0,
-            'roof_analyses': 0,
-            'estimates_generated': 0,
-            'average_confidence': 0
+        # AI usage metrics from real tables (if present)
+        ai_metrics: Dict[str, Any] = {
+            "total_analyses": None,
+            "roof_analyses": None,
+            "estimates_generated": None,
+            "average_confidence": None,
         }
+        try:
+            roof_analyses = db.execute(
+                text("SELECT COUNT(*) FROM roof_analyses WHERE created_at >= :start_time"),
+                {"start_time": start_time},
+            ).scalar()
+            ai_metrics["roof_analyses"] = int(roof_analyses or 0)
+        except Exception:
+            pass
+        try:
+            estimates_generated = db.execute(
+                text("SELECT COUNT(*) FROM ai_estimates WHERE created_at >= :start_time"),
+                {"start_time": start_time},
+            ).scalar()
+            ai_metrics["estimates_generated"] = int(estimates_generated or 0)
+        except Exception:
+            pass
+        try:
+            avg_conf = db.execute(
+                text("SELECT AVG(confidence_score) FROM roof_analyses WHERE created_at >= :start_time"),
+                {"start_time": start_time},
+            ).scalar()
+            ai_metrics["average_confidence"] = float(avg_conf) if avg_conf is not None else None
+        except Exception:
+            pass
+        if ai_metrics["roof_analyses"] is not None or ai_metrics["estimates_generated"] is not None:
+            analyses_total = 0
+            for key in ("roof_analyses", "estimates_generated"):
+                if isinstance(ai_metrics.get(key), int):
+                    analyses_total += ai_metrics[key]
+            ai_metrics["total_analyses"] = analyses_total
 
         return {
             'period': period,

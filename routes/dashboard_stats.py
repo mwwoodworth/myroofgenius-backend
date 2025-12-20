@@ -88,14 +88,7 @@ async def get_dashboard_stats(
     now = datetime.now(timezone.utc)
 
     if pool is None:
-        logger.warning("Dashboard stats falling back to offline placeholder data")
-        return {
-            "success": True,
-            "tenant_id": resolved_tenant,
-            "stats": _empty_stats(),
-            "generated_at": now.isoformat(),
-            "offline": True,
-        }
+        raise HTTPException(status_code=503, detail="Database connection not available")
 
     try:
         async with pool.acquire() as conn:
@@ -304,4 +297,3 @@ async def get_dashboard_stats(
     except Exception as exc:
         logger.exception("Failed to compute dashboard stats: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to compute dashboard stats") from exc
-

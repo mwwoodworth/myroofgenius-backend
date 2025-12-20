@@ -9,24 +9,21 @@ from typing import Optional, Dict, Any
 import stripe
 import os
 import json
+import logging
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import httpx
 
 router = APIRouter(tags=["Stripe Revenue"])
+logger = logging.getLogger(__name__)
 
 # Stripe configuration - PERMANENT RESTRICTED KEY
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_REDACTED_placeholder")
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 # SendGrid configuration
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
-SENDGRID_FROM_EMAIL = "matthew@brainstackstudio.com"
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "no-reply@myroofgenius.com")
 
 class CheckoutRequest(BaseModel):
     price_id: str
@@ -42,14 +39,17 @@ class SubscriptionRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
 
 def get_db():
-    engine = create_engine(DATABASE_URL)
-    return engine
+    from database import engine as db_engine
+
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 async def send_email(to_email: str, subject: str, html_content: str):
     """Send email via SendGrid"""
     if not SENDGRID_API_KEY:
-        print(f"Would send email to {to_email}: {subject}")
-        return
+        logger.warning("SendGrid not configured; skipping email send to %s", to_email)
+        return False
     
     async with httpx.AsyncClient() as client:
         response = await client.post(

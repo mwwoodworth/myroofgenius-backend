@@ -3,8 +3,7 @@ AI Vision Roof Analysis - Game-changing feature for WeatherCraft ERP
 Analyzes roof photos using GPT-4 Vision to generate instant estimates
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 import openai
 import base64
 import json
@@ -12,29 +11,32 @@ import logging
 from typing import Dict, Any, List
 from datetime import datetime
 import os
+import hashlib
+import asyncpg
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter(prefix="/api/v1/ai/roof", tags=["AI Vision"])
 
-# Placeholder auth and database functions
-def get_db():
-    """Placeholder for database session"""
-    return None
-
-def get_current_user():
-    """Placeholder for current user"""
-    return {"sub": "anonymous"}
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+async def get_db_pool(request: Request) -> asyncpg.Pool:
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return pool
+
 @router.post("/analyze")
 async def analyze_roof_photo(
+    request: Request,
     file: UploadFile = File(...),
     customer_id: str = None,
     job_id: str = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db_pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """
     🏠 AI-POWERED ROOF ANALYSIS
@@ -131,22 +133,40 @@ async def analyze_roof_photo(
             analysis_data, customer_id, job_id, db
         )
 
-        # Store analysis in database
-        analysis_record = {
-            "user_id": current_user.get("sub"),
-            "customer_id": customer_id,
-            "job_id": job_id,
-            "filename": file.filename,
-            "analysis": analysis_data,
-            "estimate": estimate_data,
-            "created_at": datetime.utcnow(),
-            "ai_model": "gpt-4o"
-        }
-
-        
+        # Store analysis in database (if the table exists)
+        analysis_id = None
+        try:
+            image_hash = hashlib.sha256(image_data).hexdigest()
+            async with db_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO roof_analyses (customer_email, photo_data, ai_analysis, confidence_score, created_at)
+                    VALUES ($1, $2, $3::jsonb, $4, NOW())
+                    RETURNING id
+                    """,
+                    current_user.get("email"),
+                    f"hash:{image_hash}",
+                    json.dumps(
+                        {
+                            "analysis": analysis_data,
+                            "estimate": estimate_data,
+                            "customer_id": customer_id,
+                            "job_id": job_id,
+                            "filename": file.filename,
+                            "ai_model": "gpt-4o",
+                            "created_by": current_user.get("id"),
+                        }
+                    ),
+                    0.92,
+                )
+                if row and row.get("id"):
+                    analysis_id = str(row["id"])
+        except Exception as db_error:
+            logger.warning("Failed to persist roof analysis: %s", db_error)
 
         return {
             "success": True,
+            "analysis_id": analysis_id,
             "analysis": analysis_data,
             "estimate": estimate_data,
             "confidence": 0.92,
@@ -223,10 +243,11 @@ async def generate_estimate_from_analysis(
 
 @router.post("/batch-analyze")
 async def batch_analyze_photos(
+    request: Request,
     files: List[UploadFile] = File(...),
     property_id: str = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db_pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """
     🏠 BATCH ROOF ANALYSIS
@@ -238,9 +259,10 @@ async def batch_analyze_photos(
     for file in files:
         try:
             result = await analyze_roof_photo(
+                request=request,
                 file=file,
                 customer_id=property_id,
-                db=db,
+                db_pool=db_pool,
                 current_user=current_user
             )
             results.append({
@@ -264,37 +286,48 @@ async def batch_analyze_photos(
 @router.get("/analysis/{analysis_id}")
 async def get_roof_analysis(
     analysis_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    request: Request,
+    db_pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """Retrieve a previous roof analysis by ID"""
 
-    
-    return {
-        "analysis_id": analysis_id,
-        "status": "completed",
-        "message": "Analysis retrieval endpoint ready for implementation"
-    }
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, customer_email, ai_analysis, confidence_score, created_at
+            FROM roof_analyses
+            WHERE id = $1::uuid
+            """,
+            analysis_id,
+        )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    payload = dict(row)
+    if isinstance(payload.get("ai_analysis"), str):
+        try:
+            payload["ai_analysis"] = json.loads(payload["ai_analysis"])
+        except Exception:
+            pass
+
+    return {"success": True, "data": payload}
 
 @router.post("/estimate-from-satellite")
 async def generate_satellite_estimate(
     address: str,
     satellite_api: str = "google_maps",
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    request: Request = None,
+    db_pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
 ):
     """
     🛰️ SATELLITE ROOF ESTIMATION
     Generate estimates using satellite imagery from Google Maps
     """
 
-    # This would integrate with Google Maps Static API
-    # to get aerial roof views and analyze them
-
-    return {
-        "address": address,
-        "satellite_analysis": "Feature in development",
-        "estimated_sq_ft": 2400,
-        "roof_complexity": "moderate",
-        "preliminary_estimate": "$18,500 - $24,000"
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="Satellite estimates require a configured imagery provider and are not enabled on this server",
+    )

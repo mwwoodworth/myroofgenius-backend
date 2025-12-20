@@ -16,23 +16,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Configure Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-# Price IDs for different plans
+# Optional price IDs for frontend discovery (no hardcoded fallbacks)
 PRICE_IDS = {
-    "price_starter_monthly": "price_1QNxyzABCDEF123456",  # $49/month
-    "price_starter_annual": "price_1QNxyzABCDEF123457",   # $39/month billed annually
-    "price_professional_monthly": "price_1QNxyzABCDEF123458",  # $99/month
-    "price_professional_annual": "price_1QNxyzABCDEF123459",   # $79/month billed annually
-    "price_enterprise_monthly": "price_1QNxyzABCDEF123460",  # $199/month
-    "price_enterprise_annual": "price_1QNxyzABCDEF123461",   # $159/month billed annually
-}
-
-# For testing, use test mode payment links
-TEST_PAYMENT_LINKS = {
-    "price_starter_monthly": "https://buy.stripe.com/test_starter_monthly",
-    "price_professional_monthly": "https://buy.stripe.com/test_professional_monthly",
-    "price_enterprise_monthly": "https://buy.stripe.com/test_enterprise_monthly",
+    "starter_monthly": os.getenv("STRIPE_PRICE_STARTER_MONTHLY"),
+    "starter_annual": os.getenv("STRIPE_PRICE_STARTER_ANNUAL"),
+    "professional_monthly": os.getenv("STRIPE_PRICE_PROFESSIONAL_MONTHLY"),
+    "professional_annual": os.getenv("STRIPE_PRICE_PROFESSIONAL_ANNUAL"),
+    "enterprise_monthly": os.getenv("STRIPE_PRICE_ENTERPRISE_MONTHLY"),
+    "enterprise_annual": os.getenv("STRIPE_PRICE_ENTERPRISE_ANNUAL"),
 }
 
 class CheckoutRequest(BaseModel):
@@ -48,37 +41,36 @@ class SubscriptionRequest(BaseModel):
 async def create_checkout_session(request: CheckoutRequest):
     """Create a Stripe checkout session for subscription"""
     try:
-        # For now, return a test payment link
-        # In production, this would create a real Stripe checkout session
+        if not stripe.api_key:
+            raise HTTPException(status_code=503, detail="Stripe is not configured")
 
-        # Map price_id to test payment link
-        checkout_url = TEST_PAYMENT_LINKS.get(
-            request.price_id,
-            "https://buy.stripe.com/test_default"
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+        success_url = os.getenv(
+            "STRIPE_SUCCESS_URL",
+            f"{frontend_url}/dashboard?session_id={{CHECKOUT_SESSION_ID}}",
         )
+        cancel_url = os.getenv("STRIPE_CANCEL_URL", f"{frontend_url}/pricing")
 
-        # In production, you would do:
-        """
         session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price': request.price_id,
-                'quantity': 1,
-            }],
-            mode='subscription',
-            success_url='https://myroofgenius.com/dashboard?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url='https://myroofgenius.com/pricing',
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price": request.price_id,
+                    "quantity": 1,
+                }
+            ],
+            mode="subscription",
+            success_url=success_url,
+            cancel_url=cancel_url,
             customer_email=request.customer_email,
-            metadata=request.metadata
+            metadata=request.metadata or {},
         )
-        checkout_url = session.url
-        """
 
         return {
-            "checkout_url": checkout_url,
-            "session_id": f"test_session_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "checkout_url": session.url,
+            "session_id": session.id,
             "price_id": request.price_id,
-            "metadata": request.metadata
+            "metadata": request.metadata or {},
         }
 
     except stripe.error.StripeError as e:
@@ -108,7 +100,7 @@ async def stripe_webhook(request: Dict[str, Any]):
             subscription = request.get('data', {}).get('object', {})
             logger.info(f"Subscription cancelled: {subscription.get('id')}")
 
-        
+        return {"status": "ok"}
 
     except Exception as e:
         logger.error(f"Webhook error: {e}")
@@ -125,6 +117,10 @@ async def get_pricing_plans():
                 "name": "Starter",
                 "price_monthly": 49,
                 "price_annual": 39,
+                "stripe_price_ids": {
+                    "monthly": PRICE_IDS.get("starter_monthly"),
+                    "annual": PRICE_IDS.get("starter_annual"),
+                },
                 "features": [
                     "25 AI roof analyses per month",
                     "Instant cost estimates",
@@ -142,6 +138,10 @@ async def get_pricing_plans():
                 "price_monthly": 99,
                 "price_annual": 79,
                 "popular": True,
+                "stripe_price_ids": {
+                    "monthly": PRICE_IDS.get("professional_monthly"),
+                    "annual": PRICE_IDS.get("professional_annual"),
+                },
                 "features": [
                     "UNLIMITED AI roof analyses",
                     "Advanced damage detection",
@@ -160,6 +160,10 @@ async def get_pricing_plans():
                 "name": "Enterprise",
                 "price_monthly": 199,
                 "price_annual": 159,
+                "stripe_price_ids": {
+                    "monthly": PRICE_IDS.get("enterprise_monthly"),
+                    "annual": PRICE_IDS.get("enterprise_annual"),
+                },
                 "features": [
                     "Everything in Professional",
                     "Unlimited team members",
@@ -180,22 +184,30 @@ async def get_pricing_plans():
 async def get_subscription(customer_id: str):
     """Get customer subscription details"""
     try:
-        
-        # For now, return mock data
+        if not stripe.api_key:
+            raise HTTPException(status_code=503, detail="Stripe is not configured")
+
+        subscriptions = stripe.Subscription.list(customer=customer_id, status="all", limit=1)
+        if not subscriptions.data:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        subscription = subscriptions.data[0]
+        current_period_end = None
+        if getattr(subscription, "current_period_end", None):
+            current_period_end = datetime.fromtimestamp(subscription.current_period_end).date().isoformat()
+
         return {
             "customer_id": customer_id,
             "subscription": {
-                "plan": "professional",
-                "status": "active",
-                "current_period_end": "2025-10-16",
-                "cancel_at_period_end": False
+                "id": subscription.id,
+                "status": subscription.status,
+                "cancel_at_period_end": bool(getattr(subscription, "cancel_at_period_end", False)),
+                "current_period_end": current_period_end,
+                "items": subscription.get("items", {}).get("data", []),
             },
-            "usage": {
-                "roof_analyses": 45,
-                "estimates_created": 23,
-                "invoices_sent": 18
-            }
         }
     except Exception as e:
         logger.error(f"Subscription fetch error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail="Failed to fetch subscription")

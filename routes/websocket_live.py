@@ -1,11 +1,9 @@
-from fastapi import HTTPException
 """
 Real-Time WebSocket System - Live Updates for WeatherCraft ERP
 Transforms static dashboard into dynamic, live-updating powerhouse
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List, Any
 import json
 import asyncio
@@ -17,10 +15,7 @@ import os
 router = APIRouter(prefix="/api/v1/live", tags=["Real-Time"])
 logger = logging.getLogger(__name__)
 
-# Placeholder database function
-def get_db():
-    """Placeholder for database session"""
-    return None
+from database import get_db_connection
 
 # Redis for pub/sub (optional)
 try:
@@ -91,11 +86,20 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str, channel: str = "dashboard"):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    channel: str = "dashboard",
+    tenant_id: str | None = None,
+):
     """
     🔴 LIVE WEBSOCKET CONNECTION
     Connect to real-time updates for dashboard, jobs, revenue, etc.
     """
+    if not tenant_id:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket, user_id, channel)
 
     try:
@@ -125,17 +129,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, channel: str = 
             elif message_type == "request_update":
                 # Request immediate update for specific data
                 update_type = message_data.get("update_type", "dashboard")
-                await send_live_update(update_type, user_id, websocket)
+                await send_live_update(update_type, user_id, tenant_id, websocket)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id, channel)
 
-async def send_live_update(update_type: str, user_id: str, websocket: WebSocket):
+async def send_live_update(update_type: str, user_id: str, tenant_id: str, websocket: WebSocket):
     """Send specific live updates based on type"""
 
     if update_type == "dashboard":
         # Get live dashboard data
-        update_data = await get_live_dashboard_data()
+        update_data = await get_live_dashboard_data(tenant_id)
         await manager.send_personal_message({
             "type": "dashboard_update",
             "data": update_data,
@@ -144,7 +148,7 @@ async def send_live_update(update_type: str, user_id: str, websocket: WebSocket)
 
     elif update_type == "jobs":
         # Get live job updates
-        job_data = await get_live_job_updates()
+        job_data = await get_live_job_updates(tenant_id)
         await manager.send_personal_message({
             "type": "jobs_update",
             "data": job_data,
@@ -153,60 +157,159 @@ async def send_live_update(update_type: str, user_id: str, websocket: WebSocket)
 
     elif update_type == "revenue":
         # Get live revenue data
-        revenue_data = await get_live_revenue_data()
+        revenue_data = await get_live_revenue_data(tenant_id)
         await manager.send_personal_message({
             "type": "revenue_update",
             "data": revenue_data,
             "timestamp": datetime.now().isoformat()
         }, websocket)
 
-async def get_live_dashboard_data() -> Dict[str, Any]:
+async def get_live_dashboard_data(tenant_id: str) -> Dict[str, Any]:
     """Fetch real-time dashboard metrics"""
+    pool = await get_db_connection()
+    async with pool.acquire() as conn:
+        active_jobs = await conn.fetchval(
+            """
+            SELECT COUNT(*)
+            FROM jobs
+            WHERE tenant_id = $1
+              AND status IN ('in_progress', 'scheduled')
+            """,
+            tenant_id,
+        )
+        pending_estimates = await conn.fetchval(
+            "SELECT COUNT(*) FROM estimates WHERE tenant_id = $1 AND status = 'pending'",
+            tenant_id,
+        )
+        today_revenue = await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(total_amount), 0)
+            FROM invoices
+            WHERE tenant_id = $1
+              AND status = 'paid'
+              AND created_at >= CURRENT_DATE
+            """,
+            tenant_id,
+        )
+
     return {
-        "active_jobs": 15,
-        "today_revenue": 12500.00,
-        "crew_locations": [
-            {"crew": "Team A", "location": "1234 Main St", "status": "in_progress"},
-            {"crew": "Team B", "location": "5678 Oak Ave", "status": "completed"}
-        ],
-        "pending_estimates": 8,
-        "weather_alerts": [
-            {"type": "storm_warning", "message": "Severe weather expected tomorrow"}
-        ]
+        "active_jobs": int(active_jobs or 0),
+        "today_revenue": float(today_revenue or 0),
+        "crew_locations": [],
+        "pending_estimates": int(pending_estimates or 0),
+        "weather_alerts": [],
     }
 
-async def get_live_job_updates() -> Dict[str, Any]:
+async def get_live_job_updates(tenant_id: str) -> Dict[str, Any]:
     """Fetch real-time job status updates"""
-    return {
-        "jobs_in_progress": 12,
-        "jobs_completed_today": 3,
-        "recent_updates": [
+    pool = await get_db_connection()
+    async with pool.acquire() as conn:
+        jobs_in_progress = await conn.fetchval(
+            "SELECT COUNT(*) FROM jobs WHERE tenant_id = $1 AND status = 'in_progress'",
+            tenant_id,
+        )
+        jobs_completed_today = await conn.fetchval(
+            """
+            SELECT COUNT(*)
+            FROM jobs
+            WHERE tenant_id = $1
+              AND status = 'completed'
+              AND completed_date >= CURRENT_DATE
+            """,
+            tenant_id,
+        )
+        recent = await conn.fetch(
+            """
+            SELECT j.id, j.job_number, j.status, j.created_at, c.name AS customer_name
+            FROM jobs j
+            LEFT JOIN customers c ON c.id = j.customer_id
+            WHERE j.tenant_id = $1
+            ORDER BY j.created_at DESC
+            LIMIT 10
+            """,
+            tenant_id,
+        )
+
+    recent_updates = []
+    for row in recent:
+        recent_updates.append(
             {
-                "job_id": "J2025-001",
-                "customer": "Johnson Residence",
-                "status": "materials_delivered",
-                "timestamp": "2025-09-14T10:30:00Z"
-            },
-            {
-                "job_id": "J2025-002",
-                "customer": "Smith Commercial",
-                "status": "crew_arrived",
-                "timestamp": "2025-09-14T11:15:00Z"
+                "job_id": str(row.get("job_number") or row["id"]),
+                "customer": row.get("customer_name"),
+                "status": row.get("status"),
+                "timestamp": (row.get("created_at") or datetime.utcnow()).isoformat(),
             }
-        ]
+        )
+
+    return {
+        "jobs_in_progress": int(jobs_in_progress or 0),
+        "jobs_completed_today": int(jobs_completed_today or 0),
+        "recent_updates": recent_updates,
     }
 
-async def get_live_revenue_data() -> Dict[str, Any]:
+async def get_live_revenue_data(tenant_id: str) -> Dict[str, Any]:
     """Fetch real-time revenue metrics"""
+    pool = await get_db_connection()
+    async with pool.acquire() as conn:
+        today_total = await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(total_amount), 0)
+            FROM invoices
+            WHERE tenant_id = $1
+              AND status = 'paid'
+              AND created_at >= CURRENT_DATE
+            """,
+            tenant_id,
+        )
+        week_total = await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(total_amount), 0)
+            FROM invoices
+            WHERE tenant_id = $1
+              AND status = 'paid'
+              AND created_at >= date_trunc('week', NOW())
+            """,
+            tenant_id,
+        )
+        month_total = await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(total_amount), 0)
+            FROM invoices
+            WHERE tenant_id = $1
+              AND status = 'paid'
+              AND created_at >= date_trunc('month', NOW())
+            """,
+            tenant_id,
+        )
+        recent = await conn.fetch(
+            """
+            SELECT i.total_amount, i.created_at, c.name AS customer_name
+            FROM invoices i
+            LEFT JOIN customers c ON c.id = i.customer_id
+            WHERE i.tenant_id = $1
+              AND i.status = 'paid'
+            ORDER BY i.created_at DESC
+            LIMIT 10
+            """,
+            tenant_id,
+        )
+
+    recent_payments = []
+    for row in recent:
+        recent_payments.append(
+            {
+                "customer": row.get("customer_name"),
+                "amount": float(row.get("total_amount") or 0),
+                "time": row.get("created_at").isoformat() if row.get("created_at") else None,
+            }
+        )
+
     return {
-        "today_total": 18500.75,
-        "week_total": 125000.00,
-        "month_total": 485000.00,
-        "profit_margin": 32.5,
-        "recent_payments": [
-            {"customer": "ABC Corp", "amount": 5500.00, "time": "1 hour ago"},
-            {"customer": "Johnson", "amount": 2800.00, "time": "3 hours ago"}
-        ]
+        "today_total": float(today_total or 0),
+        "week_total": float(week_total or 0),
+        "month_total": float(month_total or 0),
+        "profit_margin": None,
+        "recent_payments": recent_payments,
     }
 
 # Background task for automatic updates
@@ -215,7 +318,8 @@ async def broadcast_periodic_updates():
     while True:
         try:
             # Every 30 seconds, send updates to dashboard channel
-            dashboard_data = await get_live_dashboard_data()
+            # Periodic broadcasts require a tenant context; omit data when not provided.
+            dashboard_data = {"available": False}
 
             await manager.broadcast_to_channel({
                 "type": "periodic_update",

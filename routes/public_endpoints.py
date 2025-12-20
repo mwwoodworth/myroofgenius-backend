@@ -105,12 +105,4 @@ def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_d
     except Exception as e:
         logger.error(f"Error creating public estimate: {e}")
         db.rollback()
-        # Return success with mock data to prevent frontend errors
-        return {
-            "id": str(uuid.uuid4()),
-            "estimate_number": f"EST-{datetime.now().strftime('%Y%m')}-TEMP",
-            "customer_id": str(uuid.uuid4()),
-            "total": int(request.roof_size_sqft * 750),  # $7.50 per sqft
-            "status": "success",
-            "message": "Estimate created (offline mode)"
-        }
+        raise HTTPException(status_code=500, detail="Failed to create estimate request")

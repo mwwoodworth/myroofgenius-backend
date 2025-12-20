@@ -6,26 +6,24 @@ Live streaming analytics and monitoring
 from fastapi import APIRouter, HTTPException, Depends, WebSocket
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncpg
 import json
 import asyncio
-import random
+import psutil
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
-async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
-    try:
-        yield conn
-    finally:
-        await conn.close()
+from fastapi import Request
+
+
+async def get_db_pool(request: Request) -> asyncpg.Pool:
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return pool
 
 class MetricSubscription(BaseModel):
     metric_type: str  # revenue, orders, traffic, conversions
@@ -34,24 +32,81 @@ class MetricSubscription(BaseModel):
 
 @router.get("/live/dashboard")
 async def get_live_metrics(
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Get real-time dashboard metrics"""
-    # Current metrics
-    current_hour = datetime.now().replace(minute=0, second=0, microsecond=0)
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    now = datetime.now()
+    start_hour = now - timedelta(hours=1)
+
+    active_users = None
+    orders_last_hour = None
+    revenue_today = None
+
+    async with pool.acquire() as conn:
+        # Best-effort queries (schema may differ per deployment).
+        try:
+            active_users = await conn.fetchval(
+                """
+                SELECT COUNT(DISTINCT user_id)
+                FROM user_sessions
+                WHERE tenant_id = $1
+                  AND created_at >= NOW() - INTERVAL '5 minutes'
+                """,
+                tenant_id,
+            )
+        except Exception:
+            active_users = None
+
+        try:
+            orders_last_hour = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM invoices
+                WHERE tenant_id = $1
+                  AND created_at >= $2
+                """,
+                tenant_id,
+                start_hour,
+            )
+        except Exception:
+            orders_last_hour = None
+
+        try:
+            revenue_today = await conn.fetchval(
+                """
+                SELECT COALESCE(SUM(total_amount), 0)
+                FROM invoices
+                WHERE tenant_id = $1
+                  AND (status = 'paid' OR payment_status = 'paid')
+                  AND created_at >= CURRENT_DATE
+                """,
+                tenant_id,
+            )
+        except Exception:
+            revenue_today = None
+
+    cpu_percent = psutil.cpu_percent(interval=0.1)
+    memory = psutil.virtual_memory()
 
     metrics = {
-        "timestamp": datetime.now().isoformat(),
-        "active_users": random.randint(150, 300),
-        "orders_last_hour": random.randint(10, 30),
-        "revenue_today": round(random.uniform(5000, 15000), 2),
-        "conversion_rate": round(random.uniform(2, 5), 2),
-        "avg_response_time": random.randint(100, 500),
-        "error_rate": round(random.uniform(0.1, 1), 2),
-        "throughput": {
-            "requests_per_second": random.randint(50, 200),
-            "peak_rps": random.randint(200, 500)
-        }
+        "timestamp": now.isoformat(),
+        "active_users": int(active_users) if active_users is not None else None,
+        "orders_last_hour": int(orders_last_hour) if orders_last_hour is not None else None,
+        "revenue_today": float(revenue_today) if revenue_today is not None else None,
+        "conversion_rate": None,
+        "avg_response_time_ms": None,
+        "error_rate": None,
+        "system": {
+            "cpu_percent": round(cpu_percent, 2),
+            "memory_percent": round(memory.percent, 2),
+        },
+        "throughput": None,
     }
 
     return metrics
@@ -63,16 +118,15 @@ async def websocket_metrics(websocket: WebSocket):
 
     try:
         while True:
-            # Generate real-time metrics
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+
             metrics = {
                 "timestamp": datetime.now().isoformat(),
                 "type": "metrics_update",
                 "data": {
-                    "active_users": random.randint(150, 300),
-                    "revenue_per_minute": round(random.uniform(50, 200), 2),
-                    "orders": random.randint(0, 5),
-                    "cpu_usage": round(random.uniform(20, 80), 1),
-                    "memory_usage": round(random.uniform(40, 70), 1)
+                    "cpu_usage": round(cpu_percent, 2),
+                    "memory_usage": round(memory.percent, 2),
                 }
             }
 
@@ -86,28 +140,40 @@ async def websocket_metrics(websocket: WebSocket):
 async def get_event_stream(
     event_type: Optional[str] = None,
     limit: int = 100,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Get stream of recent events"""
-    events = []
-    event_types = ["order", "login", "error", "payment", "signup"]
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    for i in range(min(limit, 20)):
-        events.append({
-            "id": str(uuid.uuid4())[:8],
-            "timestamp": (datetime.now() - timedelta(minutes=i)).isoformat(),
-            "event_type": event_type or random.choice(event_types),
-            "user_id": f"user_{random.randint(1000, 9999)}",
-            "metadata": {
-                "ip": f"192.168.{random.randint(1, 255)}.{random.randint(1, 255)}",
-                "device": random.choice(["desktop", "mobile", "tablet"])
-            }
-        })
+    events: List[Dict[str, Any]] = []
+    # This endpoint requires a real event log table. If none exists, return an empty stream.
+    async with pool.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, created_at, event_type, metadata
+                FROM event_log
+                WHERE tenant_id = $1
+                  AND ($2::text IS NULL OR event_type = $2)
+                ORDER BY created_at DESC
+                LIMIT $3
+                """,
+                tenant_id,
+                event_type,
+                min(limit, 200),
+            )
+            events = [dict(r) for r in rows]
+        except Exception:
+            events = []
 
     return {
         "total_events": len(events),
         "events": events,
-        "streaming": True
+        "streaming": True,
     }
 
 @router.post("/alerts/configure")
@@ -115,17 +181,24 @@ async def configure_alert(
     metric: str,
     threshold: float,
     condition: str = "greater_than",  # greater_than, less_than, equals
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Configure real-time alerts"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO realtime_alerts (
-            metric, threshold, condition, is_active
-        ) VALUES ($1, $2, $3, true)
+            tenant_id, metric, threshold, condition, is_active
+        ) VALUES ($1, $2, $3, $4, true)
         RETURNING *
     """
 
-    result = await conn.fetchrow(query, metric, threshold, condition)
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow(query, tenant_id, metric, threshold, condition)
 
     return {
         **dict(result),
