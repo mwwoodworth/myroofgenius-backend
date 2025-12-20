@@ -1,29 +1,29 @@
-from fastapi import HTTPException
 """
 Test Revenue Route - Verify system is working
 """
 
-from fastapi import APIRouter
+from datetime import datetime, timezone
+from typing import Any, Dict
+
+from fastapi import APIRouter, Request
 
 router = APIRouter(tags=["Test"])
 
 @router.get("/")
-def test_revenue():
-    """Simple test endpoint"""
+async def test_revenue(request: Request) -> Dict[str, Any]:
+    """Simple test endpoint (no fake targets or demo data)."""
+    db_pool = getattr(request.app.state, "db_pool", None)
+    db_status = "unavailable"
+    if db_pool is not None:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_status = "connected"
+        except Exception:
+            db_status = "error"
+
     return {
-        "status": "operational",
-        "message": "Revenue system v5.12 is deployed",
-        "features": {
-            "ai_estimation": "ready",
-            "stripe_payments": "ready",
-            "customer_pipeline": "ready",
-            "landing_pages": "ready",
-            "google_ads": "ready",
-            "revenue_dashboard": "ready"
-        },
-        "targets": {
-            "week_1": "$2,500",
-            "week_2": "$7,500",
-            "week_4": "$25,000"
-        }
+        "status": "ok",
+        "database": db_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

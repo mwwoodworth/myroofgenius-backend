@@ -11,20 +11,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 import json
 
-# Direct database access
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
 from pydantic import BaseModel, EmailStr
 
 router = APIRouter(prefix="/api/v1/erp", tags=["Complete ERP"])

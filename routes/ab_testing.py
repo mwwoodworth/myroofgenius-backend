@@ -3,30 +3,25 @@ A/B Testing Module - Task 78
 Marketing experiment management
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import asyncpg
 import uuid
 import json
-import random
+import math
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
 # Database connection
-async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
-    try:
-        yield conn
-    finally:
-        await conn.close()
+async def get_db_pool(request: Request) -> asyncpg.Pool:
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return pool
 
 # Models
 class ABTestCreate(BaseModel):
@@ -42,7 +37,9 @@ class ABTestCreate(BaseModel):
 @router.post("/tests", response_model=dict)
 async def create_ab_test(
     test: ABTestCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Create A/B test"""
     query = """
@@ -53,41 +50,94 @@ async def create_ab_test(
         RETURNING *
     """
 
-    result = await conn.fetchrow(
-        query,
-        test.name,
-        test.test_type,
-        json.dumps(test.control_variant),
-        json.dumps(test.test_variants),
-        test.success_metric,
-        test.sample_size,
-        test.duration_days,
-        'draft'
-    )
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow(
+            query,
+            test.name,
+            test.test_type,
+            json.dumps(test.control_variant),
+            json.dumps(test.test_variants),
+            test.success_metric,
+            test.sample_size,
+            test.duration_days,
+            "draft",
+        )
 
     return {**dict(result), "id": str(result['id'])}
 
 @router.get("/tests/{test_id}/results", response_model=dict)
 async def get_test_results(
     test_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+    pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Get A/B test results"""
-    # Simulated results
+    async with pool.acquire() as conn:
+        test = await conn.fetchrow(
+            """
+            SELECT id, name, status, control_variant, test_variants, success_metric, created_at,
+                   started_at, completed_at
+            FROM ab_tests
+            WHERE id = $1::uuid
+            """,
+            test_id,
+        )
+
+        if not test:
+            raise HTTPException(status_code=404, detail="Test not found")
+
+        assignments = await conn.fetch(
+            """
+            SELECT
+                variant_name,
+                COUNT(*)::int AS visitors,
+                COUNT(*) FILTER (WHERE converted IS TRUE)::int AS conversions
+            FROM ab_test_assignments
+            WHERE test_id = $1::uuid
+            GROUP BY variant_name
+            """,
+            test_id,
+        )
+
+    control_variant = test.get("control_variant")
+    test_variants = test.get("test_variants")
+    try:
+        control_variant = json.loads(control_variant) if isinstance(control_variant, str) else control_variant
+    except Exception:
+        control_variant = {}
+    try:
+        test_variants = json.loads(test_variants) if isinstance(test_variants, str) else test_variants
+    except Exception:
+        test_variants = []
+
+    results: Dict[str, Any] = {}
+    for row in assignments:
+        visitors = row["visitors"] or 0
+        conversions = row["conversions"] or 0
+        conversion_rate = round((conversions / visitors) * 100, 2) if visitors else 0.0
+        results[row["variant_name"]] = {
+            "visitors": visitors,
+            "conversions": conversions,
+            "conversion_rate": conversion_rate,
+        }
+
+    # Determine winner (highest conversion rate among variants with data)
+    winner = None
+    best_rate = None
+    for variant_name, stats in results.items():
+        if stats["visitors"] <= 0:
+            continue
+        if best_rate is None or stats["conversion_rate"] > best_rate:
+            best_rate = stats["conversion_rate"]
+            winner = variant_name
+
     return {
-        "test_id": test_id,
-        "status": "completed",
-        "control": {
-            "visitors": 5000,
-            "conversions": 150,
-            "conversion_rate": 3.0
-        },
-        "variant_a": {
-            "visitors": 5000,
-            "conversions": 185,
-            "conversion_rate": 3.7
-        },
-        "statistical_significance": 95,
-        "winner": "variant_a",
-        "improvement": 23.3
+        "test_id": str(test["id"]),
+        "name": test["name"],
+        "status": test["status"],
+        "success_metric": test["success_metric"],
+        "results": results,
+        "winner": winner,
+        "generated_at": datetime.utcnow().isoformat(),
     }

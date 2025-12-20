@@ -13,7 +13,7 @@ import base64
 from datetime import datetime, timedelta
 import hashlib
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from functools import lru_cache
 import time
 try:
@@ -31,10 +31,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # No fallback - fail safely
 if GEMINI_AVAILABLE and genai and GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+from database import engine as db_engine
+from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
 
 # Simple rate limiting cache
 rate_limit_cache: Dict[str, List[float]] = {}
@@ -102,8 +100,9 @@ class EstimateResponse(BaseModel):
 
 def get_db():
     """Get database connection"""
-    engine = create_engine(DATABASE_URL)
-    return engine
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 @router.post("/analyze-photo", response_model=Dict[str, Any])
 async def analyze_roof_photo(
@@ -131,25 +130,11 @@ async def analyze_roof_photo(
         # Read image data
         contents = await file.read()
         
-        if not GEMINI_AVAILABLE:
-            # Return mock analysis if Gemini not available
-            return {
-                "status": "analyzed",
-                "confidence": 0.88,
-                "roof_details": {
-                    "type": "Asphalt Shingle",
-                    "condition": "Good",
-                    "area_sqft": 2200,
-                    "pitch": "6/12",
-                    "damage_detected": False
-                },
-                "estimate": {
-                    "repair_cost": "$500-$1,500",
-                    "replacement_cost": "$12,000-$18,000",
-                    "urgency": "low"
-                },
-                "message": "Analysis complete (Demo mode - Gemini not available)"
-            }
+        if not GEMINI_AVAILABLE or not GEMINI_API_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini Vision is not configured on this server",
+            )
         
         # Use Gemini Vision for analysis
         model = genai.GenerativeModel('gemini-1.5-flash-002')
@@ -221,7 +206,7 @@ async def analyze_roof_photo(
             analysis_id = result.scalar()
             conn.commit()
         
-        analysis["analysis_id"] = str(analysis_id) if analysis_id else "demo"
+        analysis["analysis_id"] = str(analysis_id) if analysis_id else None
         
         return analysis
         
@@ -234,6 +219,9 @@ async def generate_ai_estimate(request: EstimateRequest):
     Generate comprehensive AI-powered estimate with real value
     """
     try:
+        if ai_service is None:
+            raise HTTPException(status_code=503, detail="AI service not available on this server")
+
         # Calculate using real roofing industry data
         base_material_costs = {
             "asphalt_shingle": 150,  # per square (100 sq ft)
@@ -280,19 +268,23 @@ async def generate_ai_estimate(request: EstimateRequest):
         if request.urgency == "emergency":
             timeline_days = 1
         
-        # AI insights based on analysis
-        insights = []
-        
-        if total_cost > 15000:
-            insights.append("Consider financing options - we offer 0% for 12 months")
-        
-        if request.desired_material == "metal":
-            insights.append("Metal roofing can reduce insurance premiums by up to 35%")
-            insights.append("Expected lifespan: 40-70 years with proper maintenance")
-        
-        if request.urgency == "emergency":
-            insights.append("Emergency crew available within 2-4 hours")
-            insights.append("Temporary protection will be installed immediately")
+        # Generate AI insights and next steps via real provider (no mock output).
+        prompt = (
+            "You are an expert roofing estimator.\n\n"
+            f"Estimate inputs:\n{json.dumps(request.dict())}\n\n"
+            f"Computed costs:\n{json.dumps({'material_cost': material_cost, 'labor_cost': labor_cost, 'permit_cost': permit_cost, 'disposal_cost': disposal_cost, 'total_cost': total_cost, 'timeline_days': timeline_days})}\n\n"
+            "Return JSON with keys: confidence_score (0..1), ai_insights (list of strings), next_steps (list of strings)."
+        )
+        ai_result = await ai_service.generate_json(prompt)
+        confidence_score = ai_result.get("confidence_score")
+        ai_insights = ai_result.get("ai_insights") or []
+        next_steps = ai_result.get("next_steps") or []
+
+        if not isinstance(confidence_score, (int, float)):
+            raise HTTPException(status_code=500, detail="AI provider did not return confidence_score")
+        confidence_score = float(confidence_score)
+        if confidence_score < 0 or confidence_score > 1:
+            raise HTTPException(status_code=500, detail="AI provider returned invalid confidence_score")
         
         # Generate estimate ID
         estimate_id = hashlib.md5(
@@ -333,7 +325,7 @@ async def generate_ai_estimate(request: EstimateRequest):
                         "permits": permit_cost,
                         "disposal": disposal_cost
                     },
-                    "insights": insights,
+                    "insights": ai_insights,
                     "request": request.dict()
                 })
             })
@@ -345,7 +337,7 @@ async def generate_ai_estimate(request: EstimateRequest):
             material_cost=material_cost,
             labor_cost=labor_cost,
             timeline_days=timeline_days,
-            confidence_score=0.92,
+            confidence_score=confidence_score,
             breakdown={
                 "materials": material_cost,
                 "labor": labor_cost,
@@ -353,16 +345,15 @@ async def generate_ai_estimate(request: EstimateRequest):
                 "disposal": disposal_cost,
                 "squares": squares
             },
-            ai_insights=insights,
-            next_steps=[
-                "Schedule free inspection to confirm measurements",
-                "Review financing options",
-                "Select preferred start date",
-                "Sign agreement to lock in pricing"
-            ]
+            ai_insights=ai_insights,
+            next_steps=next_steps,
         )
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, AIServiceNotConfiguredError):
+            raise HTTPException(status_code=503, detail=str(e))
         raise HTTPException(status_code=500, detail=f"Estimate generation failed: {str(e)}")
 
 @router.get("/estimate/{estimate_id}")
@@ -385,23 +376,15 @@ async def analyze_competitors(zip_code: str, service_type: str):
     """
     Real-time competitor analysis for pricing strategy
     """
-    # This would integrate with real data sources
-    # For now, using market averages
-    
-    analysis = {
+    # Requires third-party market datasets; do not fabricate competitor metrics.
+    return {
         "zip_code": zip_code,
         "service_type": service_type,
-        "market_average": 12500,
-        "low_price": 9800,
-        "high_price": 18500,
-        "recommended_price": 11900,  # Slightly below average for competitive advantage
-        "competitors_found": 8,
-        "insights": [
-            "Your area has moderate competition",
-            "Quality-focused messaging will differentiate you",
-            "Emphasize warranty and insurance coverage",
-            "Highlight same-week service availability RETURNING *"
-        ]
+        "market_average": None,
+        "low_price": None,
+        "high_price": None,
+        "recommended_price": None,
+        "competitors_found": None,
+        "insights": [],
+        "available": False,
     }
-    
-    return analysis

@@ -3,7 +3,7 @@ Recruitment Management Module - Task 44
 Comprehensive recruitment and applicant tracking system
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File, Request
 from pydantic import BaseModel, Field, EmailStr, HttpUrl, validator
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date, timedelta
@@ -16,18 +16,15 @@ from decimal import Decimal
 router = APIRouter()
 
 # Database connection
-async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
-    try:
+async def get_db(request: Request):
+    """Yield a database connection from the shared asyncpg pool."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
+    async with pool.acquire() as conn:
         yield conn
-    finally:
-        await conn.close()
+
 
 # Enums
 class JobStatus(str, Enum):

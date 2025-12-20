@@ -3,7 +3,6 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 import psycopg2
-import os
 import logging
 from urllib.parse import urlparse
 from config import get_database_url
@@ -31,7 +30,8 @@ async def get_public_products(category: Optional[str] = None):
     """Get all public products - NO AUTH REQUIRED"""
     db_config = _get_db_config()
     if not db_config:
-        return _fallback_products("Database configuration incomplete")["products"]
+        logger.warning("Public products requested but database configuration is unavailable")
+        return []
 
     try:
         conn = psycopg2.connect(**db_config)
@@ -73,7 +73,7 @@ async def get_public_products(category: Optional[str] = None):
         
     except Exception as e:
         logger.error(f"Failed to load public products: {e}")
-        return _fallback_products("Database error loading products")["products"]
+        return []
 
 @router.get("/list", response_model=ProductListResponse)
 async def get_products_list(
@@ -155,7 +155,8 @@ async def get_featured_products():
     """Get featured products - NO AUTH REQUIRED"""
     db_config = _get_db_config()
     if not db_config:
-        return _fallback_products("Database configuration incomplete")["products"]
+        logger.warning("Featured products requested but database configuration is unavailable")
+        return []
 
     try:
         conn = psycopg2.connect(**db_config)
@@ -189,7 +190,7 @@ async def get_featured_products():
 
     except Exception as e:
         logger.error(f"Failed to load featured products: {e}")
-        return _fallback_products("Database error loading featured products")["products"]
+        return []
 
 @router.get("/categories", response_model=List[str])
 async def get_product_categories():
@@ -287,25 +288,3 @@ def _get_db_config():
     except Exception as e:
         logger.error(f"Unable to resolve database configuration: {e}")
         return None
-
-
-def _fallback_products(reason: str):
-    """Return a safe fallback response when DB is unavailable"""
-    logger.warning(f"Serving fallback public products due to: {reason}")
-    fallback = [
-        Product(
-            id="prod_fallback_1",
-            name="Basic Plan",
-            description="Fallback product listing (DB unavailable)",
-            price_cents=4999,
-            category="fallback",
-            is_active=True,
-            created_at=datetime.utcnow(),
-        )
-    ]
-    return {
-        "products": fallback,
-        "total": len(fallback),
-        "fallback": True,
-        "note": reason,
-    }

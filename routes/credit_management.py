@@ -350,16 +350,12 @@ async def perform_credit_check(
                 "internal_score": internal_score
             }
             
-            # Bureau check (placeholder)
+            # Bureau checks require a configured third-party bureau integration.
+            # Do not fabricate bureau scores.
             if request.check_type in ['bureau', 'comprehensive']:
-                bureau_score = 700  # Placeholder
-                results['bureau_score'] = bureau_score
-                results['bureau_report'] = {
-                    "provider": request.bureau_report_type or "Equifax",
-                    "report_date": date.today().isoformat(),
-                    "score": bureau_score,
-                    "risk_level": get_risk_level_from_score(bureau_score)
-                }
+                results["bureau_score"] = None
+                results["bureau_report"] = None
+                results["bureau_available"] = False
             
             # Trade references check
             if request.include_trade_references:
@@ -380,8 +376,9 @@ async def perform_credit_check(
             
             # Calculate recommendation
             avg_score = internal_score
-            if 'bureau_score' in results:
-                avg_score = (internal_score + results['bureau_score']) / 2
+            bureau_score = results.get("bureau_score")
+            if bureau_score is not None:
+                avg_score = (internal_score + bureau_score) / 2
             
             risk_level = get_risk_level_from_score(avg_score)
             recommended_limit = calculate_recommended_credit_limit(

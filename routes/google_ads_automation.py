@@ -383,28 +383,31 @@ async def keyword_research(seed_keyword: str):
     for keyword in base_keywords:
         expanded_keywords.append({
             "keyword": keyword,
-            "search_volume": 1000 + (len(keyword) * 50),  # Mock volume
-            "competition": "medium",
-            "suggested_bid": round(3.50 + (len(keyword) * 0.1), 2),
-            "intent": "high" if "emergency" in keyword or "repair" in keyword else "medium"
+            "search_volume": None,
+            "competition": None,
+            "suggested_bid": None,
+            "intent": "high" if "emergency" in keyword or "repair" in keyword else "medium",
+            "available": False,
         })
     
     # Add location variations
     for location in locations[:3]:
         expanded_keywords.append({
             "keyword": f"{seed_keyword} {location}",
-            "search_volume": 500,
-            "competition": "low",
-            "suggested_bid": 2.80,
-            "intent": "high"
+            "search_volume": None,
+            "competition": None,
+            "suggested_bid": None,
+            "intent": "high",
+            "available": False,
         })
     
     return {
         "seed_keyword": seed_keyword,
         "suggestions": expanded_keywords,
         "total_keywords": len(expanded_keywords),
-        "estimated_monthly_clicks": sum(k["search_volume"] for k in expanded_keywords) // 30,
-        "recommended_budget": round(sum(k["suggested_bid"] * k["search_volume"] / 30 for k in expanded_keywords), 2)
+        "estimated_monthly_clicks": None,
+        "recommended_budget": None,
+        "available": False,
     }
 
 @router.post("/ads/generate")

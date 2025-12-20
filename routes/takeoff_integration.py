@@ -27,6 +27,53 @@ class CalculationRequest(BaseModel):
     slope_pitch: Optional[str] = "0:12" # e.g., "4:12"
     assembly_id: Optional[str] = None
 
+
+def _ensure_closed_ring(points: List[List[float]]) -> List[List[float]]:
+    if not points:
+        return points
+    if points[0] != points[-1]:
+        return points + [points[0]]
+    return points
+
+
+def _polygon_area_and_perimeter(points: List[List[float]]) -> tuple[float, float]:
+    """Compute planar polygon area and perimeter for a single ring."""
+    points = _ensure_closed_ring(points)
+    if len(points) < 4:
+        return 0.0, 0.0
+    area2 = 0.0
+    perimeter = 0.0
+    for (x1, y1), (x2, y2) in zip(points[:-1], points[1:]):
+        area2 += (x1 * y2) - (x2 * y1)
+        perimeter += math.hypot(x2 - x1, y2 - y1)
+    return abs(area2) / 2.0, perimeter
+
+
+def _linestring_length(points: List[List[float]]) -> float:
+    if not points or len(points) < 2:
+        return 0.0
+    length = 0.0
+    for (x1, y1), (x2, y2) in zip(points[:-1], points[1:]):
+        length += math.hypot(x2 - x1, y2 - y1)
+    return length
+
+
+def _parse_slope_pitch(pitch: str) -> tuple[int, int]:
+    """Parse slope pitch like '4:12' or '4/12'."""
+    if not pitch:
+        return 0, 12
+    cleaned = pitch.replace("/", ":")
+    parts = cleaned.split(":")
+    if len(parts) != 2:
+        return 0, 12
+    try:
+        rise = int(parts[0])
+        run = int(parts[1])
+        return rise, run if run else 12
+    except ValueError:
+        return 0, 12
+
+
 @router.post("/calculate")
 async def calculate_feature_impact(payload: CalculationRequest):
     """
@@ -42,20 +89,24 @@ async def calculate_feature_impact(payload: CalculationRequest):
     # We assume Plan (Euclidean) for this logic block as it's safer for "scaled" drawings.
     raw_area = 0.0
     raw_perimeter = 0.0
+    scale_factor = payload.scale_factor or 1.0
+    if scale_factor <= 0:
+        raise HTTPException(status_code=400, detail="scale_factor must be > 0")
     
     if geom_type == "Polygon":
-        # Shoelace formula for Area
-        # Euclidean distance for Perimeter
-        # (Implementation omitted for brevity, assumes `calc_polygon_metrics` helper)
-        raw_area = 1000.0 # Placeholder
-        raw_perimeter = 400.0 # Placeholder
+        # Expect GeoJSON polygon: [ [ [x,y], ... ] , ... ]
+        ring = (coords or [[]])[0] if isinstance(coords, list) else []
+        area_units, perim_units = _polygon_area_and_perimeter(ring)
+        # Convert from pixels^2 to sqft and pixels to feet.
+        raw_area = area_units / (scale_factor**2)
+        raw_perimeter = perim_units / scale_factor
     elif geom_type == "LineString":
-        raw_perimeter = 100.0 # Placeholder
+        raw_perimeter = _linestring_length(coords or []) / scale_factor
     
     # 2. Apply Scale & Slope
     # Slope Multiplier
-    rise = int(payload.slope_pitch.split(":")[0])
-    slope_factor = math.sqrt(rise**2 + 12**2) / 12.0
+    rise, run = _parse_slope_pitch(payload.slope_pitch or "0:12")
+    slope_factor = math.sqrt(rise**2 + run**2) / float(run)
     
     final_area = raw_area * slope_factor
     final_len = raw_perimeter # Lines usually don't stretch by slope unless they run UP the slope

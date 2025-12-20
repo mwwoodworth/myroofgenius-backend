@@ -3,7 +3,7 @@ Support Analytics Module - Task 89
 Customer support performance analytics
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -12,18 +12,15 @@ import uuid
 
 router = APIRouter()
 
-async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
-    try:
+async def get_db(request: Request):
+    """Yield a database connection from the shared asyncpg pool."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
+    async with pool.acquire() as conn:
         yield conn
-    finally:
-        await conn.close()
+
 
 @router.get("/dashboard", response_model=dict)
 async def get_support_dashboard(
