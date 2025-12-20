@@ -2,14 +2,14 @@
 Enhanced Stripe Automation Routes with Error Handling
 """
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import stripe
 import os
 import json
-from datetime import datetime, timedelta
-from sqlalchemy import create_engine, text
+from datetime import datetime, timezone
+from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 import logging
 
@@ -17,32 +17,33 @@ router = APIRouter(tags=["Stripe Automation"])
 
 logger = logging.getLogger(__name__)
 
-# Stripe configuration - PERMANENT RESTRICTED KEY
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
-stripe.api_key = STRIPE_SECRET_KEY
+# Stripe configuration
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
 
-def get_db_engine():
-    return create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
+def _get_db_engine():
+    from database import engine as db_engine
+
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 @router.get("/health")
 async def stripe_health():
     """Stripe automation health check"""
     return {
-        "status": "healthy",
+        "status": "configured" if STRIPE_SECRET_KEY else "not_configured",
         "stripe_configured": bool(STRIPE_SECRET_KEY),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 @router.get("/analytics/revenue")
 async def get_revenue_analytics():
     """Get revenue analytics with error handling"""
     try:
-        engine = get_db_engine()
+        engine = _get_db_engine()
         with engine.connect() as conn:
             # Try to get real data
             result = conn.execute(text("""
@@ -60,25 +61,19 @@ async def get_revenue_analytics():
                     "mrr": row.mrr / 100,  # Convert from cents
                     "arr": row.arr / 100,
                     "total_revenue": row.total_revenue / 100,
-                    "period": "last_30_days"
+                    "period": "last_30_days",
+                    "available": True,
                 }
     except (ProgrammingError, Exception) as e:
-        logger.warning(f"Using fallback revenue data: {e}")
-    
-    # Fallback data if table doesn't exist
-    return {
-        "mrr": 44450,
-        "arr": 533400,
-        "total_revenue": 44450,
-        "period": "last_30_days",
-        "note": "Using cached data"
-    }
+        logger.warning("Stripe revenue analytics unavailable: %s", e)
+
+    return {"mrr": None, "arr": None, "total_revenue": None, "period": "last_30_days", "available": False}
 
 @router.get("/analytics/subscriptions")
 async def get_subscription_analytics():
     """Get subscription analytics with error handling"""
     try:
-        engine = get_db_engine()
+        engine = _get_db_engine()
         with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT 
@@ -100,25 +95,17 @@ async def get_subscription_analytics():
                 })
             
             if subscriptions:
-                return {"subscriptions": subscriptions}
+                return {"subscriptions": subscriptions, "available": True}
     except (ProgrammingError, Exception) as e:
-        logger.warning(f"Using fallback subscription data: {e}")
-    
-    # Fallback data
-    return {
-        "subscriptions": [
-            {"tier": "professional", "active_count": 62, "mrr": 2480, "churn_rate": 2.1},
-            {"tier": "enterprise", "active_count": 20, "mrr": 4000, "churn_rate": 1.5},
-            {"tier": "starter", "active_count": 45, "mrr": 895, "churn_rate": 3.2}
-        ],
-        "note": "Using cached data"
-    }
+        logger.warning("Stripe subscription analytics unavailable: %s", e)
+
+    return {"subscriptions": [], "available": False}
 
 @router.get("/automation/rules")
 async def get_automation_rules():
     """Get automation rules with error handling"""
     try:
-        engine = get_db_engine()
+        engine = _get_db_engine()
         with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT 
@@ -140,21 +127,11 @@ async def get_automation_rules():
                 })
             
             if rules:
-                return {"rules": rules, "total": len(rules)}
+                return {"rules": rules, "total": len(rules), "available": True}
     except (ProgrammingError, Exception) as e:
-        logger.warning(f"Using fallback automation rules: {e}")
-    
-    # Fallback data
-    return {
-        "rules": [
-            {"id": "1", "name": "Welcome Email", "trigger_type": "customer.created", "is_active": True, "execution_count": 245},
-            {"id": "2", "name": "Payment Success", "trigger_type": "payment.succeeded", "is_active": True, "execution_count": 189},
-            {"id": "3", "name": "Trial Ending", "trigger_type": "trial.ending", "is_active": True, "execution_count": 67},
-            {"id": "4", "name": "Failed Payment Recovery", "trigger_type": "payment.failed", "is_active": True, "execution_count": 34}
-        ],
-        "total": 4,
-        "note": "Using cached data"
-    }
+        logger.warning("Automation rules unavailable: %s", e)
+
+    return {"rules": [], "total": 0, "available": False}
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):

@@ -367,9 +367,13 @@ class AIOrchestrator:
 ai_system = RealAISystem()
 ai_orchestrator = AIOrchestrator()
 
-async def process_with_ai(prompt: str, context: Dict[str, Any] = None) -> str:
-    """Main entry point for AI processing"""
-    return await ai_system.think(prompt, context)
+async def process_with_ai(
+    prompt: str,
+    context: Dict[str, Any] | None = None,
+    provider: str | None = None,
+) -> str:
+    """Main entry point for AI processing."""
+    return await ai_system.think(prompt, context, provider)
 
 async def execute_ai_workflow(workflow: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """Execute an AI workflow"""

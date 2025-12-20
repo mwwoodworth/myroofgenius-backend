@@ -18,14 +18,12 @@ import os
 import logging
 from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrule, DAILY, WEEKLY, MONTHLY, YEARLY
+from database import DATABASE_URL as RESOLVED_DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+# Database connection (resolved from environment/config; no hardcoded fallbacks)
+DATABASE_URL = RESOLVED_DATABASE_URL
 
 router = APIRouter()
 
@@ -114,6 +112,8 @@ class RecurrencePreview(BaseModel):
 
 async def get_db_connection():
     """Get database connection"""
+    if not DATABASE_URL:
+        raise HTTPException(status_code=503, detail="Database connection not available")
     return await asyncpg.connect(DATABASE_URL)
 
 # ==================== Recurring Invoice Management ====================

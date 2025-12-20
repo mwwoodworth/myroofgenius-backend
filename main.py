@@ -502,9 +502,9 @@ async def health_check():
         return {
             "status": "healthy",
             "version": app.version,
-            "database": "mock",
+            "database": "skipped",
             "offline_mode": False,
-            "cns": "mock",
+            "cns": "skipped",
             "cns_info": {},
             "pool_active": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),

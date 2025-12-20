@@ -10,8 +10,6 @@ import os
 import json
 import httpx
 import logging
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter(
     prefix="/api/v1",
@@ -21,25 +19,18 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 # Configuration
-RENDER_API_KEY = os.getenv("RENDER_API_KEY", "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx")
-RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "srv-d1tfs4idbo4c73di6k00")
-VERCEL_TOKEN = os.getenv("VERCEL_TOKEN", "")  # Add to env if needed
-VERCEL_PROJECT_ID = os.getenv("VERCEL_PROJECT_ID", "prj_myroofgenius")
+RENDER_API_KEY = os.getenv("RENDER_API_KEY")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID")
+VERCEL_TOKEN = os.getenv("VERCEL_TOKEN")
+VERCEL_PROJECT_ID = os.getenv("VERCEL_PROJECT_ID")
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
 
-def get_db_engine():
-    # Reduced pool size to prevent exhaustion
-    return create_engine(
-        DATABASE_URL, 
-        pool_size=2,  # Reduced from 5
-        max_overflow=3,  # Reduced from 10
-        pool_recycle=3600,  # Recycle connections after 1 hour
-        pool_pre_ping=True  # Test connections before using
-    )
+def _render_configured() -> bool:
+    return bool(RENDER_API_KEY and RENDER_SERVICE_ID)
+
+
+def _vercel_configured() -> bool:
+    return bool(VERCEL_TOKEN and VERCEL_PROJECT_ID)
 
 # ============================================================================
 # RENDER MONITORING
@@ -49,6 +40,9 @@ def get_db_engine():
 async def get_render_status():
     """Get current Render deployment status"""
     try:
+        if not _render_configured():
+            raise HTTPException(status_code=503, detail="Render API not configured (set RENDER_API_KEY and RENDER_SERVICE_ID).")
+
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}",
@@ -71,22 +65,23 @@ async def get_render_status():
                     }
                 }
             else:
-                return {
-                    "status": "error",
-                    "message": f"Render API returned {response.status_code}",
-                    "details": response.text
-                }
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Render API returned {response.status_code}: {response.text}",
+                )
     except Exception as e:
         logger.error(f"Error fetching Render status: {e}")
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail=str(e))
 
 @router.get("/render/deployments")
 async def get_render_deployments(limit: int = 10):
     """Get recent Render deployments"""
     try:
+        if not _render_configured():
+            raise HTTPException(status_code=503, detail="Render API not configured (set RENDER_API_KEY and RENDER_SERVICE_ID).")
+
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/deploys?limit={limit}",
@@ -110,13 +105,15 @@ async def get_render_deployments(limit: int = 10):
                     ]
                 }
             else:
-                return {
-                    "error": f"Render API returned {response.status_code}",
-                    "details": response.text
-                }
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Render API returned {response.status_code}: {response.text}",
+                )
     except Exception as e:
         logger.error(f"Error fetching Render deployments: {e}")
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail=str(e))
 
 @router.post("/webhooks/render")
 async def render_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -165,11 +162,8 @@ async def render_webhook(request: Request, background_tasks: BackgroundTasks):
 async def get_vercel_status():
     """Get Vercel project status"""
     try:
-        if not VERCEL_TOKEN:
-            return {
-                "status": "unavailable",
-                "message": "Vercel token not configured"
-            }
+        if not _vercel_configured():
+            raise HTTPException(status_code=503, detail="Vercel API not configured (set VERCEL_TOKEN and VERCEL_PROJECT_ID).")
         
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -191,23 +185,19 @@ async def get_vercel_status():
                     }
                 }
             else:
-                return {
-                    "status": "error",
-                    "message": f"Vercel API returned {response.status_code}"
-                }
+                raise HTTPException(status_code=502, detail=f"Vercel API returned {response.status_code}: {response.text}")
     except Exception as e:
         logger.error(f"Error fetching Vercel status: {e}")
-        return {"status": "error", "message": str(e)}
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail=str(e))
 
 @router.get("/vercel/deployments")
 async def get_vercel_deployments(limit: int = 10):
     """Get recent Vercel deployments"""
     try:
-        if not VERCEL_TOKEN:
-            return {
-                "error": "Vercel token not configured",
-                "deployments": []
-            }
+        if not _vercel_configured():
+            raise HTTPException(status_code=503, detail="Vercel API not configured (set VERCEL_TOKEN and VERCEL_PROJECT_ID).")
         
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -232,13 +222,12 @@ async def get_vercel_deployments(limit: int = 10):
                     ]
                 }
             else:
-                return {
-                    "error": f"Vercel API returned {response.status_code}",
-                    "deployments": []
-                }
+                raise HTTPException(status_code=502, detail=f"Vercel API returned {response.status_code}: {response.text}")
     except Exception as e:
         logger.error(f"Error fetching Vercel deployments: {e}")
-        return {"error": str(e), "deployments": []}
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail=str(e))
 
 @router.post("/webhooks/vercel")
 async def vercel_webhook(
@@ -380,50 +369,75 @@ async def vercel_log_drain(request: Request):
 @router.get("/observability/dashboard")
 async def get_observability_dashboard():
     """Get comprehensive observability dashboard data"""
-    try:
-        # Database operations completely removed to prevent connection pool issues
-        # Will return mock/empty data until tables are created
-        # Database queries removed - tables don't exist
-        # Will return basic status only
-        
-        return {
-                "status": "operational",
-                "platforms": {
-                    "render": {
-                        "api_configured": bool(RENDER_API_KEY),
-                        "service_id": RENDER_SERVICE_ID
-                    },
-                    "vercel": {
-                        "api_configured": bool(VERCEL_TOKEN),
-                        "project_id": VERCEL_PROJECT_ID
-                    }
-                },
-                "recent_deployments": [],
-                "statistics": {},
-                "recent_errors": [],
-                "timestamp": datetime.utcnow().isoformat()
-            }
-    except SQLAlchemyError as e:
-        # Tables might not exist yet
-        logger.warning(f"Database tables not ready: {e}")
-        return {
-            "status": "initializing",
-            "message": "Observability tables not yet created",
-            "platforms": {
-                "render": {
-                    "api_configured": bool(RENDER_API_KEY),
-                    "service_id": RENDER_SERVICE_ID
-                },
-                "vercel": {
-                    "api_configured": bool(VERCEL_TOKEN),
-                    "project_id": VERCEL_PROJECT_ID
+    render_configured = _render_configured()
+    vercel_configured = _vercel_configured()
+
+    if not render_configured and not vercel_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="No observability providers configured (set Render/Vercel credentials).",
+        )
+
+    platforms: Dict[str, Any] = {
+        "render": {"configured": render_configured, "service_id": RENDER_SERVICE_ID if render_configured else None},
+        "vercel": {"configured": vercel_configured, "project_id": VERCEL_PROJECT_ID if vercel_configured else None},
+    }
+
+    errors: List[Dict[str, Any]] = []
+    render_data: Optional[Dict[str, Any]] = None
+    vercel_data: Optional[Dict[str, Any]] = None
+
+    async with httpx.AsyncClient() as client:
+        if render_configured:
+            try:
+                service_resp = await client.get(
+                    f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}",
+                    headers={"Authorization": f"Bearer {RENDER_API_KEY}"},
+                )
+                service_resp.raise_for_status()
+                deploys_resp = await client.get(
+                    f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/deploys?limit=10",
+                    headers={"Authorization": f"Bearer {RENDER_API_KEY}"},
+                )
+                deploys_resp.raise_for_status()
+                render_data = {
+                    "service": service_resp.json(),
+                    "deployments": deploys_resp.json(),
                 }
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Error generating observability dashboard: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            except Exception as exc:
+                errors.append({"provider": "render", "error": str(exc)})
+
+        if vercel_configured:
+            try:
+                project_resp = await client.get(
+                    f"https://api.vercel.com/v9/projects/{VERCEL_PROJECT_ID}",
+                    headers={"Authorization": f"Bearer {VERCEL_TOKEN}"},
+                )
+                project_resp.raise_for_status()
+                deploys_resp = await client.get(
+                    f"https://api.vercel.com/v6/deployments?projectId={VERCEL_PROJECT_ID}&limit=10",
+                    headers={"Authorization": f"Bearer {VERCEL_TOKEN}"},
+                )
+                deploys_resp.raise_for_status()
+                vercel_data = {
+                    "project": project_resp.json(),
+                    "deployments": deploys_resp.json(),
+                }
+            except Exception as exc:
+                errors.append({"provider": "vercel", "error": str(exc)})
+
+    if (render_configured and not render_data) and (vercel_configured and not vercel_data):
+        raise HTTPException(status_code=502, detail={"platforms": platforms, "errors": errors})
+
+    status = "operational" if not errors else "degraded"
+    return {
+        "status": status,
+        "platforms": platforms,
+        "render": render_data,
+        "vercel": vercel_data,
+        "errors": errors,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -448,8 +462,11 @@ async def notify_deployment_success(payload: dict):
 @router.get("/observability/health")
 async def observability_health():
     """Check observability system health"""
+    render_configured = _render_configured()
+    vercel_configured = _vercel_configured()
+    status_value = "healthy" if (render_configured or vercel_configured) else "unavailable"
     return {
-        "status": "healthy",
+        "status": status_value,
         "services": {
             "render": {
                 "webhook": "/api/v1/webhooks/render",
@@ -464,5 +481,6 @@ async def observability_health():
             },
             "dashboard": "/api/v1/observability/dashboard"
         },
-        "timestamp RETURNING * RETURNING *": datetime.utcnow().isoformat()
+        "configured": {"render": render_configured, "vercel": vercel_configured},
+        "timestamp": datetime.utcnow().isoformat(),
     }

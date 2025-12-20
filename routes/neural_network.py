@@ -9,12 +9,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from typing import Optional, Dict, Any, List, Union
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, text, MetaData, Table
+from sqlalchemy import text, MetaData, Table
 from sqlalchemy.exc import IntegrityError
 import asyncio
 import json
 import uuid
-import os
 import logging
 import numpy as np
 from dataclasses import dataclass
@@ -34,24 +33,17 @@ router = APIRouter(prefix="/api/v1/neural", tags=["Neural Network & AI Board"])
 # Security configuration
 security = HTTPBearer()
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+import database as database_module
 
-# Create database engine with connection pooling
-def get_db_engine():
-    return create_engine(
-        DATABASE_URL,
-        pool_size=20,
-        max_overflow=30,
-        pool_pre_ping=True,
-        pool_recycle=3600
-    )
 
-# Global database engine
-engine = get_db_engine()
+class _EngineProxy:
+    def connect(self, *args, **kwargs):
+        if database_module.engine is None:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        return database_module.engine.connect(*args, **kwargs)
+
+
+engine = _EngineProxy()
 
 # Pydantic Models
 class NeuronCreate(BaseModel):
@@ -969,6 +961,8 @@ async def list_neurons(
             return neurons
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error listing neurons: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve neurons")
 
@@ -998,6 +992,8 @@ async def create_neuron(neuron_data: NeuronCreate):
         return {"neuron_id": neuron_id, "status": "created"}
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error creating neuron: {e}")
         raise HTTPException(status_code=500, detail="Failed to create neuron")
 
@@ -1047,6 +1043,8 @@ async def list_synapses(
             return synapses
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error listing synapses: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve synapses")
 
@@ -1118,6 +1116,8 @@ async def activate_neural_pathway(
         }
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error activating pathway: {e}")
         raise HTTPException(status_code=500, detail="Failed to activate neural pathway")
 
@@ -1148,6 +1148,8 @@ async def list_neural_pathways(limit: int = 50):
             return pathways
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error listing pathways: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve pathways")
 
@@ -1180,22 +1182,19 @@ async def train_neural_network(
                 })
             })
             conn.commit()
-        
-        # Simulate training process (in production, implement actual learning algorithms)
-        training_results = {
+
+        # Persisted request only; no fake training results.
+        return {
             "training_id": training_id,
             "pattern_name": learning_data.pattern_name,
             "algorithm": learning_data.learning_algorithm,
-            "epochs_completed": learning_data.epochs,
-            "final_error": 0.05,  # Simulated
-            "convergence_achieved": True,
-            "weights_updated": True,
-            "status": "completed"
+            "epochs_requested": learning_data.epochs,
+            "status": "queued",
         }
         
-        return training_results
-        
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error training network: {e}")
         raise HTTPException(status_code=500, detail="Failed to train neural network")
 
@@ -1239,6 +1238,8 @@ async def list_board_sessions(
             return sessions
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error listing board sessions: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve board sessions")
 
@@ -1250,6 +1251,8 @@ async def convene_board_session(session_data: BoardSession):
         return {"session_id": session_id, "status": "convened"}
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error convening board session: {e}")
         raise HTTPException(status_code=500, detail="Failed to convene board session")
 
@@ -1261,6 +1264,8 @@ async def make_consensus_decision(decision_data: Decision):
         return {"decision_id": decision_id, "status": "finalized"}
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error making decision: {e}")
         raise HTTPException(status_code=500, detail="Failed to make decision")
 
@@ -1302,6 +1307,8 @@ async def list_decisions(
             return decisions
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error listing decisions: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve decisions")
 
@@ -1327,6 +1334,8 @@ async def store_memory(memory_data: MemoryStore):
         return {"memory_id": memory_id, "status": "stored"}
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error storing memory: {e}")
         raise HTTPException(status_code=500, detail="Failed to store memory")
 
@@ -1352,6 +1361,8 @@ async def recall_memories(
         return memories
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error recalling memories: {e}")
         raise HTTPException(status_code=500, detail="Failed to recall memories")
 
@@ -1363,6 +1374,8 @@ async def create_memory_cluster(cluster_data: MemoryCluster):
         return {"cluster_id": cluster_id, "status": "clustered"}
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error creating memory cluster: {e}")
         raise HTTPException(status_code=500, detail="Failed to create memory cluster")
 
@@ -1374,6 +1387,8 @@ async def identify_memory_patterns():
         return patterns
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error identifying patterns: {e}")
         raise HTTPException(status_code=500, detail="Failed to identify patterns")
 
@@ -1434,6 +1449,8 @@ async def neural_system_health():
         return health_status
         
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error checking system health: {e}")
         raise HTTPException(status_code=500, detail="Failed to check system health")
 
@@ -1441,152 +1458,7 @@ async def neural_system_health():
 @router.post("/initialize", response_model=Dict[str, str])
 async def initialize_neural_system():
     """Initialize neural network system with basic structure"""
-    try:
-        # Create basic neural network structure
-        input_neurons = []
-        hidden_neurons = []
-        output_neurons = []
-        
-        # Create input layer (5 neurons)
-        for i in range(5):
-            neuron_data = NeuronCreate(
-                neuron_type="input",
-                layer_id=0,
-                activation_function="linear",
-                threshold=0.5
-            )
-            neuron_id = str(uuid.uuid4())
-            
-            with engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO ai_neurons 
-                    (id, neuron_type, layer_id, activation_function, threshold, 
-                     current_value, is_active, created_at, updated_at)
-                    VALUES (:id, :type, :layer_id, :activation, :threshold, 
-                            0.0, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """), {
-                    "id": neuron_id,
-                    "type": neuron_data.neuron_type,
-                    "layer_id": neuron_data.layer_id,
-                    "activation": neuron_data.activation_function,
-                    "threshold": neuron_data.threshold
-                })
-                conn.commit()
-            
-            input_neurons.append(neuron_id)
-        
-        # Create hidden layer (10 neurons)
-        for i in range(10):
-            neuron_data = NeuronCreate(
-                neuron_type="hidden",
-                layer_id=1,
-                activation_function="sigmoid",
-                threshold=0.5
-            )
-            neuron_id = str(uuid.uuid4())
-            
-            with engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO ai_neurons 
-                    (id, neuron_type, layer_id, activation_function, threshold, 
-                     current_value, is_active, created_at, updated_at)
-                    VALUES (:id, :type, :layer_id, :activation, :threshold, 
-                            0.0, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """), {
-                    "id": neuron_id,
-                    "type": neuron_data.neuron_type,
-                    "layer_id": neuron_data.layer_id,
-                    "activation": neuron_data.activation_function,
-                    "threshold": neuron_data.threshold
-                })
-                conn.commit()
-            
-            hidden_neurons.append(neuron_id)
-        
-        # Create output layer (3 neurons)
-        for i in range(3):
-            neuron_data = NeuronCreate(
-                neuron_type="output",
-                layer_id=2,
-                activation_function="sigmoid",
-                threshold=0.5
-            )
-            neuron_id = str(uuid.uuid4())
-            
-            with engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO ai_neurons 
-                    (id, neuron_type, layer_id, activation_function, threshold, 
-                     current_value, is_active, created_at, updated_at)
-                    VALUES (:id, :type, :layer_id, :activation, :threshold, 
-                            0.0, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """), {
-                    "id": neuron_id,
-                    "type": neuron_data.neuron_type,
-                    "layer_id": neuron_data.layer_id,
-                    "activation": neuron_data.activation_function,
-                    "threshold": neuron_data.threshold
-                })
-                conn.commit()
-            
-            output_neurons.append(neuron_id)
-        
-        # Create synapses between layers
-        synapse_count = 0
-        
-        # Input to hidden connections
-        for input_id in input_neurons:
-            for hidden_id in hidden_neurons:
-                synapse_id = str(uuid.uuid4())
-                weight = np.random.normal(0, 0.5)  # Random initial weight
-                
-                with engine.connect() as conn:
-                    conn.execute(text("""
-                        INSERT INTO ai_synapses 
-                        (id, source_neuron_id, target_neuron_id, weight, synapse_type, 
-                         learning_rate, signal_count, is_active, created_at, updated_at)
-                        VALUES (:id, :source, :target, :weight, 'excitatory', 
-                                0.1, 0, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """), {
-                        "id": synapse_id,
-                        "source": input_id,
-                        "target": hidden_id,
-                        "weight": float(weight)
-                    })
-                    conn.commit()
-                
-                synapse_count += 1
-        
-        # Hidden to output connections
-        for hidden_id in hidden_neurons:
-            for output_id in output_neurons:
-                synapse_id = str(uuid.uuid4())
-                weight = np.random.normal(0, 0.5)  # Random initial weight
-                
-                with engine.connect() as conn:
-                    conn.execute(text("""
-                        INSERT INTO ai_synapses 
-                        (id, source_neuron_id, target_neuron_id, weight, synapse_type, 
-                         learning_rate, signal_count, is_active, created_at, updated_at)
-                        VALUES (:id, :source, :target, :weight, 'excitatory', 
-                                0.1, 0, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """), {
-                        "id": synapse_id,
-                        "source": hidden_id,
-                        "target": output_id,
-                        "weight": float(weight)
-                    })
-                    conn.commit()
-                
-                synapse_count += 1
-        
-        return {
-            "status": "initialized",
-            "neurons_created": len(input_neurons) + len(hidden_neurons) + len(output_neurons),
-            "synapses_created": synapse_count,
-            "architecture": "5-10-3 feedforward network"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error initializing neural system: {e}")
-        raise HTTPException(status_code=500, detail="Failed to initialize neural system RETURNING * RETURNING * RETURNING * RETURNING *")
+    raise HTTPException(
+        status_code=501,
+        detail="Neural system initialization via API is disabled. Provision schema/data via migrations.",
+    )

@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict
 from datetime import datetime
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 import uuid
 import os
 import logging
@@ -16,27 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Database configuration - use shared pool
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+from database import get_db
 
 class LeadCaptureRequest(BaseModel):
     name: str
@@ -100,23 +80,14 @@ def capture_lead(lead: LeadCaptureRequest, db: Session = Depends(get_db)):
             name=lead.name,
             email=lead.email,
             lead_score=lead_score,
-            status="success",
-            message=f"Lead captured successfully with score {lead_score}"
+            status="created",
+            message="Lead captured successfully",
         )
 
     except Exception as e:
         logger.error(f"Lead capture error: {e}")
         db.rollback()
-
-        # Return success anyway (store failed leads for later)
-        return LeadCaptureResponse(
-            id=str(uuid.uuid4()),
-            name=lead.name,
-            email=lead.email,
-            lead_score=50,
-            status="queued",
-            message="Lead queued for processing"
-        )
+        raise HTTPException(status_code=500, detail="Failed to capture lead") from e
 
 @router.get("/leads")
 def get_leads(

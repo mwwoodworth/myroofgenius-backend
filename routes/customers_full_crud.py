@@ -18,34 +18,8 @@ from uuid import UUID, uuid4
 import asyncio
 from enum import Enum
 
-try:
-    from database import get_db
-except ImportError:
-    # Fallback database connection
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    import os
-
-    def get_db():
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
-            port=os.getenv("DB_PORT", "5432"),
-            database=os.getenv("DB_NAME", "postgres"),
-            user=os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-            password=os.getenv("DB_PASSWORD", "<DB_PASSWORD_REDACTED>"),
-            cursor_factory=RealDictCursor
-        )
-        try:
-            yield conn
-        finally:
-            conn.close()
-
-try:
-    from core.supabase_auth import get_current_user  # SUPABASE AUTH
-except ImportError:
-    # Fallback - no auth for now
-    async def get_current_user():
-        return {"id": "system", "email": "system@weathercraft.com"}
+from core.supabase_auth import get_current_user  # SUPABASE AUTH
+from database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/customers", tags=["Customers - Complete"])

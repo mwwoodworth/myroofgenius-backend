@@ -19,6 +19,7 @@ import logging
 import hashlib
 import hmac
 from decimal import Decimal
+from database import DATABASE_URL as RESOLVED_DATABASE_URL
 
 try:
     import stripe
@@ -29,11 +30,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+# Database connection (resolved from environment/config; no hardcoded fallbacks)
+DATABASE_URL = RESOLVED_DATABASE_URL
 
 # Stripe configuration
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -150,6 +148,8 @@ class PaymentReport(BaseModel):
 
 async def get_db_connection():
     """Get database connection"""
+    if not DATABASE_URL:
+        raise HTTPException(status_code=503, detail="Database connection not available")
     return await asyncpg.connect(DATABASE_URL)
 
 # ==================== Payment Processing ====================
@@ -189,14 +189,53 @@ async def process_payment(
             transaction_id = f"TXN-{datetime.now().strftime('%Y%m%d')}-{payment_id[:8].upper()}"
             
             # Process based on payment method
-            gateway_response = {}
-            if payment.payment_method == PaymentMethod.STRIPE and STRIPE_AVAILABLE:
-                # Process Stripe payment (placeholder)
-                gateway_response = {
-                    "status": "succeeded",
-                    "transaction_id": transaction_id,
-                    "processor": "stripe"
-                }
+            gateway_response: Dict[str, Any] = {}
+            if payment.payment_method == PaymentMethod.STRIPE:
+                if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
+                    raise HTTPException(status_code=503, detail="Stripe is not configured on this server")
+
+                ref = None
+                if payment.payment_details:
+                    ref = payment.payment_details.reference_number
+                if not ref:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Stripe payments require payment_details.reference_number (PaymentIntent/Charge ID)",
+                    )
+
+                try:
+                    if ref.startswith("pi_"):
+                        intent = stripe.PaymentIntent.retrieve(ref)
+                        if intent.status != "succeeded":
+                            raise HTTPException(status_code=402, detail=f"PaymentIntent not succeeded (status={intent.status})")
+                        transaction_id = intent.id
+                        gateway_response = {
+                            "processor": "stripe",
+                            "object": "payment_intent",
+                            "id": intent.id,
+                            "status": intent.status,
+                            "amount": intent.amount,
+                            "currency": intent.currency,
+                        }
+                    elif ref.startswith("ch_"):
+                        charge = stripe.Charge.retrieve(ref)
+                        if not charge.paid:
+                            raise HTTPException(status_code=402, detail="Charge not paid")
+                        transaction_id = charge.id
+                        gateway_response = {
+                            "processor": "stripe",
+                            "object": "charge",
+                            "id": charge.id,
+                            "status": charge.status,
+                            "amount": charge.amount,
+                            "currency": charge.currency,
+                        }
+                    else:
+                        raise HTTPException(status_code=400, detail="Unsupported Stripe reference_number format")
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    raise HTTPException(status_code=502, detail=f"Stripe verification failed: {exc}") from exc
             
             # Record payment
             await conn.execute("""
@@ -270,7 +309,7 @@ async def process_credit_card_payment(
     background_tasks: BackgroundTasks
 ):
     """Process credit card payment"""
-    if not STRIPE_AVAILABLE:
+    if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=503,
             detail="Credit card processing is not available. Stripe not configured."
@@ -287,13 +326,37 @@ async def process_credit_card_payment(
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
             
-            # Create Stripe payment intent (placeholder)
-            payment_intent = {
-                "id": f"pi_{uuid.uuid4().hex}",
-                "amount": int(payment.amount * 100),
-                "status": "succeeded",
-                "payment_method": "card"
-            }
+            if not payment.card_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="card_token is required (tokenize card details client-side with Stripe)",
+                )
+
+            # Create a Stripe PaymentMethod from a token if needed.
+            payment_method_id = payment.card_token
+            if payment.card_token.startswith("tok_"):
+                payment_method = stripe.PaymentMethod.create(
+                    type="card",
+                    card={"token": payment.card_token},
+                )
+                payment_method_id = payment_method.id
+            elif not payment.card_token.startswith("pm_"):
+                raise HTTPException(status_code=400, detail="card_token must be a Stripe token (tok_) or payment method (pm_)")
+
+            intent = stripe.PaymentIntent.create(
+                amount=int(payment.amount * 100),
+                currency="usd",
+                payment_method=payment_method_id,
+                confirm=True,
+                confirmation_method="automatic",
+                metadata={"invoice_id": payment.invoice_id},
+            )
+
+            if intent.status != "succeeded":
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Payment requires additional action (status={intent.status})",
+                )
             
             # Record payment
             payment_id = str(uuid.uuid4())
@@ -304,7 +367,18 @@ async def process_credit_card_payment(
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
                 date.today(), payment.amount, 'credit_card',
-                payment_intent['id'], json.dumps(payment_intent))
+                intent.id,
+                json.dumps(
+                    {
+                        "processor": "stripe",
+                        "payment_intent_id": intent.id,
+                        "status": intent.status,
+                        "amount": intent.amount,
+                        "currency": intent.currency,
+                        "payment_method": intent.payment_method,
+                    }
+                ),
+            )
             
             # Update invoice
             balance = (invoice['balance_cents'] or invoice['total_cents']) / 100
@@ -323,7 +397,7 @@ async def process_credit_card_payment(
             return {
                 "success": True,
                 "payment_id": payment_id,
-                "stripe_payment_intent_id": payment_intent['id'],
+                "stripe_payment_intent_id": intent.id,
                 "amount": payment.amount,
                 "new_balance": new_balance
             }
@@ -341,67 +415,10 @@ async def process_ach_payment(
     background_tasks: BackgroundTasks
 ):
     """Process ACH payment"""
-    try:
-        conn = await get_db_connection()
-        try:
-            # Get invoice
-            invoice = await conn.fetchrow("""
-                SELECT * FROM invoices WHERE id = $1
-            """, uuid.UUID(payment.invoice_id))
-            
-            if not invoice:
-                raise HTTPException(status_code=404, detail="Invoice not found")
-            
-            # Validate routing number (basic checksum)
-            if not validate_routing_number(payment.routing_number):
-                raise HTTPException(status_code=400, detail="Invalid routing number")
-            
-            # Create ACH transaction (placeholder)
-            transaction_id = f"ACH-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
-            
-            # Record payment (pending ACH clearing)
-            payment_id = str(uuid.uuid4())
-            await conn.execute("""
-                INSERT INTO invoice_payments (
-                    id, invoice_id, payment_date, amount,
-                    payment_method, reference_number, transaction_id,
-                    gateway_response, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-            """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
-                date.today() + timedelta(days=2),  # ACH typically clears in 2-3 days
-                payment.amount, 'ach_transfer',
-                f"****{payment.account_number[-4:]}",
-                transaction_id,
-                json.dumps({
-                    "status": "pending",
-                    "account_type": payment.account_type,
-                    "expected_clear_date": (date.today() + timedelta(days=2)).isoformat()
-                }))
-            
-            # Log activity
-            await conn.execute("""
-                INSERT INTO invoice_activities (
-                    invoice_id, activity_type, description
-                ) VALUES ($1, $2, $3)
-            """, uuid.UUID(payment.invoice_id), 'ach_initiated',
-                f"ACH payment of ${payment.amount:.2f} initiated")
-            
-            return {
-                "success": True,
-                "payment_id": payment_id,
-                "transaction_id": transaction_id,
-                "amount": payment.amount,
-                "status": "pending",
-                "expected_clear_date": (date.today() + timedelta(days=2)).isoformat(),
-                "message": "ACH payment initiated. Funds will be available in 2-3 business days."
-            }
-        finally:
-            await conn.close()
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error processing ACH payment: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(
+        status_code=501,
+        detail="ACH processing is not implemented on this server",
+    )
 
 # ==================== Refunds ====================
 

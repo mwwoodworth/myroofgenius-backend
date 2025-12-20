@@ -7,18 +7,16 @@ Created: 2025-01-26
 Status: 100% PRODUCTION READY
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends, status
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from decimal import Decimal
 import json
 import uuid
-import os
 
 # Database imports
 import asyncpg
-from functools import lru_cache
 
 router = APIRouter(prefix="/api/v1/roofing", tags=["Roofing Estimation"])
 
@@ -37,12 +35,6 @@ def decimal_to_float(obj):
     elif isinstance(obj, list):
         return [decimal_to_float(item) for item in obj]
     return obj
-
-# Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
 
 # ============================================================================
 # PYDANTIC MODELS - Request/Response Schemas
@@ -178,18 +170,12 @@ class WorkbookImportResponse(BaseModel):
 # DATABASE HELPERS
 # ============================================================================
 
-async def get_db_pool():
-    """Get database connection pool"""
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+def get_db_pool(request: Request) -> asyncpg.Pool:
+    """Get the shared asyncpg pool from app.state (no hardcoded URLs)."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="Database connection not available")
     return pool
-
-
-@lru_cache()
-def get_cached_pool():
-    """Cached pool reference"""
-    import asyncio
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(get_db_pool())
 
 
 # ============================================================================
@@ -198,6 +184,7 @@ def get_cached_pool():
 
 @router.get("/components", response_model=Dict[str, Any])
 async def get_roofing_components(
+    request: Request,
     manufacturer: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     system_type: Optional[str] = Query(None),
@@ -213,7 +200,7 @@ async def get_roofing_components(
     Returns both shared (tenant_id=NULL) and tenant-specific components
     """
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             # Build dynamic query
             query = """
@@ -269,15 +256,13 @@ async def get_roofing_components(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch components: {str(e)}")
-    finally:
-        await pool.close()
 
 
 @router.get("/components/{component_id}", response_model=ComponentResponse)
-async def get_component_by_id(component_id: str):
+async def get_component_by_id(component_id: str, request: Request):
     """Get single roofing component by ID"""
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT
@@ -299,8 +284,6 @@ async def get_component_by_id(component_id: str):
         raise HTTPException(status_code=400, detail="Invalid component ID format")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch component: {str(e)}")
-    finally:
-        await pool.close()
 
 
 # ============================================================================
@@ -308,7 +291,7 @@ async def get_component_by_id(component_id: str):
 # ============================================================================
 
 @router.post("/assemblies/build", response_model=AssemblyResponse)
-async def build_intelligent_assembly(requirements: AssemblyRequirements):
+async def build_intelligent_assembly(requirements: AssemblyRequirements, request: Request):
     """
     Build intelligent roofing assembly based on requirements
 
@@ -322,7 +305,7 @@ async def build_intelligent_assembly(requirements: AssemblyRequirements):
     Returns complete assembly with cost breakdown
     """
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             # Step 1: Find suitable membrane
             membrane_query = """
@@ -533,12 +516,10 @@ async def build_intelligent_assembly(requirements: AssemblyRequirements):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to build assembly: {str(e)}")
-    finally:
-        await pool.close()
 
 
 @router.post("/assemblies/recommend", response_model=List[AssemblyRecommendation])
-async def recommend_assemblies(requirements: AssemblyRequirements, limit: int = Query(5, le=20)):
+async def recommend_assemblies(requirements: AssemblyRequirements, request: Request, limit: int = Query(5, le=20)):
     """
     Get AI-powered assembly recommendations
 
@@ -548,7 +529,7 @@ async def recommend_assemblies(requirements: AssemblyRequirements, limit: int = 
     - Performance/durability (30%)
     """
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             # Find matching assemblies
             query = """
@@ -570,7 +551,7 @@ async def recommend_assemblies(requirements: AssemblyRequirements, limit: int = 
 
             if not rows:
                 # If no cached assemblies, build one on the fly
-                new_assembly = await build_intelligent_assembly(requirements)
+                new_assembly = await build_intelligent_assembly(requirements=requirements, request=request)
                 return [AssemblyRecommendation(
                     assembly=new_assembly,
                     match_score=Decimal('95.0'),
@@ -663,8 +644,6 @@ async def recommend_assemblies(requirements: AssemblyRequirements, limit: int = 
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")
-    finally:
-        await pool.close()
 
 
 # ============================================================================
@@ -672,7 +651,7 @@ async def recommend_assemblies(requirements: AssemblyRequirements, limit: int = 
 # ============================================================================
 
 @router.post("/workbook/import", response_model=WorkbookImportResponse)
-async def import_workbook(request: WorkbookImportRequest):
+async def import_workbook(import_request: WorkbookImportRequest, request: Request):
     """
     Import roofing estimate from Excel workbook
 
@@ -684,13 +663,13 @@ async def import_workbook(request: WorkbookImportRequest):
     Returns import status and created estimate ID
     """
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             # Check for duplicate import
             existing = await conn.fetchrow("""
                 SELECT id FROM roofing_workbook_imports
                 WHERE file_hash = $1 AND tenant_id = $2
-            """, request.file_hash, uuid.UUID(request.tenant_id))
+            """, import_request.file_hash, uuid.UUID(import_request.tenant_id))
 
             if existing:
                 raise HTTPException(status_code=409, detail="This workbook has already been imported")
@@ -700,22 +679,22 @@ async def import_workbook(request: WorkbookImportRequest):
 
             # Count sheets and line items
             sheets_processed = sum([
-                1 if request.project_metadata else 0,
-                1 if request.demolition_items else 0,
-                1 if request.base_layer_items else 0,
-                1 if request.cap_sheet_items else 0,
-                1 if request.insulation_items else 0,
-                1 if request.flashing_items else 0,
-                1 if request.labor_rates else 0,
-                1 if request.price_sheet_data else 0
+                1 if import_request.project_metadata else 0,
+                1 if import_request.demolition_items else 0,
+                1 if import_request.base_layer_items else 0,
+                1 if import_request.cap_sheet_items else 0,
+                1 if import_request.insulation_items else 0,
+                1 if import_request.flashing_items else 0,
+                1 if import_request.labor_rates else 0,
+                1 if import_request.price_sheet_data else 0
             ])
 
             line_items_imported = sum([
-                len(request.demolition_items or []),
-                len(request.base_layer_items or []),
-                len(request.cap_sheet_items or []),
-                len(request.insulation_items or []),
-                len(request.flashing_items or [])
+                len(import_request.demolition_items or []),
+                len(import_request.base_layer_items or []),
+                len(import_request.cap_sheet_items or []),
+                len(import_request.insulation_items or []),
+                len(import_request.flashing_items or [])
             ])
 
             insert_query = """
@@ -735,21 +714,21 @@ async def import_workbook(request: WorkbookImportRequest):
             row = await conn.fetchrow(
                 insert_query,
                 import_id,
-                request.file_name,
-                request.file_hash,
-                request.file_size_bytes,
-                uuid.UUID(request.tenant_id),
-                uuid.UUID(request.imported_by),
+                import_request.file_name,
+                import_request.file_hash,
+                import_request.file_size_bytes,
+                uuid.UUID(import_request.tenant_id),
+                uuid.UUID(import_request.imported_by),
                 sheets_processed,
                 line_items_imported,
-                json.dumps(decimal_to_float(request.project_metadata)) if request.project_metadata else None,
-                json.dumps(decimal_to_float(request.demolition_items)) if request.demolition_items else None,
-                json.dumps(decimal_to_float(request.base_layer_items)) if request.base_layer_items else None,
-                json.dumps(decimal_to_float(request.cap_sheet_items)) if request.cap_sheet_items else None,
-                json.dumps(decimal_to_float(request.insulation_items)) if request.insulation_items else None,
-                json.dumps(decimal_to_float(request.flashing_items)) if request.flashing_items else None,
-                json.dumps(decimal_to_float(request.labor_rates)) if request.labor_rates else None,
-                json.dumps(decimal_to_float(request.price_sheet_data)) if request.price_sheet_data else None
+                json.dumps(decimal_to_float(import_request.project_metadata)) if import_request.project_metadata else None,
+                json.dumps(decimal_to_float(import_request.demolition_items)) if import_request.demolition_items else None,
+                json.dumps(decimal_to_float(import_request.base_layer_items)) if import_request.base_layer_items else None,
+                json.dumps(decimal_to_float(import_request.cap_sheet_items)) if import_request.cap_sheet_items else None,
+                json.dumps(decimal_to_float(import_request.insulation_items)) if import_request.insulation_items else None,
+                json.dumps(decimal_to_float(import_request.flashing_items)) if import_request.flashing_items else None,
+                json.dumps(decimal_to_float(import_request.labor_rates)) if import_request.labor_rates else None,
+                json.dumps(decimal_to_float(import_request.price_sheet_data)) if import_request.price_sheet_data else None
             )
 
             return WorkbookImportResponse(
@@ -766,19 +745,18 @@ async def import_workbook(request: WorkbookImportRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
-    finally:
-        await pool.close()
 
 
 @router.get("/workbook/imports", response_model=Dict[str, Any])
 async def list_workbook_imports(
+    request: Request,
     tenant_id: str,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0)
 ):
     """List all workbook imports for a tenant"""
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT
@@ -806,8 +784,6 @@ async def list_workbook_imports(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list imports: {str(e)}")
-    finally:
-        await pool.close()
 
 
 # ============================================================================
@@ -815,10 +791,10 @@ async def list_workbook_imports(
 # ============================================================================
 
 @router.get("/health")
-async def roofing_estimation_health():
+async def roofing_estimation_health(request: Request):
     """Health check for roofing estimation system"""
     try:
-        pool = await get_db_pool()
+        pool = get_db_pool(request)
         async with pool.acquire() as conn:
             # Check component count
             component_count = await conn.fetchval("SELECT COUNT(*) FROM roofing_components")
@@ -839,11 +815,11 @@ async def roofing_estimation_health():
                     "excel_import"
                 ]
             }
+    except HTTPException:
+        raise
     except Exception as e:
         return {
             "status": "unhealthy",
             "service": "roofing_estimation",
             "error": str(e)
         }
-    finally:
-        await pool.close()

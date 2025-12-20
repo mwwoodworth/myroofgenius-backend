@@ -9,20 +9,21 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import json
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import httpx
 import asyncio
 
 router = APIRouter(tags=["Google Ads"])
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
-
 # Google Ads configuration (would use actual API in production)
 GOOGLE_ADS_CUSTOMER_ID = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
 GOOGLE_ADS_API_KEY = os.getenv("GOOGLE_ADS_API_KEY", "")
+
+try:
+    from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError
+except Exception:
+    ai_service = None
+    AIServiceNotConfiguredError = Exception  # type: ignore
 
 class Campaign(BaseModel):
     name: str
@@ -39,8 +40,11 @@ class AdGroup(BaseModel):
     ads: List[Dict[str, Any]]  # headlines, descriptions, urls
 
 def get_db():
-    engine = create_engine(DATABASE_URL)
-    return engine
+    from database import engine as db_engine
+
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return db_engine
 
 @router.post("/campaigns/create")
 async def create_campaign(campaign: Campaign, background_tasks: BackgroundTasks):
@@ -49,7 +53,9 @@ async def create_campaign(campaign: Campaign, background_tasks: BackgroundTasks)
     """
     campaign_id = f"CAMPAIGN_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
     
-    # Store campaign configuration
+    google_ads_enabled = bool(GOOGLE_ADS_API_KEY and GOOGLE_ADS_CUSTOMER_ID)
+
+    # Store campaign configuration (does not launch Google Ads without integration)
     with get_db().connect() as conn:
         conn.execute(text("""
             INSERT INTO ad_campaigns (
@@ -72,7 +78,7 @@ async def create_campaign(campaign: Campaign, background_tasks: BackgroundTasks)
                 :keywords,
                 :locations,
                 :ad_schedule,
-                'active',
+                :status,
                 NOW()
             )
         """), {
@@ -82,19 +88,17 @@ async def create_campaign(campaign: Campaign, background_tasks: BackgroundTasks)
             "target_cpa": int(campaign.target_cpa * 100),
             "keywords": json.dumps(campaign.keywords),
             "locations": json.dumps(campaign.locations),
-            "ad_schedule": json.dumps(campaign.ad_schedule) if campaign.ad_schedule else None
+            "ad_schedule": json.dumps(campaign.ad_schedule) if campaign.ad_schedule else None,
+            "status": "pending_launch" if google_ads_enabled else "draft",
         })
         conn.commit()
     
-    # Start campaign optimization in background
-    background_tasks.add_task(optimize_campaign, campaign_id)
-    
     return {
         "campaign_id": campaign_id,
-        "status": "launching",
-        "message": f"Campaign '{campaign.name}' created with ${campaign.budget_daily}/day budget",
-        "estimated_clicks": int(campaign.budget_daily / 3.50),  # Avg CPC
-        "estimated_conversions": int(campaign.budget_daily / campaign.target_cpa)
+        "status": "stored",
+        "launched": False,
+        "google_ads_enabled": google_ads_enabled,
+        "message": "Campaign configuration stored. Google Ads launch requires configured Google Ads credentials.",
     }
 
 @router.post("/campaigns/emergency-weather")
@@ -193,14 +197,17 @@ async def create_weather_triggered_campaign(location: str, weather_event: str):
         })
         conn.commit()
     
+    google_ads_enabled = bool(GOOGLE_ADS_API_KEY and GOOGLE_ADS_CUSTOMER_ID)
     return {
         "campaign_id": campaign_id,
         "type": "emergency",
         "location": location,
         "weather_event": weather_event,
-        "status": "active",
+        "status": "stored",
+        "launched": False,
+        "google_ads_enabled": google_ads_enabled,
         "budget": campaign.budget_daily,
-        "message": f"Emergency campaign launched for {weather_event} in {location}"
+        "message": "Emergency campaign configuration stored. Google Ads launch requires configured Google Ads credentials.",
     }
 
 @router.get("/campaigns/performance")
@@ -298,41 +305,9 @@ def generate_optimization_recommendations(campaigns, stats):
 
 async def optimize_campaign(campaign_id: str):
     """
-    Background task to continuously optimize campaign
+    Background task stub (not enabled without a worker/queue)
     """
-    while True:
-        await asyncio.sleep(3600)  # Check every hour
-        
-        with get_db().connect() as conn:
-            # Get campaign performance
-            perf = conn.execute(text("""
-                SELECT 
-                    AVG(cpc_cents) as avg_cpc,
-                    AVG(conversion_rate) as conv_rate,
-                    SUM(conversions) as total_conversions
-                FROM ad_performance
-                WHERE campaign_id = :campaign_id
-                AND date >= CURRENT_DATE - INTERVAL '7 days'
-            """), {"campaign_id": campaign_id}).fetchone()
-            
-            if perf and perf["total_conversions"] > 10:
-                # Adjust bids based on performance
-                if perf["conv_rate"] > 0.08:  # Good conversion rate
-                    # Increase budget
-                    conn.execute(text("""
-                        UPDATE ad_campaigns
-                        SET budget_daily_cents = budget_daily_cents * 1.2
-                        WHERE campaign_id = :campaign_id
-                    """), {"campaign_id": campaign_id})
-                elif perf["conv_rate"] < 0.03:  # Poor conversion rate
-                    # Decrease budget
-                    conn.execute(text("""
-                        UPDATE ad_campaigns
-                        SET budget_daily_cents = budget_daily_cents * 0.8
-                        WHERE campaign_id = :campaign_id
-                    """), {"campaign_id": campaign_id})
-                
-                conn.commit()
+    return
 
 @router.post("/keywords/research")
 async def keyword_research(seed_keyword: str):
@@ -415,69 +390,33 @@ async def generate_ad_copy(product: str, tone: str = "urgent"):
     """
     AI-generated ad copy variations
     """
-    ad_templates = {
-        "urgent": {
-            "headlines": [
-                f"Emergency {product} - Get Help Now",
-                f"24/7 {product} Service Available",
-                f"Urgent {product}? Free Estimate",
-                "Act Fast - Limited Time Offer",
-                f"Same Day {product} Service"
-            ],
-            "descriptions": [
-                "Professional service when you need it most. Fast response guaranteed.",
-                "Don't wait - get your free estimate now. Licensed & insured pros.",
-                "Emergency service available 24/7. AI-powered accurate estimates."
-            ]
-        },
-        "value": {
-            "headlines": [
-                f"Save $2000 on {product}",
-                f"Best Price {product} Guaranteed",
-                f"Affordable {product} Solutions",
-                "Compare & Save - Free Quotes",
-                f"{product} Sale - 20% Off"
-            ],
-            "descriptions": [
-                "Get the best value with our AI-powered estimates. Save thousands.",
-                "Price match guarantee. Professional service at unbeatable prices.",
-                "Limited time offer. Quality service without breaking the bank."
-            ]
-        },
-        "trust": {
-            "headlines": [
-                f"Trusted {product} Experts",
-                "5-Star Rated Service",
-                f"Licensed {product} Professionals",
-                "10,000+ Happy Customers",
-                "BBB A+ Rated Company"
-            ],
-            "descriptions": [
-                "Join thousands of satisfied customers. Professional & reliable service.",
-                "Fully licensed and insured. 100% satisfaction guaranteed.",
-                "Industry-leading accuracy with AI technology. Trust the experts."
-            ]
-        }
-    }
-    
-    selected_template = ad_templates.get(tone, ad_templates["urgent"])
-    
-    # Generate multiple ad variations
-    ad_variations = []
-    for i in range(3):
-        ad_variations.append({
-            "variant": chr(65 + i),  # A, B, C
-            "headlines": selected_template["headlines"][i*3:(i+1)*3] if i < 2 else selected_template["headlines"][-3:],
-            "descriptions": selected_template["descriptions"],
-            "display_url": "myroofgenius.com",
-            "final_url": f"https://myroofgenius.com/estimate?source=google&tone={tone}"
-        })
-    
+    if ai_service is None:
+        raise HTTPException(status_code=503, detail="AI service not available on this server")
+
+    prompt = (
+        "Generate Google Ads copy for a roofing company.\n\n"
+        f"Product/service: {product}\n"
+        f"Tone: {tone}\n\n"
+        "Return JSON with key 'ad_variations' as a list of 3 variants.\n"
+        "Each variant must include: variant (A/B/C), headlines (list of 3), descriptions (list of 2), "
+        "display_url, final_url.\n"
+        "Do not include fabricated performance metrics."
+    )
+
+    try:
+        result = await ai_service.generate_json(prompt)
+    except AIServiceNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    variations = result.get("ad_variations") if isinstance(result, dict) else None
+    if not isinstance(variations, list):
+        variations = []
+
     return {
         "product": product,
         "tone": tone,
-        "ad_variations": ad_variations,
-        "recommendation": "Test all variations and optimize based on CTR and conversion rate"
+        "ad_variations": variations,
+        "ai_provider": result.get("ai_provider") if isinstance(result, dict) else None,
     }
 
 # Database tables needed

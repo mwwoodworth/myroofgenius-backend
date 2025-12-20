@@ -12,6 +12,7 @@ import json
 import uuid
 from datetime import datetime
 import logging
+import os
 
 # Import our REAL AI system
 import sys
@@ -239,12 +240,22 @@ async def get_agents_status():
             "last_activity": agent.memory[-1]["timestamp"] if agent.memory else None
         })
     
+    configured_providers = [
+        name
+        for name, key in (
+            ("openai", os.getenv("OPENAI_API_KEY")),
+            ("anthropic", os.getenv("ANTHROPIC_API_KEY")),
+            ("gemini", os.getenv("GEMINI_API_KEY")),
+        )
+        if key
+    ]
+
     return {
         "total_agents": len(agents),
         "active_agents": len(agents),
         "agents": agents,
-        "ai_providers": ["openai", "anthropic", "gemini"],
-        "status": "operational"
+        "ai_providers": configured_providers,
+        "status": "operational" if configured_providers else "not_configured",
     }
 
 @router.post("/vision/analyze")

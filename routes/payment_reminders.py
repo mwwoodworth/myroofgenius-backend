@@ -17,14 +17,13 @@ import asyncpg
 import os
 import logging
 from collections import defaultdict
+from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+# Database connection (resolved from environment/config; no hardcoded fallbacks)
+DATABASE_URL = RESOLVED_DATABASE_URL
 
 router = APIRouter()
 
@@ -125,6 +124,8 @@ class ReminderCampaign(BaseModel):
 
 async def get_db_connection():
     """Get database connection"""
+    if not DATABASE_URL:
+        raise HTTPException(status_code=503, detail="Database connection not available")
     return await asyncpg.connect(DATABASE_URL)
 
 # ==================== Reminder Templates ====================
@@ -753,13 +754,15 @@ def generate_reminder_message(template: str, invoice_data: Dict[str, Any]) -> st
     """Generate reminder message from template"""
     # Replace placeholders in template
     message = template
+    frontend_base = (settings.frontend_url or "").rstrip("/")
+    invoice_id = invoice_data.get("id", "")
     replacements = {
         "{customer_name}": invoice_data.get('customer_name', 'Customer'),
         "{invoice_number}": invoice_data.get('invoice_number', ''),
         "{amount_due}": f"${invoice_data.get('balance_cents', 0) / 100:.2f}",
         "{due_date}": invoice_data.get('due_date', '').isoformat() if invoice_data.get('due_date') else '',
         "{days_overdue}": str((date.today() - invoice_data.get('due_date')).days) if invoice_data.get('due_date') and invoice_data.get('due_date') < date.today() else '0',
-        "{payment_link}": f"https://pay.example.com/invoice/{invoice_data.get('id', '')} RETURNING * RETURNING * RETURNING * RETURNING * RETURNING *"
+        "{payment_link}": f"{frontend_base}/invoices/{invoice_id}" if frontend_base and invoice_id else ""
     }
     
     for key, value in replacements.items():
