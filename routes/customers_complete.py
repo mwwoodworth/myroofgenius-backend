@@ -114,6 +114,10 @@ async def list_customers(
 ):
     """List customers with pagination, search, and filters"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Build base query
         query = "SELECT c.*, COUNT(j.id) as job_count, COALESCE(SUM(j.total_amount), 0) as total_revenue "
         count_query = "SELECT COUNT(DISTINCT c.id) "
@@ -121,8 +125,8 @@ async def list_customers(
         base_from = "FROM customers c LEFT JOIN jobs j ON c.id = j.customer_id "
 
         # Build WHERE conditions
-        conditions = []
-        params = {}
+        conditions = ["c.tenant_id = :tenant_id"]
+        params = {"tenant_id": tenant_id}
 
         if search:
             conditions.append("""
@@ -196,6 +200,10 @@ async def get_customer(
 ):
     """Get single customer with full details"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         result = db.execute(
             text("""
                 SELECT c.*,
@@ -204,10 +212,10 @@ async def get_customer(
                     MAX(j.created_at) as last_job_date
                 FROM customers c
                 LEFT JOIN jobs j ON c.id = j.customer_id
-                WHERE c.id = :id
+                WHERE c.id = :id AND c.tenant_id = :tenant_id
                 GROUP BY c.id
             """),
-            {"id": customer_id}
+            {"id": customer_id, "tenant_id": tenant_id}
         )
 
         customer = result.fetchone()
@@ -239,12 +247,16 @@ async def create_customer(
 ):
     """Create new customer"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         customer_id = str(uuid4())
 
-        # Check for duplicate email
+        # Check for duplicate email within tenant
         existing = db.execute(
-            text("SELECT id FROM customers WHERE email = :email"),
-            {"email": customer.email}
+            text("SELECT id FROM customers WHERE email = :email AND tenant_id = :tenant_id"),
+            {"email": customer.email, "tenant_id": tenant_id}
         ).fetchone()
 
         if existing:
@@ -260,12 +272,12 @@ async def create_customer(
                     id, name, email, phone, company,
                     address, city, state, zip_code,
                     status, tags, source, custom_fields,
-                    created_at, created_by
+                    created_at, created_by, tenant_id
                 ) VALUES (
                     :id, :name, :email, :phone, :company,
                     :address, :city, :state, :zip_code,
                     'active', :tags::jsonb, :source, :custom_fields::jsonb,
-                    NOW(), :created_by
+                    NOW(), :created_by, :tenant_id
                 )
             """),
             {
@@ -281,7 +293,8 @@ async def create_customer(
                 "tags": json.dumps(customer.tags or []),
                 "source": customer.source,
                 "custom_fields": json.dumps(customer.custom_fields or {}),
-                "created_by": current_user["id"]
+                "created_by": current_user["id"],
+                "tenant_id": tenant_id
             }
         )
 
@@ -312,10 +325,14 @@ async def update_customer(
 ):
     """Update customer details"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Check customer exists
         existing = db.execute(
-            text("SELECT * FROM customers WHERE id = :id"),
-            {"id": customer_id}
+            text("SELECT * FROM customers WHERE id = :id AND tenant_id = :tenant_id"),
+            {"id": customer_id, "tenant_id": tenant_id}
         ).fetchone()
 
         if not existing:
@@ -323,7 +340,7 @@ async def update_customer(
 
         # Build update query
         update_fields = []
-        params = {"id": customer_id}
+        params = {"id": customer_id, "tenant_id": tenant_id}
 
         for field, value in customer.dict(exclude_unset=True).items():
             if field in ["tags", "custom_fields"]:
@@ -338,7 +355,7 @@ async def update_customer(
             query = f"""
                 UPDATE customers
                 SET {', '.join(update_fields)}
-                WHERE id = :id
+                WHERE id = :id AND tenant_id = :tenant_id
             """
 
             db.execute(text(query), params)
@@ -369,10 +386,14 @@ async def delete_customer(
 ):
     """Delete customer (soft delete by default)"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Check if customer has jobs
         job_count = db.execute(
-            text("SELECT COUNT(*) FROM jobs WHERE customer_id = :id"),
-            {"id": customer_id}
+            text("SELECT COUNT(*) FROM jobs WHERE customer_id = :id AND tenant_id = :tenant_id"),
+            {"id": customer_id, "tenant_id": tenant_id}
         ).scalar()
 
         if job_count > 0:
@@ -383,15 +404,15 @@ async def delete_customer(
                     SET status = 'deleted',
                         deleted_at = NOW(),
                         deleted_by = :user_id
-                    WHERE id = :id
+                    WHERE id = :id AND tenant_id = :tenant_id
                 """),
-                {"id": customer_id, "user_id": current_user["id"]}
+                {"id": customer_id, "user_id": current_user["id"], "tenant_id": tenant_id}
             )
         else:
             # Hard delete if no associated data
             db.execute(
-                text("DELETE FROM customers WHERE id = :id"),
-                {"id": customer_id}
+                text("DELETE FROM customers WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": customer_id, "tenant_id": tenant_id}
             )
 
         db.commit()
@@ -438,9 +459,9 @@ async def batch_operation(
                         text("""
                             UPDATE customers
                             SET tags = tags || :new_tags::jsonb
-                            WHERE id = :id
+                            WHERE id = :id AND tenant_id = :tenant_id
                         """),
-                        {"id": customer_id, "new_tags": json.dumps(tags)}
+                        {"id": customer_id, "new_tags": json.dumps(tags), "tenant_id": current_user["tenant_id"]}
                     )
                     results["success"] += 1
 
@@ -518,8 +539,13 @@ async def export_customers(
 ):
     """Export customers to CSV or JSON"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         result = db.execute(
-            text("SELECT * FROM customers WHERE status != 'deleted' ORDER BY created_at DESC")
+            text("SELECT * FROM customers WHERE status != 'deleted' AND tenant_id = :tenant_id ORDER BY created_at DESC"),
+            {"tenant_id": tenant_id}
         )
 
         customers = [dict(row._mapping) for row in result]
