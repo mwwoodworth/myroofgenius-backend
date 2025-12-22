@@ -590,7 +590,8 @@ async def health_check():
     elif offline:
         status = "offline"
     else:
-        status = "degraded"
+        # No pool, not offline, DB unavailable - truly unhealthy
+        status = "unhealthy"
 
     payload = {
         "status": status,
@@ -603,9 +604,15 @@ async def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
-    # ALWAYS return 200 to keep Render health checks passing
-    # The 'status' field indicates actual health for monitoring
-    return payload
+    # Return appropriate HTTP status based on health
+    # - 200: healthy or degraded (service is functional)
+    # - 503: unhealthy (database completely unavailable, not just slow)
+    if status == "healthy" or status == "degraded" or status == "offline":
+        return payload
+    else:
+        # Database is completely unreachable - return 503
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content=payload)
 
 # Customer model
 class Customer(BaseModel):
