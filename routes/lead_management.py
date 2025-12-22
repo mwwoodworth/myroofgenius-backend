@@ -3,7 +3,7 @@ Lead Management Module - Task 61
 Complete lead tracking and qualification system
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
 from pydantic import BaseModel, Field, EmailStr, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
@@ -12,6 +12,8 @@ import asyncpg
 import uuid
 import json
 import logging
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -222,10 +224,16 @@ def calculate_lead_score(lead: dict) -> int:
 async def create_lead(
     lead: LeadCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new lead"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         lead_number = await generate_lead_number(conn)
         lead_data = lead.dict()
         lead_score = calculate_lead_score(lead_data)
@@ -236,10 +244,10 @@ async def create_lead(
                 website, industry, company_size, annual_revenue, lead_source,
                 lead_status, lead_score, rating, assigned_to, territory_id,
                 address_line1, address_line2, city, state, postal_code, country,
-                description, notes, tags, created_by
+                description, notes, tags, created_by, tenant_id
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+                $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
             ) RETURNING *
         """
 
@@ -252,7 +260,7 @@ async def create_lead(
             uuid.UUID(lead.territory_id) if lead.territory_id else None,
             lead.address_line1, lead.address_line2, lead.city, lead.state,
             lead.postal_code, lead.country, lead.description, lead.notes,
-            lead.tags, "system"
+            lead.tags, current_user["id"], tenant_id
         )
 
         # Track lead creation activity
@@ -260,7 +268,7 @@ async def create_lead(
             track_lead_activity,
             str(result['id']),
             "Lead created",
-            "system"
+            current_user["id"]
         )
 
         return {**dict(result), "id": str(result['id'])}
@@ -271,6 +279,7 @@ async def create_lead(
 
 @router.get("/", response_model=List[LeadResponse])
 async def list_leads(
+    request: Request,
     status: Optional[LeadStatus] = None,
     source: Optional[LeadSource] = None,
     rating: Optional[LeadRating] = None,
@@ -279,13 +288,18 @@ async def list_leads(
     converted: Optional[bool] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List leads with filters"""
     try:
-        conditions = []
-        params = []
-        param_count = 0
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        conditions = ["tenant_id = $1"]
+        params = [tenant_id]
+        param_count = 1
 
         if status:
             param_count += 1
@@ -317,7 +331,7 @@ async def list_leads(
             conditions.append(f"converted_to_customer = ${param_count}")
             params.append(converted)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_clause = f"WHERE {' AND '.join(conditions)}"
 
         param_count += 1
         limit_param = f"${param_count}"
@@ -350,12 +364,18 @@ async def list_leads(
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def get_lead(
     lead_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get lead by ID"""
     try:
-        query = "SELECT * FROM leads WHERE id = $1"
-        row = await conn.fetchrow(query, uuid.UUID(lead_id))
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        query = "SELECT * FROM leads WHERE id = $1 AND tenant_id = $2"
+        row = await conn.fetchrow(query, uuid.UUID(lead_id), tenant_id)
 
         if not row:
             raise HTTPException(status_code=404, detail="Lead not found")
@@ -380,14 +400,20 @@ async def update_lead(
     lead_id: str,
     updates: LeadUpdate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update lead information"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Check if lead exists
         existing = await conn.fetchrow(
-            "SELECT * FROM leads WHERE id = $1",
-            uuid.UUID(lead_id)
+            "SELECT * FROM leads WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(lead_id), tenant_id
         )
         if not existing:
             raise HTTPException(status_code=404, detail="Lead not found")
@@ -418,16 +444,17 @@ async def update_lead(
 
         param_count += 1
         set_clauses.append(f"updated_by = ${param_count}")
-        params.append("system")
+        params.append(current_user["id"])
 
         param_count += 1
         query = f"""
             UPDATE leads
             SET {', '.join(set_clauses)}
-            WHERE id = ${param_count}
+            WHERE id = ${param_count} AND tenant_id = ${param_count + 1}
             RETURNING *
         """
         params.append(uuid.UUID(lead_id))
+        params.append(tenant_id)
 
         result = await conn.fetchrow(query, *params)
 
@@ -437,7 +464,7 @@ async def update_lead(
                 track_lead_activity,
                 lead_id,
                 f"Status changed from {existing['lead_status']} to {update_data['lead_status']}",
-                "system"
+                current_user["id"]
             )
 
         return {
@@ -458,14 +485,20 @@ async def convert_lead_to_customer(
     lead_id: str,
     conversion: LeadConversion,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Convert lead to customer"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Check if lead exists and not already converted
         lead = await conn.fetchrow(
-            "SELECT * FROM leads WHERE id = $1",
-            uuid.UUID(lead_id)
+            "SELECT * FROM leads WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(lead_id), tenant_id
         )
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
@@ -481,7 +514,7 @@ async def convert_lead_to_customer(
                 converted_by = $3,
                 lead_status = 'converted',
                 updated_at = $2
-            WHERE id = $4
+            WHERE id = $4 AND tenant_id = $5
             RETURNING *
         """
 
@@ -489,8 +522,9 @@ async def convert_lead_to_customer(
             query,
             uuid.UUID(conversion.customer_id),
             datetime.utcnow(),
-            "system",
-            uuid.UUID(lead_id)
+            current_user["id"],
+            uuid.UUID(lead_id),
+            tenant_id
         )
 
         # Track conversion
@@ -498,7 +532,7 @@ async def convert_lead_to_customer(
             track_lead_activity,
             lead_id,
             f"Lead converted to customer {conversion.customer_id}",
-            "system"
+            current_user["id"]
         )
 
         return {
@@ -518,14 +552,20 @@ async def convert_lead_to_customer(
 async def create_lead_activity(
     lead_id: str,
     activity: LeadActivity,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create activity for a lead"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Check if lead exists
         lead_exists = await conn.fetchval(
-            "SELECT EXISTS(SELECT 1 FROM leads WHERE id = $1)",
-            uuid.UUID(lead_id)
+            "SELECT EXISTS(SELECT 1 FROM leads WHERE id = $1 AND tenant_id = $2)",
+            uuid.UUID(lead_id), tenant_id
         )
         if not lead_exists:
             raise HTTPException(status_code=404, detail="Lead not found")
@@ -549,7 +589,7 @@ async def create_lead_activity(
             activity.scheduled_at,
             activity.duration_minutes,
             activity.assigned_to,
-            "system"
+            current_user["id"]
         )
 
         # Update lead last contacted
@@ -575,12 +615,26 @@ async def create_lead_activity(
 @router.get("/{lead_id}/activities", response_model=List[LeadActivityResponse])
 async def get_lead_activities(
     lead_id: str,
+    request: Request,
     activity_type: Optional[ActivityType] = None,
     limit: int = Query(50, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get activities for a lead"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify lead access first
+        lead_exists = await conn.fetchval(
+             "SELECT EXISTS(SELECT 1 FROM leads WHERE id = $1 AND tenant_id = $2)",
+             uuid.UUID(lead_id), tenant_id
+        )
+        if not lead_exists:
+            raise HTTPException(status_code=404, detail="Lead not found")
+
         conditions = [f"lead_id = $1"]
         params = [uuid.UUID(lead_id)]
 
@@ -607,6 +661,8 @@ async def get_lead_activities(
 
     except Exception as e:
         logger.error(f"Error getting activities: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{lead_id}/qualify", response_model=LeadResponse)
@@ -614,14 +670,20 @@ async def qualify_lead(
     lead_id: str,
     qualification: LeadQualification,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Qualify lead with BANT criteria"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Get lead
         lead = await conn.fetchrow(
-            "SELECT * FROM leads WHERE id = $1",
-            uuid.UUID(lead_id)
+            "SELECT * FROM leads WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(lead_id), tenant_id
         )
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
@@ -663,7 +725,7 @@ async def qualify_lead(
                 lead_score = $1,
                 metadata = $2,
                 updated_at = $3
-            WHERE id = $4
+            WHERE id = $4 AND tenant_id = $5
             RETURNING *
         """
 
@@ -672,7 +734,8 @@ async def qualify_lead(
             new_score,
             json.dumps(metadata),
             datetime.utcnow(),
-            uuid.UUID(lead_id)
+            uuid.UUID(lead_id),
+            tenant_id
         )
 
         # Track qualification
@@ -680,7 +743,7 @@ async def qualify_lead(
             track_lead_activity,
             lead_id,
             f"Lead qualified with score {new_score}",
-            "system"
+            current_user["id"]
         )
 
         return {
@@ -698,15 +761,21 @@ async def qualify_lead(
 
 @router.get("/stats/summary")
 async def get_lead_stats(
+    request: Request,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     assigned_to: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get lead statistics"""
     try:
-        conditions = []
-        params = []
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        conditions = ["tenant_id = $1"]
+        params = [tenant_id]
 
         if date_from:
             params.append(date_from)
@@ -720,7 +789,7 @@ async def get_lead_stats(
             params.append(assigned_to)
             conditions.append(f"assigned_to = ${len(params)}")
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_clause = f"WHERE {' AND '.join(conditions)}"
 
         query = f"""
             SELECT

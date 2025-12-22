@@ -11,6 +11,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -57,15 +59,21 @@ class CampaignResponse(BaseModel):
 @router.post("/", response_model=CampaignResponse)
 async def create_campaign(
     campaign: CampaignCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new marketing campaign"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO marketing_campaigns (
             name, campaign_type, target_audience, budget,
             start_date, end_date, objectives, channels,
-            content, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            content, status, tenant_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
     """
 
@@ -80,22 +88,29 @@ async def create_campaign(
         json.dumps(campaign.objectives),
         json.dumps(campaign.channels),
         json.dumps(campaign.content),
-        campaign.status
+        campaign.status,
+        tenant_id
     )
 
     return format_campaign_response(result)
 
 @router.get("/", response_model=List[CampaignResponse])
 async def list_campaigns(
+    request: Request,
     status: Optional[str] = None,
     campaign_type: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all marketing campaigns"""
-    params = []
-    conditions = []
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    params = [tenant_id]
+    conditions = ["tenant_id = $1"]
 
     if status:
         params.append(status)
@@ -105,7 +120,7 @@ async def list_campaigns(
         params.append(campaign_type)
         conditions.append(f"campaign_type = ${len(params)}")
 
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+    where_clause = " WHERE " + " AND ".join(conditions)
 
     params.extend([limit, offset])
     query = f"""
@@ -122,19 +137,25 @@ async def list_campaigns(
 async def launch_campaign(
     campaign_id: str,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    request: Request,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Launch a marketing campaign"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     # Update status
     query = """
         UPDATE marketing_campaigns
         SET status = 'active',
             start_date = NOW()
-        WHERE id = $1 AND status = 'draft'
+        WHERE id = $1 AND status = 'draft' AND tenant_id = $2
         RETURNING *
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(campaign_id))
+    result = await conn.fetchrow(query, uuid.UUID(campaign_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Campaign not found or already launched")
 
