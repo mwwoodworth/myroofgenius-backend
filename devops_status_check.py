@@ -103,11 +103,11 @@ class DevOpsStatusCheck:
 
         try:
             conn = psycopg2.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port="6543",
-                database="postgres",
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
+                host=os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
+                port=os.getenv("DB_PORT", "6543"),
+                database=os.getenv("DB_NAME", "postgres"),
+                user=os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
+                password=os.getenv("DB_PASSWORD", ""),
                 sslmode="require"
             )
             cur = conn.cursor()
@@ -262,7 +262,7 @@ class DevOpsStatusCheck:
         print("-" * 40)
 
         # Check if token is configured
-        token = "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"
+        token = os.getenv("NOTION_TOKEN", "")
 
         if token:
             print(f"  ✅ Notion token configured")
@@ -349,7 +349,7 @@ class DevOpsStatusCheck:
                 print(f"    • {issue}")
 
         print("\n  Quick Actions:")
-        print("  • Start Docker: echo 'Mww00dw0rth@2O1S$' | sudo -S systemctl start docker")
+        print("  • Start Docker: sudo systemctl start docker")
         print("  • Launch DevOps: ./launch_devops.sh")
         print("  • Run Demo: python3 devops_demo.py")
         print("  • Sync Notion: python3 notion_live_integration.py")

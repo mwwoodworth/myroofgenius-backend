@@ -9,9 +9,9 @@ import requests
 from datetime import datetime
 
 # Render API credentials
-RENDER_API_KEY = "4b6b1a40f7b042f5a04dd1234f3e36c8"
-RENDER_SERVICE_ID = "srv-cja1ipir0cfc73gqbl70"
-BACKEND_URL = "https://brainops-backend-prod.onrender.com"
+RENDER_API_KEY = os.getenv("RENDER_API_KEY", "")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "srv-cja1ipir0cfc73gqbl70")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://brainops-backend-prod.onrender.com")
 
 def setup_mcp_config():
     """Create MCP configuration for Claude Code"""

@@ -3,6 +3,7 @@
 Direct Notion Database Sync - Populates existing databases
 """
 
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
@@ -12,7 +13,7 @@ from datetime import datetime
 
 class DirectNotionSync:
     def __init__(self):
-        self.notion_token = "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"
+        self.notion_token = os.getenv("NOTION_TOKEN", "")
         self.headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",
@@ -22,11 +23,11 @@ class DirectNotionSync:
         
         # Database configuration
         self.db_config = {
-            "host": "aws-0-us-east-2.pooler.supabase.com",
-            "database": "postgres",
-            "user": "postgres.yomagoqdmxszqtdwuhab",
-            "password": "<DB_PASSWORD_REDACTED>",
-            "port": 5432
+            "host": os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
+            "database": os.getenv("DB_NAME", "postgres"),
+            "user": os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
+            "password": os.getenv("DB_PASSWORD", ""),
+            "port": int(os.getenv("DB_PORT", "5432"))
         }
         
         # Your database IDs from the URLs

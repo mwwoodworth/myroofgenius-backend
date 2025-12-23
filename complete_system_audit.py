@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from typing import Dict, List, Any
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 class SystemAuditor:
     def __init__(self):
@@ -132,8 +132,8 @@ class SystemAuditor:
         print("\n🚀 CHECKING RENDER STATUS...")
 
         # Check current deployment
-        api_key = "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx"
-        service_id = "srv-d1tfs4idbo4c73di6k00"
+        api_key = os.getenv("RENDER_API_KEY", "")
+        service_id = os.getenv("RENDER_SERVICE_ID", "srv-d1tfs4idbo4c73di6k00")
 
         try:
             # Get deployment status
@@ -188,7 +188,7 @@ class SystemAuditor:
         """Check Vercel deployments"""
         print("\n🌐 CHECKING VERCEL DEPLOYMENTS...")
 
-        vercel_token = "vCDh2d4AgYXPAs0089MvQcHs"
+        vercel_token = os.getenv("VERCEL_TOKEN", "")
 
         try:
             # List all projects

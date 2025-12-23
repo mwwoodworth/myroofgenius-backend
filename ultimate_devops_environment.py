@@ -22,8 +22,8 @@ import webbrowser
 from dataclasses import dataclass
 import yaml
 
-# System password for sudo operations
-SUDO_PASSWORD = "Mww00dw0rth@2O1S$"
+# System password for sudo operations has been removed for security
+# Use sudo with explicit password prompt or configure sudoers file
 
 class UltimateDevOpsEnvironment:
     """
@@ -71,8 +71,8 @@ class UltimateDevOpsEnvironment:
 
         # Notion configuration
         self.notion_config = {
-            "token": "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",
-            "workspace_id": "609966813963"
+            "token": os.getenv("NOTION_TOKEN", ""),
+            "workspace_id": os.getenv("NOTION_WORKSPACE_ID", "609966813963")
         }
 
     async def setup_complete_environment(self):
@@ -155,7 +155,7 @@ class UltimateDevOpsEnvironment:
 
         # Update package list
         subprocess.run(
-            f"echo '{SUDO_PASSWORD}' | sudo -S apt-get update",
+            "sudo apt-get update",
             shell=True,
             capture_output=True
         )
@@ -164,7 +164,7 @@ class UltimateDevOpsEnvironment:
         for dep in dependencies:
             print(f"  Installing {dep}...")
             result = subprocess.run(
-                f"echo '{SUDO_PASSWORD}' | sudo -S apt-get install -y {dep}",
+                f"sudo apt-get install -y {dep}",
                 shell=True,
                 capture_output=True
             )
@@ -176,7 +176,7 @@ class UltimateDevOpsEnvironment:
         # Install Vercel CLI globally
         print("  Installing Vercel CLI...")
         subprocess.run(
-            f"echo '{SUDO_PASSWORD}' | sudo -S npm install -g vercel",
+            "sudo npm install -g vercel",
             shell=True,
             capture_output=True
         )
@@ -632,7 +632,7 @@ if __name__ == "__main__":
         if not notion_path.exists():
             print("  Installing Notion Desktop...")
             subprocess.run(
-                f"echo '{SUDO_PASSWORD}' | sudo -S snap install notion-snap-reborn",
+                "sudo snap install notion-snap-reborn",
                 shell=True,
                 capture_output=True
             )
