@@ -11,9 +11,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import uvicorn
-from datetime import datetime
+from datetime import datetime, timedelta
 import httpx
 import os
+import asyncpg
+from decimal import Decimal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +25,18 @@ app = FastAPI(
     description="Revenue optimization and growth",
     version="1.0.0"
 )
+
+# Database configuration
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'aws-0-us-east-2.pooler.supabase.com'),
+    'database': os.getenv('DB_NAME', 'postgres'),
+    'user': os.getenv('DB_USER', 'postgres.yomagoqdmxszqtdwuhab'),
+    'password': os.getenv('DB_PASSWORD', 'Brain0ps2O2S'),
+    'port': int(os.getenv('DB_PORT', '5432'))
+}
+
+# Database pool
+db_pool = None
 
 # Agent state
 class AgentState:
@@ -34,6 +48,21 @@ class AgentState:
         self.memory = []
 
 agent_state = AgentState()
+
+async def get_db_pool():
+    """Get or create database connection pool"""
+    global db_pool
+    if db_pool is None:
+        db_pool = await asyncpg.create_pool(
+            host=DB_CONFIG['host'],
+            database=DB_CONFIG['database'],
+            user=DB_CONFIG['user'],
+            password=DB_CONFIG['password'],
+            port=DB_CONFIG['port'],
+            min_size=2,
+            max_size=10
+        )
+    return db_pool
 
 class AgentTask(BaseModel):
     task_id: str
@@ -50,12 +79,22 @@ class AgentResponse(BaseModel):
 
 @app.get("/health")
 async def health():
+    # Check database connection
+    db_healthy = False
+    try:
+        pool = await get_db_pool()
+        await pool.fetchval("SELECT 1")
+        db_healthy = True
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+
     return {
-        "status": "healthy",
+        "status": "healthy" if db_healthy else "degraded",
         "agent": "revenue-agent",
         "port": 6006,
         "capabilities": ["analyze_revenue", "optimize_pricing", "forecast", "recommend"],
-        "ai_model": "claude-3",
+        "data_source": "real_database",
+        "database_connected": db_healthy,
         "tasks_processed": agent_state.tasks_processed,
         "current_status": agent_state.status,
         "timestamp": datetime.utcnow().isoformat()
@@ -98,33 +137,155 @@ async def process_task(task: AgentTask):
         return AgentResponse(status="error", error=str(e))
 
 async def execute_ai_task(task: AgentTask) -> Dict[str, Any]:
-    """Execute the actual AI task"""
-    # This is where you'd integrate with real AI APIs
-    # For now, return simulated results
-    
-    if task.task_type == "analyze":
-        return {
-            "analysis": "Completed analysis of data",
-            "insights": ["Insight 1", "Insight 2", "Insight 3"],
-            "confidence": 0.95
-        }
-    elif task.task_type == "automate":
-        return {
-            "automation": "Workflow automated successfully",
-            "steps_completed": 5,
-            "time_saved": "2 hours"
-        }
-    elif task.task_type == "monitor":
-        return {
-            "status": "All systems operational",
-            "metrics": {"cpu": 45, "memory": 60, "disk": 30},
-            "alerts": []
-        }
-    else:
-        return {
-            "result": f"Processed {task.task_type} successfully",
-            "details": task.params
-        }
+    """Execute the actual AI task with real database queries"""
+    pool = await get_db_pool()
+
+    try:
+        if task.task_type == "analyze_revenue":
+            # Get real revenue metrics from database
+            total_revenue = await pool.fetchval("""
+                SELECT COALESCE(SUM(revenue), 0) FROM revenue_tracking
+            """)
+
+            monthly_revenue = await pool.fetch("""
+                SELECT
+                    DATE_TRUNC('month', date) as month,
+                    SUM(revenue) as total
+                FROM revenue_tracking
+                GROUP BY DATE_TRUNC('month', date)
+                ORDER BY month DESC
+                LIMIT 6
+            """)
+
+            active_subscriptions = await pool.fetchval("""
+                SELECT COUNT(*) FROM subscriptions WHERE status = 'active'
+            """)
+
+            return {
+                "analysis": "Real revenue analysis from database",
+                "total_revenue": float(total_revenue or 0),
+                "monthly_trend": [
+                    {"month": row['month'].isoformat(), "revenue": float(row['total'])}
+                    for row in monthly_revenue
+                ],
+                "active_subscriptions": active_subscriptions or 0,
+                "insights": [
+                    f"Total revenue tracked: ${float(total_revenue or 0):.2f}",
+                    f"Active subscriptions: {active_subscriptions or 0}",
+                    f"Last {len(monthly_revenue)} months of data available"
+                ],
+                "confidence": 1.0
+            }
+
+        elif task.task_type == "optimize_pricing":
+            # Get real subscription pricing data
+            pricing_data = await pool.fetch("""
+                SELECT
+                    plan_name,
+                    AVG(amount) as avg_price,
+                    COUNT(*) as count,
+                    billing_cycle
+                FROM subscriptions
+                WHERE status = 'active'
+                GROUP BY plan_name, billing_cycle
+                ORDER BY avg_price DESC
+            """)
+
+            return {
+                "optimization": "Pricing recommendations based on real subscription data",
+                "current_plans": [
+                    {
+                        "plan": row['plan_name'],
+                        "avg_price": float(row['avg_price'] or 0),
+                        "subscribers": row['count'],
+                        "billing_cycle": row['billing_cycle']
+                    }
+                    for row in pricing_data
+                ],
+                "recommendations": [
+                    "Consider introducing annual discounts to increase LTV",
+                    "Monitor churn rates by pricing tier",
+                    "A/B test pricing variations for new signups"
+                ]
+            }
+
+        elif task.task_type == "forecast":
+            # Get historical data for forecasting
+            historical = await pool.fetch("""
+                SELECT
+                    date,
+                    revenue,
+                    new_customers
+                FROM revenue_tracking
+                ORDER BY date DESC
+                LIMIT 90
+            """)
+
+            if not historical:
+                return {
+                    "forecast": "Insufficient data for forecasting",
+                    "message": "Need at least 30 days of historical revenue data",
+                    "data_points": 0
+                }
+
+            # Simple moving average forecast
+            avg_daily_revenue = sum(float(row['revenue'] or 0) for row in historical) / len(historical)
+            avg_new_customers = sum(row['new_customers'] or 0 for row in historical) / len(historical)
+
+            return {
+                "forecast": "30-day revenue forecast based on historical data",
+                "data_points": len(historical),
+                "avg_daily_revenue": round(avg_daily_revenue, 2),
+                "avg_daily_new_customers": round(avg_new_customers, 2),
+                "projected_30_day_revenue": round(avg_daily_revenue * 30, 2),
+                "projected_new_customers": round(avg_new_customers * 30),
+                "confidence": 0.75 if len(historical) >= 30 else 0.5
+            }
+
+        elif task.task_type == "recommend":
+            # Get revenue opportunities from database
+            recent_transactions = await pool.fetchval("""
+                SELECT COUNT(*) FROM revenue_tracking
+                WHERE date > NOW() - INTERVAL '7 days'
+            """)
+
+            churn_risk = await pool.fetchval("""
+                SELECT COUNT(*) FROM subscriptions
+                WHERE status = 'active'
+                AND next_billing_date < NOW() + INTERVAL '7 days'
+            """)
+
+            return {
+                "recommendations": [
+                    {
+                        "type": "retention",
+                        "priority": "high" if churn_risk > 0 else "low",
+                        "message": f"{churn_risk or 0} subscriptions renewing in next 7 days - send retention emails"
+                    },
+                    {
+                        "type": "growth",
+                        "priority": "medium",
+                        "message": f"Recent activity: {recent_transactions or 0} transactions in last 7 days"
+                    },
+                    {
+                        "type": "optimization",
+                        "priority": "medium",
+                        "message": "Review pricing tiers based on customer LTV data"
+                    }
+                ],
+                "action_items": churn_risk or 0
+            }
+
+        else:
+            return {
+                "result": f"Unknown task type: {task.task_type}",
+                "supported_types": ["analyze_revenue", "optimize_pricing", "forecast", "recommend"],
+                "details": task.params
+            }
+
+    except Exception as e:
+        logger.error(f"Database query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/status")
 async def get_status():
@@ -164,8 +325,23 @@ async def heartbeat():
 
 @app.on_event("startup")
 async def startup_event():
+    # Initialize database pool
+    try:
+        await get_db_pool()
+        logger.info("Database connection pool initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database pool: {e}")
+
     asyncio.create_task(heartbeat())
-    logger.info(f"{'revenue-agent'} started on port 6006")
+    logger.info(f"revenue-agent started on port 6006")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        logger.info("Database pool closed")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=6006)
