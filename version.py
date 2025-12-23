@@ -2,9 +2,13 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.26"
-__build__ = "2025-12-18T16:30:00Z"
+__version__ = "163.0.27"
+__build__ = "2025-12-23T18:30:00Z"
 __status__ = "production"
+# v163.0.27: Performance & Security hardening
+# - Connection pool: min=1→10, max=5→40 for 9,800+ customers scale
+# - Statement caching: enabled (100 statements) for query performance
+# - SQL injection: parameterized LIMIT/OFFSET in warehouse_management.py
 # v163.0.26: Fix all async/await bugs and database connection issues
 # - Fixed job_analytics.py: Converted from SQLAlchemy sync to asyncpg
 # - Fixed admin_dashboard.py: Uses app.state.db_pool instead of new connections
