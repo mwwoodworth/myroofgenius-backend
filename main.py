@@ -114,10 +114,10 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
         try:
             pool = await asyncpg.create_pool(
                 database_url,
-                min_size=int(os.getenv("ASYNCPG_POOL_MIN_SIZE", "1")),
-                max_size=int(os.getenv("ASYNCPG_POOL_MAX_SIZE", "5")),
+                min_size=int(os.getenv("ASYNCPG_POOL_MIN_SIZE", "10")),
+                max_size=int(os.getenv("ASYNCPG_POOL_MAX_SIZE", "40")),
                 command_timeout=float(os.getenv("ASYNCPG_COMMAND_TIMEOUT_SECS", "15")),
-                statement_cache_size=0,
+                statement_cache_size=100,  # Enable prepared statement caching for performance
                 max_inactive_connection_lifetime=float(os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")),
                 timeout=float(os.getenv("ASYNCPG_CONNECT_TIMEOUT_SECS", "10")),
                 ssl=ssl_context,

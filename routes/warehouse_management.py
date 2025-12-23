@@ -469,7 +469,13 @@ async def get_warehouses(
             params.append(is_active)
 
         query += " GROUP BY w.id"
-        query += f" ORDER BY w.name LIMIT {limit} OFFSET {offset}"
+        # Use parameterized queries for LIMIT/OFFSET to prevent SQL injection
+        param_count += 1
+        limit_param = param_count
+        param_count += 1
+        offset_param = param_count
+        query += f" ORDER BY w.name LIMIT ${limit_param} OFFSET ${offset_param}"
+        params.extend([limit, offset])
 
         rows = await conn.fetch(query, *params)
 
@@ -635,7 +641,13 @@ async def get_warehouse_locations(
             query += f" AND storage_type = ${param_count}"
             params.append(storage_type)
 
-        query += f" ORDER BY location_code LIMIT {limit} OFFSET {offset}"
+        # Use parameterized queries for LIMIT/OFFSET to prevent SQL injection
+        param_count += 1
+        limit_param = param_count
+        param_count += 1
+        offset_param = param_count
+        query += f" ORDER BY location_code LIMIT ${limit_param} OFFSET ${offset_param}"
+        params.extend([limit, offset])
 
         rows = await conn.fetch(query, *params)
 
