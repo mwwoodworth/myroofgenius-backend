@@ -4,13 +4,14 @@ BrainOps Notion API Setup Script
 Automatically creates and populates your Notion workspace
 """
 
+import os
 import requests
 import json
 import time
 from datetime import datetime
 
 # Notion API Configuration
-NOTION_TOKEN = "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"
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_VERSION = "2022-06-28"
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",

@@ -4,6 +4,7 @@ Monitor v135.0.0 CNS Deployment
 Central Nervous System with corrected table references
 """
 
+import os
 import time
 import requests
 import json
@@ -11,8 +12,8 @@ import json
 print("🧠 Monitoring BrainOps Backend v135.0.0 CNS deployment...")
 print("=" * 60)
 
-api_key = "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx"
-service_id = "srv-d1tfs4idbo4c73di6k00"
+api_key = os.getenv("RENDER_API_KEY", "")
+service_id = os.getenv("RENDER_SERVICE_ID", "srv-d1tfs4idbo4c73di6k00")
 
 # Trigger deployment
 print("\n📦 Triggering deployment of v135.0.0...")
