@@ -18,6 +18,7 @@ import os
 import logging
 import hashlib
 import hmac
+import httpx
 from decimal import Decimal
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
 
@@ -38,6 +39,10 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 if STRIPE_AVAILABLE and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
+
+# SendGrid configuration
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "no-reply@myroofgenius.com")
 
 router = APIRouter()
 
@@ -414,11 +419,199 @@ async def process_ach_payment(
     payment: ACHPayment,
     background_tasks: BackgroundTasks
 ):
-    """Process ACH payment"""
-    raise HTTPException(
-        status_code=501,
-        detail="ACH processing is not implemented on this server",
-    )
+    """Process ACH payment using Stripe ACH Direct Debit"""
+    if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="ACH processing is not available. Stripe not configured."
+        )
+
+    try:
+        conn = await get_db_connection()
+        try:
+            # Validate routing number
+            if not validate_routing_number(payment.routing_number):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid routing number. Please verify the 9-digit routing number."
+                )
+
+            # Validate account type
+            if payment.account_type not in ['checking', 'savings']:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Account type must be 'checking' or 'savings'"
+                )
+
+            # Get invoice
+            invoice = await conn.fetchrow("""
+                SELECT i.*, c.customer_name, c.email
+                FROM invoices i
+                JOIN customers c ON i.customer_id = c.id
+                WHERE i.id = $1
+            """, uuid.UUID(payment.invoice_id))
+
+            if not invoice:
+                raise HTTPException(status_code=404, detail="Invoice not found")
+
+            # Calculate balance to ensure payment doesn't exceed it
+            balance_cents = invoice['balance_cents'] or invoice['total_cents']
+            payment_cents = int(payment.amount * 100)
+
+            if payment_cents > balance_cents:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payment amount exceeds balance due: ${balance_cents/100:.2f}"
+                )
+
+            # Create Stripe bank account token
+            # Note: In production, the client should tokenize bank details using Stripe.js
+            # For server-side implementation, we create a token here
+            try:
+                bank_account_token = stripe.Token.create(
+                    bank_account={
+                        "country": "US",
+                        "currency": "usd",
+                        "account_holder_name": payment.account_holder_name,
+                        "account_holder_type": "individual",  # or "company"
+                        "routing_number": payment.routing_number,
+                        "account_number": payment.account_number,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error creating bank account token: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid bank account details: {str(e)}"
+                )
+
+            # Create a PaymentMethod from the bank account token
+            try:
+                payment_method = stripe.PaymentMethod.create(
+                    type="us_bank_account",
+                    us_bank_account={
+                        "account_holder_type": "individual",
+                        "account_number": payment.account_number,
+                        "routing_number": payment.routing_number,
+                    },
+                    billing_details={
+                        "name": payment.account_holder_name,
+                        "email": invoice['email'],
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error creating PaymentMethod: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to create payment method: {str(e)}"
+                )
+
+            # Create PaymentIntent with ACH
+            try:
+                intent = stripe.PaymentIntent.create(
+                    amount=payment_cents,
+                    currency="usd",
+                    payment_method_types=["us_bank_account"],
+                    payment_method=payment_method.id,
+                    confirm=False,  # ACH requires customer confirmation
+                    metadata={
+                        "invoice_id": payment.invoice_id,
+                        "customer_name": invoice['customer_name'],
+                        "invoice_number": invoice['invoice_number']
+                    },
+                    description=f"Payment for invoice {invoice['invoice_number']}"
+                )
+            except Exception as e:
+                logger.error(f"Error creating PaymentIntent: {str(e)}")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to initiate ACH payment: {str(e)}"
+                )
+
+            # Record payment with 'processing' status since ACH takes time
+            payment_id = str(uuid.uuid4())
+            transaction_id = intent.id
+
+            await conn.execute("""
+                INSERT INTO invoice_payments (
+                    id, invoice_id, payment_date, amount,
+                    payment_method, transaction_id, gateway_response,
+                    notes, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
+                date.today(), payment.amount, 'ach_transfer',
+                transaction_id,
+                json.dumps({
+                    "processor": "stripe",
+                    "payment_intent_id": intent.id,
+                    "payment_method_id": payment_method.id,
+                    "status": intent.status,
+                    "amount": intent.amount,
+                    "currency": intent.currency,
+                    "account_type": payment.account_type,
+                    "last_four": payment.account_number[-4:],
+                    "routing_number": payment.routing_number,
+                }),
+                f"ACH payment - Account ending in {payment.account_number[-4:]}"
+            )
+
+            # Update invoice status to 'processing' for ACH (takes 3-5 business days)
+            # We'll update to 'paid' when webhook confirms success
+            balance_after = balance_cents - payment_cents
+
+            await conn.execute("""
+                UPDATE invoices
+                SET status = CASE
+                    WHEN $1 <= 0 THEN 'processing'
+                    ELSE 'partial'
+                END,
+                updated_at = NOW()
+                WHERE id = $2
+            """, balance_after, uuid.UUID(payment.invoice_id))
+
+            # Log activity
+            await conn.execute("""
+                INSERT INTO invoice_activities (
+                    invoice_id, activity_type, description, metadata
+                ) VALUES ($1, $2, $3, $4)
+            """, uuid.UUID(payment.invoice_id), 'payment_initiated',
+                f"ACH payment of ${payment.amount:.2f} initiated (pending bank confirmation)",
+                json.dumps({
+                    "payment_id": payment_id,
+                    "amount": payment.amount,
+                    "method": "ach_transfer",
+                    "status": "processing"
+                }))
+
+            # Send confirmation email
+            if invoice['email']:
+                background_tasks.add_task(
+                    send_payment_receipt,
+                    payment_id,
+                    invoice['email'],
+                    payment.amount,
+                    invoice['invoice_number']
+                )
+
+            return {
+                "success": True,
+                "payment_id": payment_id,
+                "stripe_payment_intent_id": intent.id,
+                "transaction_id": transaction_id,
+                "amount": payment.amount,
+                "status": "processing",
+                "message": "ACH payment initiated. Processing typically takes 3-5 business days.",
+                "next_steps": "Customer must confirm the bank account via micro-deposits or instant verification.",
+                "new_balance": balance_after / 100
+            }
+        finally:
+            await conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing ACH payment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==================== Refunds ====================
 
@@ -815,15 +1008,267 @@ async def send_payment_receipt(
     amount: float,
     invoice_number: str
 ):
-    """Send payment receipt email (placeholder)"""
-    logger.info(f"Sending receipt for payment {payment_id} to {email}")
-    # Email sending implementation would go here
+    """Send payment receipt email"""
+    try:
+        if not SENDGRID_API_KEY:
+            logger.warning(f"SendGrid not configured; skipping receipt email to {email}")
+            return False
+
+        # Get payment details from database
+        conn = await get_db_connection()
+        try:
+            payment = await conn.fetchrow("""
+                SELECT p.*, i.customer_id
+                FROM invoice_payments p
+                JOIN invoices i ON p.invoice_id = i.id
+                WHERE p.id = $1
+            """, uuid.UUID(payment_id))
+
+            if not payment:
+                logger.error(f"Payment {payment_id} not found for receipt email")
+                return False
+
+            # Get customer name
+            customer = await conn.fetchrow("""
+                SELECT customer_name, email FROM customers WHERE id = $1
+            """, payment['customer_id'])
+
+            customer_name = customer['customer_name'] if customer else "Valued Customer"
+            payment_date = payment['payment_date'].strftime('%B %d, %Y') if payment['payment_date'] else datetime.now().strftime('%B %d, %Y')
+            payment_method = payment['payment_method'].replace('_', ' ').title() if payment['payment_method'] else 'N/A'
+            transaction_id = payment['transaction_id'] or payment_id[:8].upper()
+
+        finally:
+            await conn.close()
+
+        # Create email content
+        subject = f"Payment Receipt - Invoice {invoice_number}"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #2563eb; color: white; padding: 20px; text-align: center; }}
+                .content {{ background-color: #f9fafb; padding: 30px; border-radius: 8px; margin: 20px 0; }}
+                .detail-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }}
+                .detail-label {{ font-weight: bold; color: #4b5563; }}
+                .detail-value {{ color: #1f2937; }}
+                .amount {{ font-size: 24px; font-weight: bold; color: #059669; text-align: center; margin: 20px 0; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Payment Receipt</h1>
+                </div>
+                <div class="content">
+                    <p>Dear {customer_name},</p>
+                    <p>Thank you for your payment! This email confirms that we have received your payment.</p>
+
+                    <div class="amount">
+                        Amount Paid: ${amount:.2f}
+                    </div>
+
+                    <div class="detail-row">
+                        <span class="detail-label">Invoice Number:</span>
+                        <span class="detail-value">{invoice_number}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Transaction ID:</span>
+                        <span class="detail-value">{transaction_id}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Payment Date:</span>
+                        <span class="detail-value">{payment_date}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Payment Method:</span>
+                        <span class="detail-value">{payment_method}</span>
+                    </div>
+
+                    <p style="margin-top: 30px;">If you have any questions about this payment, please don't hesitate to contact us.</p>
+                    <p>Thank you for your business!</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated receipt from MyRoofGenius</p>
+                    <p>Please do not reply to this email</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Send email via SendGrid
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "personalizations": [{"to": [{"email": email}]}],
+                    "from": {"email": SENDGRID_FROM_EMAIL, "name": "MyRoofGenius"},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": html_content}]
+                }
+            )
+
+            if response.status_code == 202:
+                logger.info(f"Payment receipt sent successfully to {email} for payment {payment_id}")
+                return True
+            else:
+                logger.error(f"Failed to send receipt email. Status: {response.status_code}, Response: {response.text}")
+                return False
+
+    except Exception as e:
+        logger.error(f"Error sending payment receipt: {str(e)}")
+        return False
 
 async def send_refund_notification(
     refund_id: str,
     customer_id: str,
     amount: float
 ):
-    """Send refund notification (placeholder)"""
-    logger.info(f"Sending refund notification for {refund_id} to customer {customer_id} RETURNING * RETURNING * RETURNING * RETURNING * RETURNING *")
-    # Notification implementation would go here
+    """Send refund notification email"""
+    try:
+        if not SENDGRID_API_KEY:
+            logger.warning(f"SendGrid not configured; skipping refund notification for customer {customer_id}")
+            return False
+
+        # Get customer and refund details from database
+        conn = await get_db_connection()
+        try:
+            # Get customer info
+            customer = await conn.fetchrow("""
+                SELECT customer_name, email FROM customers WHERE id = $1
+            """, uuid.UUID(customer_id))
+
+            if not customer or not customer['email']:
+                logger.error(f"Customer {customer_id} not found or has no email for refund notification")
+                return False
+
+            # Get refund details
+            refund = await conn.fetchrow("""
+                SELECT r.*, p.invoice_id, p.transaction_id as original_transaction_id, i.invoice_number
+                FROM payment_refunds r
+                JOIN invoice_payments p ON r.payment_id = p.id
+                JOIN invoices i ON p.invoice_id = i.id
+                WHERE r.id = $1
+            """, uuid.UUID(refund_id))
+
+            if not refund:
+                logger.error(f"Refund {refund_id} not found for notification email")
+                return False
+
+            customer_name = customer['customer_name'] or "Valued Customer"
+            customer_email = customer['email']
+            refund_date = refund['refund_date'].strftime('%B %d, %Y') if refund['refund_date'] else datetime.now().strftime('%B %d, %Y')
+            refund_reason = refund['reason'].replace('_', ' ').title() if refund['reason'] else 'N/A'
+            invoice_number = refund['invoice_number'] or 'N/A'
+            transaction_id = refund['transaction_id'] or refund_id[:8].upper()
+            original_transaction_id = refund['original_transaction_id'] or 'N/A'
+
+        finally:
+            await conn.close()
+
+        # Create email content
+        subject = f"Refund Processed - Invoice {invoice_number}"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #2563eb; color: white; padding: 20px; text-align: center; }}
+                .content {{ background-color: #f9fafb; padding: 30px; border-radius: 8px; margin: 20px 0; }}
+                .detail-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }}
+                .detail-label {{ font-weight: bold; color: #4b5563; }}
+                .detail-value {{ color: #1f2937; }}
+                .amount {{ font-size: 24px; font-weight: bold; color: #dc2626; text-align: center; margin: 20px 0; }}
+                .info-box {{ background-color: #dbeafe; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Refund Notification</h1>
+                </div>
+                <div class="content">
+                    <p>Dear {customer_name},</p>
+                    <p>This email confirms that a refund has been processed for your payment.</p>
+
+                    <div class="amount">
+                        Refund Amount: ${amount:.2f}
+                    </div>
+
+                    <div class="detail-row">
+                        <span class="detail-label">Invoice Number:</span>
+                        <span class="detail-value">{invoice_number}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Refund Transaction ID:</span>
+                        <span class="detail-value">{transaction_id}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Original Transaction ID:</span>
+                        <span class="detail-value">{original_transaction_id}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Refund Date:</span>
+                        <span class="detail-value">{refund_date}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Reason:</span>
+                        <span class="detail-value">{refund_reason}</span>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>Processing Time:</strong> Please allow 5-10 business days for the refund to appear on your original payment method.
+                    </div>
+
+                    <p style="margin-top: 30px;">If you have any questions about this refund, please don't hesitate to contact us.</p>
+                    <p>We appreciate your business and apologize for any inconvenience.</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from MyRoofGenius</p>
+                    <p>Please do not reply to this email</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Send email via SendGrid
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "personalizations": [{"to": [{"email": customer_email}]}],
+                    "from": {"email": SENDGRID_FROM_EMAIL, "name": "MyRoofGenius"},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": html_content}]
+                }
+            )
+
+            if response.status_code == 202:
+                logger.info(f"Refund notification sent successfully to {customer_email} for refund {refund_id}")
+                return True
+            else:
+                logger.error(f"Failed to send refund notification. Status: {response.status_code}, Response: {response.text}")
+                return False
+
+    except Exception as e:
+        logger.error(f"Error sending refund notification: {str(e)}")
+        return False

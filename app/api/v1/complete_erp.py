@@ -13,6 +13,7 @@ import json
 
 from database import get_db
 from pydantic import BaseModel, EmailStr
+from core.supabase_auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/erp", tags=["Complete ERP"])
 
@@ -49,15 +50,19 @@ class ProjectUpdate(BaseModel):
 # Complete Workflow Endpoints
 
 @router.post("/workflow/lead-to-project")
-async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_db)):
+async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Complete workflow from lead capture to project creation"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         result = {}
-        
+
         # 1. Create Lead (id auto-generates)
         lead_query = text("""
-            INSERT INTO leads (name, email, phone, address, roof_type, square_footage, urgency, source, status)
-            VALUES (:name, :email, :phone, :address, :roof_type, :square_footage, :urgency, :source, 'NEW')
+            INSERT INTO leads (name, email, phone, address, roof_type, square_footage, urgency, source, status, tenant_id)
+            VALUES (:name, :email, :phone, :address, :roof_type, :square_footage, :urgency, :source, 'NEW', :tenant_id)
             RETURNING id, name, email
         """)
         
@@ -69,7 +74,8 @@ async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_d
             'roof_type': lead.roof_type,
             'square_footage': lead.square_footage,
             'urgency': lead.urgency,
-            'source': lead.source
+            'source': lead.source,
+            'tenant_id': tenant_id
         }).fetchone()
         db.commit()
         result['lead'] = {'id': lead_result[0], 'name': lead_result[1], 'email': lead_result[2]}
@@ -77,15 +83,15 @@ async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_d
         # 2. Score and Qualify Lead
         lead_id = lead_result[0]
         score = calculate_lead_score(lead)
-        db.execute(text("UPDATE leads SET score = :score WHERE id = :id"), 
-                  {'score': score, 'id': lead_id})
+        db.execute(text("UPDATE leads SET score = :score WHERE id = :id AND tenant_id = :tenant_id"),
+                  {'score': score, 'id': lead_id, 'tenant_id': tenant_id})
         result['lead_score'] = score
         
         # 3. Convert to Customer
         customer_id = str(uuid4())
         customer_query = text("""
-            INSERT INTO customers (id, name, email, phone, address, source)
-            VALUES (:id, :name, :email, :phone, CAST(:address AS jsonb), 'lead_conversion')
+            INSERT INTO customers (id, name, email, phone, address, source, tenant_id)
+            VALUES (:id, :name, :email, :phone, CAST(:address AS jsonb), 'lead_conversion', :tenant_id)
             RETURNING id
         """)
         
@@ -97,25 +103,26 @@ async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_d
             'name': lead.name,
             'email': lead.email,
             'phone': lead.phone,
-            'address': address_json
+            'address': address_json,
+            'tenant_id': tenant_id
         }).fetchone()
         db.commit()
         result['customer'] = {'id': customer_result[0], 'name': lead.name, 'email': lead.email}
         
         # 4. Generate AI Estimate
-        estimate = await generate_ai_estimate(customer_id, lead.square_footage, lead.roof_type, db)
+        estimate = await generate_ai_estimate(customer_id, lead.square_footage, lead.roof_type, db, tenant_id=tenant_id)
         result['estimate'] = estimate
-        
+
         # 5. Create Project
-        project = await create_project_from_estimate(customer_id, estimate['id'], db)
+        project = await create_project_from_estimate(customer_id, estimate['id'], db, tenant_id=tenant_id)
         result['project'] = project
-        
+
         # 6. Generate Documents
-        documents = await generate_project_documents(project['id'], db)
+        documents = await generate_project_documents(project['id'], db, tenant_id=tenant_id)
         result['documents'] = documents
-        
+
         # 7. Schedule and Assign
-        schedule = await schedule_project(project['id'], db)
+        schedule = await schedule_project(project['id'], db, tenant_id=tenant_id)
         result['schedule'] = schedule
         
         return {
@@ -129,13 +136,17 @@ async def create_complete_workflow(lead: LeadCreate, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/leads")
-async def create_lead(lead: LeadCreate, db: Session = Depends(get_db)):
+async def create_lead(lead: LeadCreate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Create a new lead"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         lead_id = str(uuid4())
         query = text("""
-            INSERT INTO leads (id, name, email, phone, address, roof_type, square_footage, urgency, source, status)
-            VALUES (:id, :name, :email, :phone, :address, :roof_type, :square_footage, :urgency, :source, 'NEW')
+            INSERT INTO leads (id, name, email, phone, address, roof_type, square_footage, urgency, source, status, tenant_id)
+            VALUES (:id, :name, :email, :phone, :address, :roof_type, :square_footage, :urgency, :source, 'NEW', :tenant_id)
             RETURNING id, name, email, status, score
         """)
         
@@ -148,15 +159,16 @@ async def create_lead(lead: LeadCreate, db: Session = Depends(get_db)):
             'roof_type': lead.roof_type,
             'square_footage': lead.square_footage,
             'urgency': lead.urgency,
-            'source': lead.source
+            'source': lead.source,
+            'tenant_id': tenant_id
         }).fetchone()
-        
+
         db.commit()
-        
+
         # Calculate and update score
         score = calculate_lead_score(lead)
-        db.execute(text("UPDATE leads SET score = :score WHERE id = :id"), 
-                  {'score': score, 'id': lead_id})
+        db.execute(text("UPDATE leads SET score = :score WHERE id = :id AND tenant_id = :tenant_id"),
+                  {'score': score, 'id': lead_id, 'tenant_id': tenant_id})
         db.commit()
         
         return {
@@ -172,61 +184,76 @@ async def create_lead(lead: LeadCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/estimates")
-async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db)):
+async def create_estimate(estimate: EstimateCreate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Generate AI-powered estimate"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         result = await generate_ai_estimate(
             estimate.customer_id,
             estimate.square_footage,
             estimate.roof_type,
             db,
-            estimate.materials_grade
+            estimate.materials_grade,
+            tenant_id=tenant_id
         )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects")
-async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
+async def create_project(project: ProjectCreate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Create project from approved estimate"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         result = await create_project_from_estimate(
             project.customer_id,
             project.estimate_id,
             db,
             project.start_date,
-            project.crew_size
+            project.crew_size,
+            tenant_id=tenant_id
         )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/projects/{project_id}")
-async def update_project(project_id: str, update: ProjectUpdate, db: Session = Depends(get_db)):
+async def update_project(project_id: str, update: ProjectUpdate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Update project status and track progress"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         query = text("""
-            UPDATE jobs 
+            UPDATE jobs
             SET status = :status,
                 completion_percentage = COALESCE(:completion, completion_percentage),
                 notes = COALESCE(:notes, notes),
                 updated_at = NOW()
-            WHERE id = :id
+            WHERE id = :id AND tenant_id = :tenant_id
             RETURNING id, status, completion_percentage
         """)
-        
+
         result = db.execute(query, {
             'id': project_id,
             'status': update.status,
             'completion': update.completion_percentage,
-            'notes': update.notes
+            'notes': update.notes,
+            'tenant_id': tenant_id
         }).fetchone()
-        
+
         db.commit()
-        
+
         # If completed, generate final documents
         if update.status == 'completed':
-            await generate_completion_documents(project_id, db)
+            await generate_completion_documents(project_id, db, tenant_id=tenant_id)
         
         return {
             "id": result[0],
@@ -265,9 +292,12 @@ def calculate_lead_score(lead: LeadCreate) -> int:
     
     return min(score, 100)  # Cap at 100
 
-async def generate_ai_estimate(customer_id: str, sq_ft: int, roof_type: str, db: Session, grade: str = "standard") -> Dict:
+async def generate_ai_estimate(customer_id: str, sq_ft: int, roof_type: str, db: Session, grade: str = "standard", tenant_id: str = None) -> Dict:
     """Generate comprehensive AI estimate"""
-    
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required for estimate generation")
+
     # Pricing matrix (per sq ft)
     pricing = {
         "shingle": {"economy": 5.50, "standard": 7.50, "premium": 9.50},
@@ -295,20 +325,20 @@ async def generate_ai_estimate(customer_id: str, sq_ft: int, roof_type: str, db:
     ]
     
     # Get customer info
-    customer_info = db.execute(text("SELECT name, email, phone FROM customers WHERE id = :id"), {'id': customer_id}).fetchone()
+    customer_info = db.execute(text("SELECT name, email, phone FROM customers WHERE id = :id AND tenant_id = :tenant_id"), {'id': customer_id, 'tenant_id': tenant_id}).fetchone()
     
     # Use existing system user ID  
     system_user_id = "44491c1c-0e28-4aa1-ad33-552d1386769c"
     
     query = text("""
         INSERT INTO estimates (id, estimate_number, customer_id, client_name, client_email, client_phone,
-                             title, subtotal, total, total_amount, subtotal_cents, total_cents, 
-                             status, description, line_items, 
-                             estimate_date, valid_until, created_by_id, created_by)
+                             title, subtotal, total, total_amount, subtotal_cents, total_cents,
+                             status, description, line_items,
+                             estimate_date, valid_until, created_by_id, created_by, tenant_id)
         VALUES (:id, :estimate_number, :customer_id, :client_name, :client_email, :client_phone,
                 :title, :subtotal, :total, :total, :subtotal_cents, :total_cents,
-                'pending', :description, :line_items, 
-                :estimate_date, :valid_until, :created_by_id, :created_by)
+                'pending', :description, :line_items,
+                :estimate_date, :valid_until, :created_by_id, :created_by, :tenant_id)
         RETURNING id, estimate_number, total_amount, status
     """)
     
@@ -329,7 +359,8 @@ async def generate_ai_estimate(customer_id: str, sq_ft: int, roof_type: str, db:
         'estimate_date': datetime.now().date().isoformat(),
         'valid_until': (datetime.now() + timedelta(days=30)).date().isoformat(),
         'created_by_id': system_user_id,
-        'created_by': system_user_id
+        'created_by': system_user_id,
+        'tenant_id': tenant_id
     }).fetchone()
     
     db.commit()
@@ -347,14 +378,17 @@ async def generate_ai_estimate(customer_id: str, sq_ft: int, roof_type: str, db:
         "items": items
     }
 
-async def create_project_from_estimate(customer_id: str, estimate_id: str, db: Session, 
-                                      start_date: str = None, crew_size: int = 4) -> Dict:
+async def create_project_from_estimate(customer_id: str, estimate_id: str, db: Session,
+                                      start_date: str = None, crew_size: int = 4, tenant_id: str = None) -> Dict:
     """Create project/job from approved estimate"""
-    
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required for project creation")
+
     # Get estimate details
     estimate = db.execute(
-        text("SELECT total_amount, description FROM estimates WHERE id = :id"),
-        {'id': estimate_id}
+        text("SELECT total_amount, description FROM estimates WHERE id = :id AND tenant_id = :tenant_id"),
+        {'id': estimate_id, 'tenant_id': tenant_id}
     ).fetchone()
     
     if not estimate:
@@ -366,10 +400,10 @@ async def create_project_from_estimate(customer_id: str, estimate_id: str, db: S
     # Create job
     job_id = str(uuid4())
     query = text("""
-        INSERT INTO jobs (id, customer_id, job_number, status, title, description, 
-                         scheduled_start, estimate_id)
+        INSERT INTO jobs (id, customer_id, job_number, status, title, description,
+                         scheduled_start, estimate_id, tenant_id)
         VALUES (:id, :customer_id, :job_number, 'scheduled', :title, :description,
-                :start_date, :estimate_id)
+                :start_date, :estimate_id, :tenant_id)
         RETURNING id, job_number, status
     """)
     
@@ -380,15 +414,16 @@ async def create_project_from_estimate(customer_id: str, estimate_id: str, db: S
         'title': f'Roof Replacement - ${estimate[0]:,.2f}',
         'description': estimate[1],
         'start_date': start_date or (datetime.now() + timedelta(days=7)).isoformat(),
-        'estimate_id': estimate_id
+        'estimate_id': estimate_id,
+        'tenant_id': tenant_id
     }).fetchone()
-    
+
     db.commit()
-    
+
     # Update estimate status
     db.execute(
-        text("UPDATE estimates SET status = 'approved' WHERE id = :id"),
-        {'id': estimate_id}
+        text("UPDATE estimates SET status = 'approved' WHERE id = :id AND tenant_id = :tenant_id"),
+        {'id': estimate_id, 'tenant_id': tenant_id}
     )
     db.commit()
     
@@ -401,19 +436,23 @@ async def create_project_from_estimate(customer_id: str, estimate_id: str, db: S
         "estimated_total": float(estimate[0]) if estimate[0] else 0
     }
 
-async def generate_project_documents(project_id: str, db: Session) -> List[Dict]:
+async def generate_project_documents(project_id: str, db: Session, tenant_id: str = None) -> List[Dict]:
     """Generate all required project documents"""
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required for document generation")
+
     documents = []
-    
+
     # Get project details
     project = db.execute(
         text("""
-            SELECT j.*, c.name, c.email, c.address 
-            FROM jobs j 
-            JOIN customers c ON j.customer_id = c.id 
-            WHERE j.id = :id
+            SELECT j.*, c.name, c.email, c.address
+            FROM jobs j
+            JOIN customers c ON j.customer_id = c.id
+            WHERE j.id = :id AND j.tenant_id = :tenant_id
         """),
-        {'id': project_id}
+        {'id': project_id, 'tenant_id': tenant_id}
     ).fetchone()
     
     # Generate documents
@@ -438,8 +477,12 @@ async def generate_project_documents(project_id: str, db: Session) -> List[Dict]
     
     return documents
 
-async def schedule_project(project_id: str, db: Session) -> Dict:
+async def schedule_project(project_id: str, db: Session, tenant_id: str = None) -> Dict:
     """Create project schedule with milestones"""
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required for project scheduling")
+
     milestones = [
         ("materials_delivery", "Materials Delivery", 0),
         ("tear_off", "Tear Off Old Roof", 1),
@@ -468,8 +511,12 @@ async def schedule_project(project_id: str, db: Session) -> Dict:
     
     return schedule
 
-async def generate_completion_documents(project_id: str, db: Session) -> List[Dict]:
+async def generate_completion_documents(project_id: str, db: Session, tenant_id: str = None) -> List[Dict]:
     """Generate completion documents"""
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required for completion document generation")
+
     return [
         {"type": "warranty", "name": "Warranty Certificate"},
         {"type": "invoice", "name": "Final Invoice"},
@@ -480,47 +527,53 @@ async def generate_completion_documents(project_id: str, db: Session) -> List[Di
 # Revenue tracking endpoints
 
 @router.get("/revenue/dashboard")
-async def revenue_dashboard(db: Session = Depends(get_db)):
+async def revenue_dashboard(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Get revenue metrics and analytics"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         metrics = {}
-        
+
         # Total revenue
         revenue = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_projects,
                 SUM(total) as total_revenue,
                 AVG(total) as avg_project_value
-            FROM jobs 
-            WHERE status = 'completed'
-        """)).fetchone()
-        
+            FROM jobs
+            WHERE status = 'completed' AND tenant_id = :tenant_id
+        """), {'tenant_id': tenant_id}).fetchone()
+
         metrics['revenue'] = {
             'total_projects': revenue[0],
             'total_revenue': float(revenue[1]) if revenue[1] else 0,
             'avg_value': float(revenue[2]) if revenue[2] else 0
         }
-        
+
         # Pipeline
         pipeline = db.execute(text("""
             SELECT status, COUNT(*) as count, SUM(total_amount) as value
             FROM estimates
+            WHERE tenant_id = :tenant_id
             GROUP BY status
-        """)).fetchall()
-        
+        """), {'tenant_id': tenant_id}).fetchall()
+
         metrics['pipeline'] = [
             {'status': row[0], 'count': row[1], 'value': float(row[2]) if row[2] else 0}
             for row in pipeline
         ]
-        
+
         # Lead conversion
         leads = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_leads,
                 COUNT(CASE WHEN status = 'CONVERTED' THEN 1 END) as converted,
                 AVG(score) as avg_score
             FROM leads
-        """)).fetchone()
+            WHERE tenant_id = :tenant_id
+        """), {'tenant_id': tenant_id}).fetchone()
         
         metrics['leads'] = {
             'total': leads[0],
@@ -535,17 +588,21 @@ async def revenue_dashboard(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/workflow/status/{lead_id}")
-async def get_workflow_status(lead_id: str, db: Session = Depends(get_db)):
+async def get_workflow_status(lead_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Track complete workflow status for a lead"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="User not assigned to any tenant")
+
         status = {}
-        
+
         # Lead status
         lead = db.execute(
-            text("SELECT name, email, status, score FROM leads WHERE id = :id"),
-            {'id': lead_id}
+            text("SELECT name, email, status, score FROM leads WHERE id = :id AND tenant_id = :tenant_id"),
+            {'id': lead_id, 'tenant_id': tenant_id}
         ).fetchone()
-        
+
         if lead:
             status['lead'] = {
                 'name': lead[0],
@@ -553,33 +610,33 @@ async def get_workflow_status(lead_id: str, db: Session = Depends(get_db)):
                 'status': lead[2],
                 'score': lead[3]
             }
-        
+
         # Find related customer
         customer = db.execute(
-            text("SELECT id, name FROM customers WHERE email = :email"),
-            {'email': lead[1] if lead else ''}
+            text("SELECT id, name FROM customers WHERE email = :email AND tenant_id = :tenant_id"),
+            {'email': lead[1] if lead else '', 'tenant_id': tenant_id}
         ).fetchone()
-        
+
         if customer:
             status['customer'] = {'id': customer[0], 'name': customer[1]}
-            
+
             # Find estimates
             estimates = db.execute(
-                text("SELECT id, total_amount, status FROM estimates WHERE customer_id = :id"),
-                {'id': customer[0]}
+                text("SELECT id, total_amount, status FROM estimates WHERE customer_id = :id AND tenant_id = :tenant_id"),
+                {'id': customer[0], 'tenant_id': tenant_id}
             ).fetchall()
-            
+
             status['estimates'] = [
                 {'id': e[0], 'total': float(e[1]), 'status': e[2]}
                 for e in estimates
             ]
-            
+
             # Find jobs
             jobs = db.execute(
-                text("SELECT id, job_number, status, completion_percentage FROM jobs WHERE customer_id = :id"),
-                {'id': customer[0]}
+                text("SELECT id, job_number, status, completion_percentage FROM jobs WHERE customer_id = :id AND tenant_id = :tenant_id"),
+                {'id': customer[0], 'tenant_id': tenant_id}
             ).fetchall()
-            
+
             status['projects'] = [
                 {'id': j[0], 'number': j[1], 'status': j[2], 'completion': j[3]}
                 for j in jobs
