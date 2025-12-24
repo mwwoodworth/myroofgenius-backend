@@ -191,7 +191,7 @@ async def generate_estimate_from_analysis(
     analysis: Dict[Any, Any],
     customer_id: str,
     job_id: str,
-    db: Session
+    db: Any = None  # Optional - kept for compatibility but unused
 ) -> Dict[str, Any]:
     """Generate cost estimate based on AI analysis"""
 
