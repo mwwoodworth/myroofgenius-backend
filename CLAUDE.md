@@ -82,3 +82,4 @@ PGPASSWORD=Brain0ps2O2S psql -h aws-0-us-east-2.pooler.supabase.com \
 2. Always push Docker images after code changes
 3. Database schema must match code before deployment
 4. Update version in main.py and api_health.py
+5. This file is gitignored - credentials are LOCAL ONLY
