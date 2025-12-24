@@ -331,8 +331,8 @@ async def get_system_health(db: Session = Depends(get_db)):
                 revenue_metrics["mrr"] = float(latest.mrr) if latest.mrr is not None else None
                 revenue_metrics["churn_rate"] = float(latest.churn_rate) if latest.churn_rate is not None else None
                 revenue_metrics["ltv"] = float(latest.ltv) if latest.ltv is not None else None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to fetch MRR/churn/LTV metrics: {e}")
 
         # Growth based on paid invoices (last 30 days vs prior 30 days).
         try:
@@ -365,8 +365,8 @@ async def get_system_health(db: Session = Depends(get_db)):
             )
             if prior_30 > 0:
                 revenue_metrics["growth_rate"] = round(((last_30 - prior_30) / prior_30) * 100, 2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to calculate revenue growth rate: {e}")
 
         # ARPU when MRR is available.
         if revenue_metrics["mrr"] is not None:
@@ -374,8 +374,8 @@ async def get_system_health(db: Session = Depends(get_db)):
                 active_subs = db.execute(text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")).scalar()
                 if active_subs:
                     revenue_metrics["arpu"] = round(revenue_metrics["mrr"] / float(active_subs), 2)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to calculate ARPU: {e}")
 
         return {
             "status": "healthy",
