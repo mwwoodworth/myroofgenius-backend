@@ -1,11 +1,11 @@
 """
 Public endpoints for MyRoofGenius frontend
-No authentication required
+No authentication required, but requires tenant context.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 import uuid
 from datetime import datetime
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/erp/public", tags=["Public"])
 
 class EstimateRequest(BaseModel):
+    tenant_id: str = Field(..., description="The ID of the roofing company (Tenant)")
     customer_name: str
     customer_email: str
     customer_phone: str
@@ -29,6 +30,12 @@ class EstimateRequest(BaseModel):
 def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_db)):
     """Create estimate from public website"""
     try:
+        # Validate Tenant ID format
+        try:
+            tenant_uuid = str(uuid.UUID(request.tenant_id))
+        except ValueError:
+             raise HTTPException(status_code=400, detail="Invalid Tenant ID format")
+
         # Calculate estimate based on roof size and type
         price_per_sqft = {
             "shingle": 7.50,
@@ -44,21 +51,23 @@ def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_d
         estimate_number = f"EST-{datetime.now().strftime('%Y%m')}-{str(uuid.uuid4())[:8].upper()}"
         
         # Create or find customer
+        # MUST scope to tenant
         customer_query = """
-            SELECT id FROM customers WHERE email = :email
+            SELECT id FROM customers WHERE email = :email AND tenant_id = :tenant_id
         """
-        customer = db.execute(text(customer_query), {"email": request.customer_email}).first()
+        customer = db.execute(text(customer_query), {"email": request.customer_email, "tenant_id": tenant_uuid}).first()
         
         if not customer:
             # Create new customer
             create_customer = """
-                INSERT INTO customers (id, name, email, phone, address, created_at)
-                VALUES (:id, :name, :email, :phone, :address, :created_at)
+                INSERT INTO customers (id, tenant_id, name, email, phone, address, created_at)
+                VALUES (:id, :tenant_id, :name, :email, :phone, :address, :created_at)
                 RETURNING id
             """
             customer_id = str(uuid.uuid4())
             db.execute(text(create_customer), {
                 "id": customer_id,
+                "tenant_id": tenant_uuid,
                 "name": request.customer_name,
                 "email": request.customer_email,
                 "phone": request.customer_phone,
@@ -72,16 +81,17 @@ def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_d
         estimate_id = str(uuid.uuid4())
         create_estimate = """
             INSERT INTO estimates (
-                id, estimate_number, customer_id, 
+                id, tenant_id, estimate_number, customer_id, 
                 total, status, notes, created_at
             ) VALUES (
-                :id, :number, :customer_id,
+                :id, :tenant_id, :number, :customer_id,
                 :total, 'draft', :notes, :created_at
             )
         """
         
         db.execute(text(create_estimate), {
             "id": estimate_id,
+            "tenant_id": tenant_uuid,
             "number": estimate_number,
             "customer_id": customer_id,
             "total": total,
@@ -91,7 +101,7 @@ def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_d
         
         db.commit()
         
-        logger.info(f"Created estimate {estimate_number} for {request.customer_email}")
+        logger.info(f"Created estimate {estimate_number} for {request.customer_email} (Tenant: {tenant_uuid})")
         
         return {
             "id": estimate_id,
@@ -102,6 +112,8 @@ def create_public_estimate(request: EstimateRequest, db: Session = Depends(get_d
             "message": "Estimate created successfully"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating public estimate: {e}")
         db.rollback()

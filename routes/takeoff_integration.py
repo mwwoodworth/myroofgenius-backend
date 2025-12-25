@@ -5,14 +5,18 @@ The 'Brain' that converts geometric shapes into financial line items.
 Implements the 'Minimum In, Max Out' protocol.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
 import uuid
 import math
 import json
+import logging
 from database.async_connection import get_pool
+from core.supabase_auth import get_authenticated_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/takeoff", tags=["Takeoff Intelligence"])
 
@@ -75,18 +79,24 @@ def _parse_slope_pitch(pitch: str) -> tuple[int, int]:
 
 
 @router.post("/calculate")
-async def calculate_feature_impact(payload: CalculationRequest):
+async def calculate_feature_impact(
+    payload: CalculationRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """
     Takes a raw geometry, applies physics/slope/scale, 
     and returns the financial 'Assembly BOM' (Bill of Materials).
+    Requires Authentication.
     """
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context missing")
+
     # 1. Geometry Analysis
     geom_type = payload.feature.geometry.get("type")
     coords = payload.feature.geometry.get("coordinates")
     
     # Calculate Raw Metrics (Area/Length)
-    # Note: This is a simplified calc. Real implementation needs Geodesic (Lat/Lon) or Euclidean (Plan) logic.
-    # We assume Plan (Euclidean) for this logic block as it's safer for "scaled" drawings.
     raw_area = 0.0
     raw_perimeter = 0.0
     scale_factor = payload.scale_factor or 1.0
@@ -116,34 +126,45 @@ async def calculate_feature_impact(payload: CalculationRequest):
     
     if payload.assembly_id:
         pool = await get_pool()
-        assembly = await pool.fetchrow("SELECT * FROM roofing_assemblies WHERE id = $1", payload.assembly_id)
-        
-        if assembly:
-            components = json.loads(assembly['components'] or '[]')
+        async with pool.acquire() as conn:
+            # Enforce Tenant Isolation (Own assemblies OR System assemblies)
+            assembly = await conn.fetchrow(
+                """
+                SELECT * FROM roofing_assemblies 
+                WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+                """, 
+                payload.assembly_id, 
+                tenant_id
+            )
             
-            for comp in components:
-                # "Minimum In" -> "Max Out" Logic
-                # If component unit is 'sqft', multiply by Area
-                # If component unit is 'lf', multiply by Perimeter
+            if assembly:
+                components = json.loads(assembly['components'] or '[]')
                 
-                qty = 0
-                if comp['unit_type'] == 'sqft':
-                    qty = final_area * float(comp.get('quantity', 1.0))
-                elif comp['unit_type'] == 'lf':
-                    qty = final_len * float(comp.get('quantity', 1.0))
-                elif comp['unit_type'] == 'ea':
-                    # Complex logic: e.g., "1 screw per 2 sqft"
-                    rate = float(comp.get('quantity', 1.0))
-                    # Heuristic: If rate is small (<1), it's likely 'per sqft'
-                    qty = final_area * rate 
-                
-                line_items.append({
-                    "name": comp['product_name'],
-                    "quantity": round(qty, 2),
-                    "unit": comp['unit_type'],
-                    "unit_cost": comp['unit_cost'],
-                    "extended_cost": round(qty * float(comp['unit_cost']), 2)
-                })
+                for comp in components:
+                    # "Minimum In" -> "Max Out" Logic
+                    # If component unit is 'sqft', multiply by Area
+                    # If component unit is 'lf', multiply by Perimeter
+                    
+                    qty = 0
+                    if comp['unit_type'] == 'sqft':
+                        qty = final_area * float(comp.get('quantity', 1.0))
+                    elif comp['unit_type'] == 'lf':
+                        qty = final_len * float(comp.get('quantity', 1.0))
+                    elif comp['unit_type'] == 'ea':
+                        # Complex logic: e.g., "1 screw per 2 sqft"
+                        rate = float(comp.get('quantity', 1.0))
+                        # Heuristic: If rate is small (<1), it's likely 'per sqft'
+                        qty = final_area * rate 
+                    
+                    line_items.append({
+                        "name": comp['product_name'],
+                        "quantity": round(qty, 2),
+                        "unit": comp['unit_type'],
+                        "unit_cost": comp['unit_cost'],
+                        "extended_cost": round(qty * float(comp['unit_cost']), 2)
+                    })
+            else:
+                 logger.warning(f"Assembly {payload.assembly_id} not found for tenant {tenant_id}")
 
     return {
         "metrics": {
