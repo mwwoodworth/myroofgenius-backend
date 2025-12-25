@@ -3,10 +3,12 @@ Elena Roofing AI Agent - API Routes
 Enterprise-grade roofing estimation agent
 """
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import logging
+
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,11 @@ class ComponentQueryRequest(BaseModel):
     cool_roof_eligible: Optional[bool] = None
 
 @router.post("/assemblies/build")
-async def build_assembly(request: Request, assembly_req: AssemblyRequest):
+async def build_assembly(
+    request: Request,
+    assembly_req: AssemblyRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """
     Elena builds a roofing assembly based on requirements
 
@@ -53,6 +59,9 @@ async def build_assembly(request: Request, assembly_req: AssemblyRequest):
     and calculating costs.
     """
     try:
+        # SECURITY: Get tenant_id from authenticated user, not request body
+        tenant_id = current_user.get('tenant_id') or assembly_req.tenant_id
+
         # Get Elena instance from app state
         elena = getattr(request.app.state, 'elena', None)
         if not elena:
@@ -64,7 +73,7 @@ async def build_assembly(request: Request, assembly_req: AssemblyRequest):
         # Call Elena's assembly building service
         result = await elena.build_assembly(
             requirements=requirements,
-            tenant_id=assembly_req.tenant_id
+            tenant_id=tenant_id
         )
 
         if result.get('status') == 'error':
@@ -79,7 +88,11 @@ async def build_assembly(request: Request, assembly_req: AssemblyRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/assemblies/recommend")
-async def recommend_assemblies(request: Request, rec_req: RecommendationRequest):
+async def recommend_assemblies(
+    request: Request,
+    rec_req: RecommendationRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """
     Elena recommends optimal assemblies
 
@@ -110,7 +123,11 @@ async def recommend_assemblies(request: Request, rec_req: RecommendationRequest)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/components/query")
-async def query_components(request: Request, query_req: ComponentQueryRequest):
+async def query_components(
+    request: Request,
+    query_req: ComponentQueryRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """
     Elena queries manufacturer components
 
