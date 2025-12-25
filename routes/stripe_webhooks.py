@@ -39,21 +39,25 @@ async def handle_stripe_webhook(
         # Get the raw body
         payload = await request.body()
 
-        # Verify webhook signature if secret is configured
-        if STRIPE_WEBHOOK_SECRET:
-            try:
-                event = stripe.Webhook.construct_event(
-                    payload, stripe_signature, STRIPE_WEBHOOK_SECRET
-                )
-            except ValueError:
-                logger.error("Invalid payload")
-                raise HTTPException(status_code=400, detail="Invalid payload")
-            except stripe.error.SignatureVerificationError:
-                logger.error("Invalid signature")
-                raise HTTPException(status_code=400, detail="Invalid signature")
-        else:
-            logger.warning("Stripe webhook secret not configured; skipping signature verification.")
-            event = json.loads(payload)
+        # SECURITY FIX: Always require webhook signature verification
+        if not STRIPE_WEBHOOK_SECRET:
+            logger.error("CRITICAL: Stripe webhook secret not configured - rejecting request")
+            raise HTTPException(status_code=500, detail="Webhook configuration error")
+
+        if not stripe_signature:
+            logger.error("Missing Stripe signature header")
+            raise HTTPException(status_code=400, detail="Missing signature")
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, stripe_signature, STRIPE_WEBHOOK_SECRET
+            )
+        except ValueError:
+            logger.error("Invalid payload")
+            raise HTTPException(status_code=400, detail="Invalid payload")
+        except stripe.error.SignatureVerificationError:
+            logger.error("Invalid signature")
+            raise HTTPException(status_code=400, detail="Invalid signature")
 
         # Handle the event
         event_type = event.get('type', '')
