@@ -111,7 +111,7 @@ def get_tenant_id(current_user: Dict[str, Any]) -> str:
 @router.get("")
 async def list_agents(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all available AI agents (requires authentication)"""
     try:
@@ -165,7 +165,7 @@ async def list_agents(
 async def get_agent_details(
     agent_id: str,
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get details of a specific AI agent (requires authentication)"""
     try:
