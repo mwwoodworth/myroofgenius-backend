@@ -147,25 +147,52 @@ async def get_automation_rules():
 
     return {"rules": [], "total": 0, "available": False}
 
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhooks"""
+    """Handle Stripe webhooks with signature verification"""
     try:
         payload = await request.body()
-        event = stripe.Event.construct_from(
-            json.loads(payload), stripe.api_key
-        )
-        
+        sig_header = request.headers.get("stripe-signature")
+
+        # CRITICAL: Verify webhook signature to prevent forged requests
+        if not STRIPE_WEBHOOK_SECRET:
+            logger.error("CRITICAL: STRIPE_WEBHOOK_SECRET not configured - rejecting webhook")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        if not sig_header:
+            logger.warning("Webhook received without signature header")
+            raise HTTPException(status_code=400, detail="Missing stripe-signature header")
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, STRIPE_WEBHOOK_SECRET
+            )
+        except stripe.error.SignatureVerificationError as e:
+            logger.error(f"Webhook signature verification failed: {e}")
+            raise HTTPException(status_code=400, detail="Invalid signature")
+
         # Log the event
-        logger.info(f"Stripe webhook received: {event.type}")
-        
+        logger.info(f"Stripe webhook verified and received: {event.type}")
+
         # Process different event types
         if event.type == "payment_intent.succeeded":
             logger.info("Payment succeeded")
         elif event.type == "customer.subscription.created":
             logger.info("New subscription created")
-        
+        elif event.type == "customer.subscription.updated":
+            logger.info("Subscription updated")
+        elif event.type == "customer.subscription.deleted":
+            logger.info("Subscription cancelled")
+        elif event.type == "invoice.paid":
+            logger.info("Invoice paid")
+        elif event.type == "invoice.payment_failed":
+            logger.warning("Invoice payment failed")
+
         return {"success": True, "event_id": event.id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
