@@ -109,9 +109,14 @@ def get_tenant_id(current_user: Dict[str, Any]) -> str:
 # ============================================================================
 
 @router.get("")
-async def list_agents(request: Request):
-    """List all available AI agents"""
+async def list_agents(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """List all available AI agents (requires authentication)"""
     try:
+        # Verify user is authenticated
+        tenant_id = get_tenant_id(current_user)
         db_pool = await get_db_pool(request)
 
         async with db_pool.acquire() as conn:
@@ -159,10 +164,13 @@ async def list_agents(request: Request):
 @router.get("/{agent_id}")
 async def get_agent_details(
     agent_id: str,
-    request: Request
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """Get details of a specific AI agent"""
+    """Get details of a specific AI agent (requires authentication)"""
     try:
+        # Verify user is authenticated
+        tenant_id = get_tenant_id(current_user)
         db_pool = await get_db_pool(request)
 
         async with db_pool.acquire() as conn:
