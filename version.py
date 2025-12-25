@@ -2,9 +2,12 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.27"
-__build__ = "2025-12-23T18:30:00Z"
+__version__ = "163.0.28"
+__build__ = "2025-12-25T23:10:00Z"
 __status__ = "production"
+# v163.0.28: Security fix - Stripe webhook signature verification
+# - stripe_automation.py: Added proper webhook signature verification
+# - Prevents forged webhook events
 # v163.0.27: Performance & Security hardening
 # - Connection pool: min=1→10, max=5→40 for 9,800+ customers scale
 # - Statement caching: enabled (100 statements) for query performance
