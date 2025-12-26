@@ -2,8 +2,8 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.29"
-__build__ = "2025-12-26T00:15:00Z"
+__version__ = "163.0.31"
+__build__ = "2025-12-26T00:55:00Z"
 __status__ = "production"
 # v163.0.29: Critical AI OS fixes - Orchestrator, Routes, MCP
 # - Fixed _invoke_agent: Now makes real HTTP calls to brainops-ai-agents
