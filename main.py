@@ -284,8 +284,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️  Elena initialization failed: {e}")
 
+    # Initialize MCP Bridge Client for active tool usage
+    try:
+        print("\n🔌 Initializing MCP Bridge Client...")
+        from services.mcp_client import initialize_mcp_client
+        mcp_client = await initialize_mcp_client()
+        app.state.mcp_client = mcp_client
+        print("🔌 MCP Bridge Client ACTIVE!")
+    except Exception as e:
+        print(f"⚠️  MCP Bridge Client initialization failed: {e}")
+
     print("\n" + "=" * 80)
-    print("✅ BrainOps Backend v163.0.0 FULLY OPERATIONAL")
+    print("✅ BrainOps Backend v163.0.29 FULLY OPERATIONAL")
     print("  🤖 23 AI agent endpoints active")
     print("  🔗 Complete relationship awareness")
     print("  ✅ All frontend linkages verified")
@@ -481,6 +491,23 @@ try:
     logger.info("✅ Gemini Estimation Engine loaded at /api/v1/gemini-estimation")
 except Exception as e:
     logger.error(f"⚠️  Failed to load Gemini Estimation Engine: {e}")
+
+# CRITICAL: Explicitly load complete-erp alias routes for MyRoofGenius frontend compatibility
+# This fixes the API contract mismatch between MRG (calls /api/v1/complete-erp/*) and backend (/api/v1/erp/*)
+try:
+    from routes.complete_erp_alias import router as complete_erp_alias_router
+    app.include_router(complete_erp_alias_router)
+    logger.info("✅ Complete-ERP alias routes loaded at /api/v1/complete-erp/*")
+except Exception as e:
+    logger.error(f"⚠️  Failed to load Complete-ERP alias routes: {e}")
+
+# Load MCP Bridge routes for active tool execution
+try:
+    from routes.mcp_bridge import router as mcp_bridge_router
+    app.include_router(mcp_bridge_router)
+    logger.info("✅ MCP Bridge routes loaded at /api/v1/mcp/*")
+except Exception as e:
+    logger.error(f"⚠️  Failed to load MCP Bridge routes: {e}")
 
 # Health check endpoint
 @app.get("/health")

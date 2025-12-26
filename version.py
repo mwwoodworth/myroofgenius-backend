@@ -2,9 +2,15 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.28"
-__build__ = "2025-12-25T23:10:00Z"
+__version__ = "163.0.29"
+__build__ = "2025-12-26T00:15:00Z"
 __status__ = "production"
+# v163.0.29: Critical AI OS fixes - Orchestrator, Routes, MCP
+# - Fixed _invoke_agent: Now makes real HTTP calls to brainops-ai-agents
+# - Added complete-erp alias routes: /api/v1/complete-erp/* -> /api/v1/erp/*
+# - Added MCP Bridge client: Active tool execution (245 tools, 11 servers)
+# - Archived 17 zombie FIX_*.py scripts
+# - Explicit route loading bypasses fragile dynamic loader
 # v163.0.28: Security fix - Stripe webhook signature verification
 # - stripe_automation.py: Added proper webhook signature verification
 # - Prevents forged webhook events
