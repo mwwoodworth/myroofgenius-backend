@@ -29,6 +29,7 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/logs/render",  # Render log drain - no auth needed
     "/api/v1/mcp/health",   # MCP Bridge health check - monitoring
     "/api/v1/mcp/status",   # MCP Bridge status - monitoring
+    "/api/v1/orchestrator/status",  # Orchestrator status - monitoring
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
