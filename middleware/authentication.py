@@ -27,6 +27,8 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/webhook/stripe",
     "/api/v1/logs/vercel",  # Vercel log drain - no auth needed
     "/api/v1/logs/render",  # Render log drain - no auth needed
+    "/api/v1/mcp/health",   # MCP Bridge health check - monitoring
+    "/api/v1/mcp/status",   # MCP Bridge status - monitoring
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
