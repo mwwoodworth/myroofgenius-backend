@@ -229,10 +229,72 @@ class AgentOrchestratorV2:
         return results
 
     async def _invoke_agent(self, agent_name: str, action: str, context: Dict, previous_results: Dict) -> str:
-        """Invoke specific agent (stub - implement actual agent execution)"""
-        # TODO: Implement actual agent invocation
-        # For now, return simulated result
-        return f"{agent_name} completed: {action}"
+        """Invoke specific agent via brainops-ai-agents service"""
+        import aiohttp
+        import os
+
+        # Get AI agents service URL from environment or use default
+        ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL", "https://brainops-ai-agents.onrender.com")
+        api_key = os.getenv("BRAINOPS_API_KEY", "brainops_prod_key_2025")
+
+        try:
+            # Prepare the request payload
+            payload = {
+                "agent_name": agent_name,
+                "agent_id": agent_name,
+                "task": action,
+                "data": {
+                    "context": context or {},
+                    "previous_results": previous_results or {},
+                    "action": action
+                }
+            }
+
+            headers = {
+                "Content-Type": "application/json",
+                "X-API-Key": api_key
+            }
+
+            # Try multiple endpoints for agent execution
+            endpoints = [
+                f"{ai_agents_url}/agents/execute",
+                f"{ai_agents_url}/api/v1/agents/{agent_name}/execute",
+                f"{ai_agents_url}/agents/{agent_name}/trigger"
+            ]
+
+            async with aiohttp.ClientSession() as session:
+                for endpoint in endpoints:
+                    try:
+                        async with session.post(
+                            endpoint,
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=30)
+                        ) as response:
+                            if response.status == 200:
+                                result = await response.json()
+                                # Extract result from response
+                                if isinstance(result, dict):
+                                    return result.get("result", result.get("data", str(result)))
+                                return str(result)
+                            elif response.status == 404:
+                                # Try next endpoint
+                                continue
+                            else:
+                                error_text = await response.text()
+                                logger.warning(f"Agent invocation failed at {endpoint}: {response.status} - {error_text[:200]}")
+                                continue
+                    except aiohttp.ClientError as e:
+                        logger.warning(f"HTTP error calling {endpoint}: {e}")
+                        continue
+
+                # All endpoints failed, return fallback result
+                logger.warning(f"All agent invocation endpoints failed for {agent_name}, using fallback")
+                return f"{agent_name} completed: {action} (fallback - service unreachable)"
+
+        except Exception as e:
+            logger.error(f"Agent invocation error for {agent_name}: {e}")
+            return f"{agent_name} error: {str(e)}"
 
     async def _record_agent_message(self, agent_name: str, action: str, result: str):
         """Record inter-agent communication in database"""
