@@ -2,9 +2,13 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.31"
-__build__ = "2025-12-26T00:55:00Z"
+__version__ = "163.0.32"
+__build__ = "2025-12-26T02:30:00Z"
 __status__ = "production"
+# v163.0.32: Self-healing production config + Database optimization
+# - Fixed self_healing_system.py: Uses Supabase instead of localhost
+# - Docker and Redis now graceful-optional for containerized environments
+# - Database optimized: RLS on unified_brain, new indexes, ANALYZE complete
 # v163.0.29: Critical AI OS fixes - Orchestrator, Routes, MCP
 # - Fixed _invoke_agent: Now makes real HTTP calls to brainops-ai-agents
 # - Added complete-erp alias routes: /api/v1/complete-erp/* -> /api/v1/erp/*
