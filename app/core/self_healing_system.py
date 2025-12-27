@@ -38,9 +38,29 @@ class SelfHealingSystem:
     """
     
     def __init__(self):
-        self.docker_client = docker.from_env()
-        self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-        self.db_conn = self._get_db_connection()
+        import os
+        # Docker client - optional, may not be available in containerized environments
+        try:
+            self.docker_client = docker.from_env()
+        except Exception:
+            self.docker_client = None
+
+        # Redis client - use environment variable or disable if not available
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            try:
+                self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            except Exception:
+                self.redis_client = None
+        else:
+            self.redis_client = None
+
+        # Database connection - use production config
+        try:
+            self.db_conn = self._get_db_connection()
+        except Exception:
+            self.db_conn = None
+
         self.health_checks = {}
         self.recovery_actions = {}
         self.metrics = {
@@ -55,12 +75,15 @@ class SelfHealingSystem:
         self.is_running = True
     
     def _get_db_connection(self):
-        """Get database connection"""
+        """Get database connection - uses production Supabase"""
+        import os
         return psycopg2.connect(
-            host="localhost",
-            database="ai_orchestrator",
-            user="postgres",
-            password="postgres",
+            host=os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
+            database=os.getenv("DB_NAME", "postgres"),
+            user=os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
+            password=os.getenv("DB_PASSWORD", ""),
+            port=int(os.getenv("DB_PORT", "5432")),
+            sslmode="require",
             cursor_factory=RealDictCursor
         )
     
