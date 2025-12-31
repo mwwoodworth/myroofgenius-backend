@@ -1,15 +1,21 @@
 """Request authentication middleware enforcing Supabase JWT validation."""
 
 from fastapi import HTTPException
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 import logging
+import time
+from collections import defaultdict
 
 from core.supabase_auth import get_current_user
 
 logger = logging.getLogger(__name__)
+
+# Rate limit auth failure logging per path to avoid log flooding
+_auth_fail_log_times: Dict[str, float] = defaultdict(float)
+_AUTH_FAIL_LOG_INTERVAL = 60  # Only log same path failure once per minute
 
 # Only health checks and explicitly reviewed webhook endpoints are exempt.
 DEFAULT_EXEMPT_PATHS: Sequence[str] = (
@@ -85,7 +91,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         try:
             user = await get_current_user(authorization=authorization)
         except HTTPException as exc:
-            logger.warning("Authentication failed for %s: %s", path, exc.detail)
+            # Rate-limit auth failure logging to avoid flooding logs
+            now = time.time()
+            if now - _auth_fail_log_times[path] > _AUTH_FAIL_LOG_INTERVAL:
+                _auth_fail_log_times[path] = now
+                logger.warning("Authentication failed for %s: %s (rate-limited)", path, exc.detail)
             return JSONResponse(
                 {"detail": exc.detail},
                 status_code=exc.status_code,
