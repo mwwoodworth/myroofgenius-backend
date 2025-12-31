@@ -2,9 +2,13 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.32"
+__version__ = "163.0.33"
 __build__ = "2025-12-26T02:30:00Z"
 __status__ = "production"
+# v163.0.33: Fix log flooding from auth failures and Vercel log drain
+# - Rate-limited JWT verification error logging (once per minute per error type)
+# - Rate-limited authentication failure logging (once per minute per path)
+# - Improved Vercel log drain to handle empty/malformed data silently
 # v163.0.32: Self-healing production config + Database optimization
 # - Fixed self_healing_system.py: Uses Supabase instead of localhost
 # - Docker and Redis now graceful-optional for containerized environments
