@@ -293,72 +293,67 @@ async def vercel_webhook(
 
 @router.post("/logs/vercel")
 async def vercel_log_drain(request: Request):
-    """Handle Vercel log drain events"""
+    """Handle Vercel log drain events
+
+    Vercel sends logs as newline-delimited JSON (NDJSON).
+    This endpoint silently accepts all log data without storing it.
+    """
     try:
         # Vercel sends logs as newline-delimited JSON
         body = await request.body()
-        logs = body.decode('utf-8').strip().split('\n')
-        
+
+        # Handle empty body gracefully
+        if not body:
+            return {
+                "success": True,
+                "processed": 0,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        body_str = body.decode('utf-8').strip()
+
+        # Handle empty string after stripping
+        if not body_str:
+            return {
+                "success": True,
+                "processed": 0,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        logs = body_str.split('\n')
+
         processed_count = 0
         for log_line in logs:
+            log_line = log_line.strip()
             if log_line:
                 try:
-                    log_data = json.loads(log_line)
-                    
-                    # Store log entry - DISABLED to prevent errors
-                    
-                    # engine = get_db_engine()
-                    # with engine.connect() as conn:
-                    #     conn.execute(text("""
-                    #         INSERT INTO vercel_logs (
-                    #             timestamp,
-                    #             level,
-                    #             message,
-                    #             source,
-                    #             deployment_id,
-                    #             request_id,
-                    #             path,
-                    #             status_code,
-                    #             raw_data
-                    #         ) VALUES (
-                    #             :timestamp,
-                    #             :level,
-                    #             :message,
-                    #             :source,
-                    #             :deployment_id,
-                    #             :request_id,
-                    #             :path,
-                    #             :status_code,
-                    #             :raw_data
-                    #         )
-                    #         ON CONFLICT DO NOTHING
-                    #     """), {
-                    #         "timestamp": datetime.fromtimestamp(log_data.get("timestamp", 0) / 1000),
-                    #         "level": log_data.get("level", "info"),
-                    #         "message": log_data.get("message", ""),
-                    #         "source": log_data.get("source", "vercel"),
-                    #         "deployment_id": log_data.get("deploymentId"),
-                    #         "request_id": log_data.get("requestId"),
-                    #         "path": log_data.get("path"),
-                    #         "status_code": log_data.get("statusCode"),
-                    #         "raw_data": json.dumps(log_data)
-                    #     })
-                    #     conn.commit()
+                    # Just validate it's valid JSON - we don't store but accept
+                    json.loads(log_line)
                     processed_count += 1
-                except Exception as e:
-                    logger.error(f"Error processing log entry: {e}")
-        
+                except json.JSONDecodeError:
+                    # Silently skip malformed log lines - don't flood error logs
+                    pass
+
         return {
             "success": True,
             "processed": processed_count,
             "timestamp": datetime.utcnow().isoformat()
         }
+    except UnicodeDecodeError:
+        # Body wasn't valid UTF-8 - accept anyway to prevent drain disablement
+        return {
+            "success": True,
+            "processed": 0,
+            "note": "non-utf8-body",
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
-        logger.error(f"Error processing Vercel logs: {e}")
+        # Only log truly unexpected errors with details
+        logger.warning(f"Vercel log drain unexpected error: {type(e).__name__}: {e}")
         # Return success to prevent log drain from being disabled
         return {
-            "success": False,
-            "error": str(e),
+            "success": True,
+            "processed": 0,
             "timestamp": datetime.utcnow().isoformat()
         }
 

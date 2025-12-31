@@ -15,8 +15,14 @@ import os
 import logging
 import jwt
 from jwt import PyJWTError
+import time
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
+
+# Rate limit JWT error logging to avoid log flooding
+_jwt_error_log_times: Dict[str, float] = defaultdict(float)
+_JWT_ERROR_LOG_INTERVAL = 60  # Only log same error type once per minute
 
 # Supabase configuration (optional)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -168,7 +174,12 @@ async def get_current_user(
                 options={"verify_aud": True}
             )
         except PyJWTError as jwt_error:
-            logger.error(f"JWT verification error: {jwt_error}")
+            # Rate-limit error logging to avoid flooding logs
+            error_key = str(type(jwt_error).__name__)
+            now = time.time()
+            if now - _jwt_error_log_times[error_key] > _JWT_ERROR_LOG_INTERVAL:
+                _jwt_error_log_times[error_key] = now
+                logger.warning(f"JWT verification error (rate-limited): {jwt_error}")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid or expired token"
