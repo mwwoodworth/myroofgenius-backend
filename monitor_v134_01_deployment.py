@@ -3,6 +3,8 @@
 Monitor v134.0.1 CNS deployment with fixes
 """
 
+import os
+
 import time
 import requests
 import json
@@ -10,7 +12,7 @@ import json
 print("🧠 CENTRAL NERVOUS SYSTEM v134.0.1 DEPLOYMENT (FIXED)")
 print("=" * 60)
 
-api_key = "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx"
+api_key = os.environ.get("RENDER_API_KEY")
 service_id = "srv-d1tfs4idbo4c73di6k00"
 
 # Trigger deployment

@@ -1,172 +1,113 @@
 """
-Webhook management Module - Auto-generated
-Part of complete ERP implementation
+Webhook Management Module
+Handles CRUD operations for webhooks.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date
-import asyncpg
+from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from database import get_db
 import uuid
 import json
 
 router = APIRouter()
 
-# Database connection
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
-
-    async with pool.acquire() as conn:
-        yield conn
-
-
 # Models
-class WebhookManagementBase(BaseModel):
-    name: str = Field(..., description="Name")
+class WebhookBase(BaseModel):
+    name: str = Field(..., description="Name of the webhook")
     description: Optional[str] = None
     status: str = "active"
-    data: Optional[Dict[str, Any]] = {}
+    data: Optional[Dict[str, Any]] = Field(default={}, description="Webhook config (url, events, etc)")
 
-class WebhookManagementCreate(WebhookManagementBase):
+class WebhookCreate(WebhookBase):
     pass
 
-class WebhookManagementResponse(WebhookManagementBase):
+class WebhookResponse(WebhookBase):
     id: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 # Endpoints
-@router.post("/", response_model=WebhookManagementResponse)
-async def create_webhook_management(
-    item: WebhookManagementCreate,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Create new webhook management record"""
-    query = """
-        INSERT INTO webhook_management (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at
-    """
 
-    result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
-    )
-
-    return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
-    }
-
-@router.get("/", response_model=List[WebhookManagementResponse])
-async def list_webhook_management(
-    status: Optional[str] = None,
+@router.get("/", response_model=List[WebhookResponse])
+def list_webhooks(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
-    """List webhook management records"""
-    query = "SELECT * FROM webhook_management WHERE 1=1"
-    params = []
-    param_count = 0
+    """List all webhooks"""
+    try:
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM webhook_management
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :skip
+        """), {"limit": limit, "skip": skip}).fetchall()
 
-    if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        webhooks = []
+        for row in result:
+            webhooks.append({
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "status": row[3],
+                "data": json.loads(row[4]) if isinstance(row[4], str) else row[4] if row[4] else {},
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        return webhooks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
-    params.extend([limit, skip])
+@router.post("/", response_model=WebhookResponse)
+def create_webhook(
+    item: WebhookCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new webhook"""
+    try:
+        new_id = uuid.uuid4()
+        timestamp = datetime.now()
+        
+        db.execute(text("""
+            INSERT INTO webhook_management (id, name, description, status, data, created_at, updated_at)
+            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+        """), {
+            "id": new_id,
+            "name": item.name,
+            "description": item.description,
+            "status": item.status,
+            "data": json.dumps(item.data) if item.data else None,
+            "created_at": timestamp,
+            "updated_at": timestamp
+        })
+        db.commit()
 
-    rows = await conn.fetch(query, *params)
-
-    return [
-        {
-            **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
+        return {
+            **item.dict(),
+            "id": str(new_id),
+            "created_at": timestamp,
+            "updated_at": timestamp
         }
-        for row in rows
-    ]
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{item_id}", response_model=WebhookManagementResponse)
-async def get_webhook_management(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+@router.delete("/{id}")
+def delete_webhook(
+    id: str,
+    db: Session = Depends(get_db)
 ):
-    """Get specific webhook management record"""
-    query = "SELECT * FROM webhook_management WHERE id = $1"
-
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="Webhook management not found")
-
-    return {
-        **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
-    }
-
-@router.put("/{item_id}")
-async def update_webhook_management(
-    item_id: str,
-    updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Update webhook management record"""
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
-
-    set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
-        params.append(value)
-
-    params.append(uuid.UUID(item_id))
-    query = f"""
-        UPDATE webhook_management
-        SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
-        RETURNING id
-    """
-
-    result = await conn.fetchrow(query, *params)
-    if not result:
-        raise HTTPException(status_code=404, detail="Webhook management not found")
-
-    return {"message": "Webhook management updated", "id": str(result['id'])}
-
-@router.delete("/{item_id}")
-async def delete_webhook_management(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Delete webhook management record"""
-    query = "DELETE FROM webhook_management WHERE id = $1 RETURNING id"
-
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="Webhook management not found")
-
-    return {"message": "Webhook management deleted", "id": str(result['id'])}
-
-@router.get("/stats/summary")
-async def get_webhook_management_stats(conn: asyncpg.Connection = Depends(get_db)):
-    """Get webhook management statistics"""
-    query = """
-        SELECT
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-            COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
-        FROM webhook_management
-    """
-
-    result = await conn.fetchrow(query)
-    return dict(result)
+    """Remove a webhook"""
+    try:
+        result = db.execute(text("DELETE FROM webhook_management WHERE id = :id RETURNING id"), {"id": id}).fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+        db.commit()
+        return {"message": "Webhook deleted successfully", "id": id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

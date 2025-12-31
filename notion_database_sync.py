@@ -16,7 +16,7 @@ import time
 class NotionDatabaseSync:
     def __init__(self):
         # Notion configuration
-        self.notion_token = "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"
+        self.notion_token = os.environ.get("NOTION_TOKEN")
         self.notion_headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",

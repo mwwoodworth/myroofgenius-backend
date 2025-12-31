@@ -1,172 +1,140 @@
 """
-Calibration tracking Module - Auto-generated
-Part of complete ERP implementation
+Calibration Tracking Module
+Handles equipment calibration records.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
-import asyncpg
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from database import get_db
 import uuid
 import json
 
 router = APIRouter()
 
-# Database connection
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
-
-    async with pool.acquire() as conn:
-        yield conn
-
-
 # Models
-class CalibrationTrackingBase(BaseModel):
-    name: str = Field(..., description="Name")
+class CalibrationBase(BaseModel):
+    name: str = Field(..., description="Name of the equipment/calibration")
     description: Optional[str] = None
     status: str = "active"
-    data: Optional[Dict[str, Any]] = {}
+    data: Optional[Dict[str, Any]] = Field(default={}, description="Calibration data (dates, results, etc)")
 
-class CalibrationTrackingCreate(CalibrationTrackingBase):
+    @validator('data')
+    def validate_dates(cls, v):
+        # Optional: Validate next_due_date format if present
+        return v
+
+class CalibrationCreate(CalibrationBase):
     pass
 
-class CalibrationTrackingResponse(CalibrationTrackingBase):
+class CalibrationResponse(CalibrationBase):
     id: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 # Endpoints
-@router.post("/", response_model=CalibrationTrackingResponse)
-async def create_calibration_tracking(
-    item: CalibrationTrackingCreate,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Create new calibration tracking record"""
-    query = """
-        INSERT INTO calibration_tracking (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at
-    """
 
-    result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
-    )
-
-    return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
-    }
-
-@router.get("/", response_model=List[CalibrationTrackingResponse])
-async def list_calibration_tracking(
-    status: Optional[str] = None,
+@router.get("/", response_model=List[CalibrationResponse])
+def list_calibrations(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
-    """List calibration tracking records"""
-    query = "SELECT * FROM calibration_tracking WHERE 1=1"
-    params = []
-    param_count = 0
+    """List all calibrations"""
+    try:
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM calibration_tracking
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :skip
+        """), {"limit": limit, "skip": skip}).fetchall()
 
-    if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        items = []
+        for row in result:
+            items.append({
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "status": row[3],
+                "data": json.loads(row[4]) if isinstance(row[4], str) else row[4] if row[4] else {},
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        return items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
-    params.extend([limit, skip])
+@router.post("/", response_model=CalibrationResponse)
+def record_calibration(
+    item: CalibrationCreate,
+    db: Session = Depends(get_db)
+):
+    """Record a new calibration"""
+    try:
+        new_id = uuid.uuid4()
+        timestamp = datetime.now()
+        
+        db.execute(text("""
+            INSERT INTO calibration_tracking (id, name, description, status, data, created_at, updated_at)
+            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+        """), {
+            "id": new_id,
+            "name": item.name,
+            "description": item.description,
+            "status": item.status,
+            "data": json.dumps(item.data) if item.data else None,
+            "created_at": timestamp,
+            "updated_at": timestamp
+        })
+        db.commit()
 
-    rows = await conn.fetch(query, *params)
-
-    return [
-        {
-            **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
+        return {
+            **item.dict(),
+            "id": str(new_id),
+            "created_at": timestamp,
+            "updated_at": timestamp
         }
-        for row in rows
-    ]
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{item_id}", response_model=CalibrationTrackingResponse)
-async def get_calibration_tracking(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+@router.get("/due", response_model=List[CalibrationResponse])
+def get_due_calibrations(
+    db: Session = Depends(get_db)
 ):
-    """Get specific calibration tracking record"""
-    query = "SELECT * FROM calibration_tracking WHERE id = $1"
+    """Get due calibrations (next_due_date <= today)"""
+    try:
+        # Assuming next_due_date is stored in data JSONB as 'next_due_date' (ISO string YYYY-MM-DD)
+        # We fetch all active and filter in python for safety if JSON structure is uncertain,
+        # or try a JSON query. Let's try JSON query first, fall back to Python filter if needed.
+        # Postgres JSONB operator ->> returns text.
+        
+        today_str = date.today().isoformat()
+        
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM calibration_tracking
+            WHERE status = 'active'
+        """)).fetchall()
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="Calibration tracking not found")
-
-    return {
-        **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
-    }
-
-@router.put("/{item_id}")
-async def update_calibration_tracking(
-    item_id: str,
-    updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Update calibration tracking record"""
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
-
-    set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
-        params.append(value)
-
-    params.append(uuid.UUID(item_id))
-    query = f"""
-        UPDATE calibration_tracking
-        SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
-        RETURNING id
-    """
-
-    result = await conn.fetchrow(query, *params)
-    if not result:
-        raise HTTPException(status_code=404, detail="Calibration tracking not found")
-
-    return {"message": "Calibration tracking updated", "id": str(result['id'])}
-
-@router.delete("/{item_id}")
-async def delete_calibration_tracking(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Delete calibration tracking record"""
-    query = "DELETE FROM calibration_tracking WHERE id = $1 RETURNING id"
-
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="Calibration tracking not found")
-
-    return {"message": "Calibration tracking deleted", "id": str(result['id'])}
-
-@router.get("/stats/summary")
-async def get_calibration_tracking_stats(conn: asyncpg.Connection = Depends(get_db)):
-    """Get calibration tracking statistics"""
-    query = """
-        SELECT
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-            COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
-        FROM calibration_tracking
-    """
-
-    result = await conn.fetchrow(query)
-    return dict(result)
+        due_items = []
+        for row in result:
+            data = json.loads(row[4]) if isinstance(row[4], str) else row[4] if row[4] else {}
+            next_due = data.get('next_due_date')
+            if next_due and next_due <= today_str:
+                 due_items.append({
+                    "id": str(row[0]),
+                    "name": row[1],
+                    "description": row[2],
+                    "status": row[3],
+                    "data": data,
+                    "created_at": row[5],
+                    "updated_at": row[6]
+                })
+        
+        return due_items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

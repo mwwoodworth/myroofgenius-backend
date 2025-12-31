@@ -3,6 +3,8 @@
 Master Notion Sync - Modifies Notion to match Supabase DB structure
 """
 
+import os
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
@@ -12,7 +14,7 @@ from datetime import datetime
 
 class MasterNotionSync:
     def __init__(self):
-        self.notion_token = "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"
+        self.notion_token = os.environ.get("NOTION_TOKEN")
         self.headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",
