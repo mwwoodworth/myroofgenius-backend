@@ -1,17 +1,13 @@
-#!/bin/bash
-# MCP Servers Systemd Service Script
-# This script manages all MCP servers as a single service
-
 [Unit]
 Description=BrainOps MCP Servers
 After=network.target
 
 [Service]
 Type=forking
-User=mwwoodworth
-WorkingDirectory=/home/mwwoodworth/code/mcp-servers
-ExecStart=/home/mwwoodworth/code/mcp-servers/start_all_mcp.sh
-ExecStop=/home/mwwoodworth/code/mcp-servers/stop_all_mcp.sh
+User=matt-woodworth
+WorkingDirectory=/home/matt-woodworth/dev/myroofgenius-backend/mcp-servers
+ExecStart=/home/matt-woodworth/dev/myroofgenius-backend/mcp-servers/start_all_mcp.sh
+ExecStop=/home/matt-woodworth/dev/myroofgenius-backend/mcp-servers/stop_all_mcp.sh
 Restart=on-failure
 RestartSec=10
 
