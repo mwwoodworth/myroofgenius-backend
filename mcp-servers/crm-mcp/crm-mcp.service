@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=mwwoodworth
-WorkingDirectory=/home/mwwoodworth/code/mcp-servers/crm-mcp
+User=matt-woodworth
+WorkingDirectory=/home/matt-woodworth/dev/myroofgenius-backend/mcp-servers/crm-mcp
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-ExecStart=/usr/bin/python3 /home/mwwoodworth/code/mcp-servers/crm-mcp/server.py
+ExecStart=/usr/bin/python3 /home/matt-woodworth/dev/myroofgenius-backend/mcp-servers/crm-mcp/server.py
 Restart=always
 RestartSec=10
 
