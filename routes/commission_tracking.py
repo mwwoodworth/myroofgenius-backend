@@ -1,14 +1,17 @@
 """
 Commission Tracking Module - Task 67
 Complete sales commission management system
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 import asyncpg
 import uuid
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -50,9 +53,14 @@ class CommissionResponse(BaseModel):
 @router.post("/", response_model=CommissionResponse)
 async def create_commission(
     commission: CommissionCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create commission record"""
+    """Create commission record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     commission_amount = commission.sale_amount * (commission.commission_rate / 100)
     total_commission = commission_amount + commission.bonus_amount
 
@@ -60,9 +68,9 @@ async def create_commission(
         INSERT INTO commissions (
             sales_rep, period_start, period_end, opportunity_id,
             sale_amount, commission_rate, commission_amount,
-            bonus_amount, total_commission, status, notes
+            bonus_amount, total_commission, status, notes, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         ) RETURNING *
     """
 
@@ -78,7 +86,8 @@ async def create_commission(
         commission.bonus_amount,
         total_commission,
         'pending',
-        commission.notes
+        commission.notes,
+        tenant_id
     )
 
     return {
@@ -95,11 +104,16 @@ async def list_commissions(
     period_end: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List commissions with filters"""
-    conditions = []
-    params = []
+    """List commissions with filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    conditions = ["tenant_id = $1"]
+    params = [tenant_id]
 
     if sales_rep:
         params.append(sales_rep)
@@ -117,7 +131,7 @@ async def list_commissions(
         params.append(period_end)
         conditions.append(f"period_end <= ${len(params)}")
 
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_clause = f"WHERE {' AND '.join(conditions)}"
     params.extend([limit, skip])
 
     query = f"""
@@ -141,9 +155,14 @@ async def list_commissions(
 async def get_commission_summary(
     sales_rep: str,
     year: int = Query(datetime.now().year),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get commission summary for a sales rep"""
+    """Get commission summary for a sales rep - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             SUM(sale_amount) as total_sales,
@@ -153,11 +172,11 @@ async def get_commission_summary(
             COUNT(*) as deals_count,
             AVG(commission_rate) as avg_rate
         FROM commissions
-        WHERE sales_rep = $1
-        AND EXTRACT(YEAR FROM period_start) = $2
+        WHERE tenant_id = $1 AND sales_rep = $2
+        AND EXTRACT(YEAR FROM period_start) = $3
     """
 
-    result = await conn.fetchrow(query, sales_rep, year)
+    result = await conn.fetchrow(query, tenant_id, sales_rep, year)
 
     return {
         "sales_rep": sales_rep,

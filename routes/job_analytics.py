@@ -2,10 +2,11 @@
 Job Analytics and Insights
 Provides analytical insights and metrics for jobs
 
-FIX v163.0.25: Converted to asyncpg for proper async/await support
+FIX v163.0.26: Converted to asyncpg for proper async/await support
 - Removed SQLAlchemy sync Session usage in async endpoints
 - Using asyncpg directly for database queries
 - Fixed "coroutine object has no attribute fetchone" error
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
@@ -71,8 +72,13 @@ async def get_analytics_overview(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Get comprehensive analytics overview"""
+    """Get comprehensive analytics overview - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to last 30 days if no date range provided
         if not end_date:
             end_date = date.today()
@@ -80,7 +86,7 @@ async def get_analytics_overview(
             start_date = end_date - timedelta(days=30)
 
         async with pool.acquire() as conn:
-            # Get job statistics
+            # Get job statistics - tenant filtered
             job_stats = await conn.fetchrow("""
                 SELECT
                     COUNT(*) as total_jobs,
@@ -92,10 +98,10 @@ async def get_analytics_overview(
                     COUNT(*) FILTER (WHERE completed_date <= scheduled_end) as on_time_count,
                     COUNT(*) FILTER (WHERE completed_date > scheduled_end) as delayed_count
                 FROM jobs
-                WHERE created_at BETWEEN $1 AND $2
-            """, start_date, end_date)
+                WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
+            """, tenant_id, start_date, end_date)
 
-            # Get financial metrics - using actual columns from jobs table
+            # Get financial metrics - tenant filtered
             financial = await conn.fetchrow("""
                 SELECT
                     COALESCE(SUM(total_amount), 0) as total_estimated_revenue,
@@ -105,10 +111,10 @@ async def get_analytics_overview(
                     COALESCE(AVG(30.0), 0) as avg_profit_margin,
                     COALESCE(AVG(5.0), 0) as avg_cost_variance
                 FROM jobs
-                WHERE created_at BETWEEN $1 AND $2
-            """, start_date, end_date)
+                WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
+            """, tenant_id, start_date, end_date)
 
-            # Get customer metrics
+            # Get customer metrics - tenant filtered
             customer_metrics = await conn.fetchrow("""
                 SELECT
                     COUNT(DISTINCT customer_id) as unique_customers,
@@ -118,18 +124,18 @@ async def get_analytics_overview(
                     COUNT(*) FILTER (WHERE status = 'completed') as satisfied_customers,
                     4.5 as avg_customer_rating
                 FROM jobs
-                WHERE created_at BETWEEN $1 AND $2
-            """, start_date, end_date)
+                WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
+            """, tenant_id, start_date, end_date)
 
-            # Get resource utilization
+            # Get resource utilization - tenant filtered
             resource_stats = await conn.fetchrow("""
                 SELECT
                     COUNT(DISTINCT crew_id) as active_crews,
                     COUNT(DISTINCT assigned_to) as active_employees,
                     75.0 as avg_resource_utilization
                 FROM jobs
-                WHERE created_at BETWEEN $1 AND $2
-            """, start_date, end_date)
+                WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
+            """, tenant_id, start_date, end_date)
 
         # Calculate key metrics
         total_jobs = job_stats['total_jobs'] or 0
@@ -196,8 +202,13 @@ async def get_trend_analysis(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Get trend analysis for specific metrics"""
+    """Get trend analysis for specific metrics - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to last 6 months if no date range provided
         if not end_date:
             end_date = date.today()
@@ -214,7 +225,7 @@ async def get_trend_analysis(
         }[period]
 
         async with pool.acquire() as conn:
-            # Build query based on metric type
+            # Build query based on metric type - all tenant filtered
             if metric == MetricType.COMPLETION_RATE:
                 query = f"""
                     SELECT
@@ -222,7 +233,7 @@ async def get_trend_analysis(
                         COUNT(*) as total_jobs,
                         (COUNT(*) FILTER (WHERE status = 'completed')::float / NULLIF(COUNT(*), 0)) * 100 as metric_value
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                     GROUP BY DATE_TRUNC('{date_trunc}', created_at)
                     ORDER BY period
                 """
@@ -233,7 +244,7 @@ async def get_trend_analysis(
                         COUNT(*) as total_jobs,
                         AVG(EXTRACT(DAY FROM (completed_date - created_at))) as metric_value
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                         AND completed_date IS NOT NULL
                     GROUP BY DATE_TRUNC('{date_trunc}', created_at)
                     ORDER BY period
@@ -245,7 +256,7 @@ async def get_trend_analysis(
                         COUNT(*) as total_jobs,
                         30.0 as metric_value
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                     GROUP BY DATE_TRUNC('{date_trunc}', created_at)
                     ORDER BY period
                 """
@@ -257,7 +268,7 @@ async def get_trend_analysis(
                         (COUNT(*) FILTER (WHERE completed_date <= scheduled_end)::float /
                          NULLIF(COUNT(*) FILTER (WHERE completed_date IS NOT NULL), 0)) * 100 as metric_value
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                     GROUP BY DATE_TRUNC('{date_trunc}', created_at)
                     ORDER BY period
                 """
@@ -269,12 +280,12 @@ async def get_trend_analysis(
                         COUNT(*) as total_jobs,
                         5.0 as metric_value
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                     GROUP BY DATE_TRUNC('{date_trunc}', created_at)
                     ORDER BY period
                 """
 
-            rows = await conn.fetch(query, start_date, end_date)
+            rows = await conn.fetch(query, tenant_id, start_date, end_date)
 
         data_points = []
         for row in rows:
@@ -329,8 +340,13 @@ async def get_crew_performance(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Get performance metrics by crew"""
+    """Get performance metrics by crew - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to last 30 days
         if not end_date:
             end_date = date.today()
@@ -350,13 +366,13 @@ async def get_crew_performance(
                     SUM(j.total_amount * 0.3) as total_profit,
                     30.0 as avg_profit_margin
                 FROM jobs j
-                WHERE j.created_at BETWEEN $1 AND $2
+                WHERE j.tenant_id = $1 AND j.created_at BETWEEN $2 AND $3
                     AND j.crew_id IS NOT NULL
                 GROUP BY j.crew_id
                 HAVING COUNT(j.id) > 0
                 ORDER BY COUNT(j.id) DESC
-                LIMIT $3
-            """, start_date, end_date, limit)
+                LIMIT $4
+            """, tenant_id, start_date, end_date, limit)
 
         crews = []
         for row in rows:
@@ -403,8 +419,13 @@ async def get_employee_performance(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Get performance metrics by employee"""
+    """Get performance metrics by employee - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to last 30 days
         if not end_date:
             end_date = date.today()
@@ -422,13 +443,13 @@ async def get_employee_performance(
                     40.0 as total_hours,
                     4.5 as avg_rating
                 FROM jobs j
-                WHERE j.created_at BETWEEN $1 AND $2
+                WHERE j.tenant_id = $1 AND j.created_at BETWEEN $2 AND $3
                     AND j.assigned_to IS NOT NULL
                 GROUP BY j.assigned_to
                 HAVING COUNT(j.id) > 0
                 ORDER BY COUNT(j.id) DESC
-                LIMIT $3
-            """, start_date, end_date, limit)
+                LIMIT $4
+            """, tenant_id, start_date, end_date, limit)
 
         employees = []
         for row in rows:
@@ -475,8 +496,13 @@ async def get_customer_insights(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Get insights about customer behavior and patterns"""
+    """Get insights about customer behavior and patterns - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to last 90 days
         if not end_date:
             end_date = date.today()
@@ -484,7 +510,7 @@ async def get_customer_insights(
             start_date = end_date - timedelta(days=90)
 
         async with pool.acquire() as conn:
-            # Get customer data
+            # Get customer data - tenant filtered
             if customer_id:
                 rows = await conn.fetch("""
                     SELECT
@@ -502,10 +528,10 @@ async def get_customer_insights(
                         30.0 as avg_days_between_jobs
                     FROM customers c
                     LEFT JOIN jobs j ON c.id = j.customer_id
-                        AND j.created_at BETWEEN $1 AND $2
-                    WHERE c.id = $3::uuid
+                        AND j.created_at BETWEEN $2 AND $3
+                    WHERE c.tenant_id = $1 AND c.id = $4::uuid
                     GROUP BY c.id, c.name
-                """, start_date, end_date, customer_id)
+                """, tenant_id, start_date, end_date, customer_id)
             else:
                 rows = await conn.fetch("""
                     SELECT
@@ -523,14 +549,15 @@ async def get_customer_insights(
                         30.0 as avg_days_between_jobs
                     FROM customers c
                     LEFT JOIN jobs j ON c.id = j.customer_id
-                        AND j.created_at BETWEEN $1 AND $2
+                        AND j.created_at BETWEEN $2 AND $3
+                    WHERE c.tenant_id = $1
                     GROUP BY c.id, c.name
                     HAVING COUNT(j.id) > 0
                     ORDER BY SUM(j.total_amount) DESC NULLS LAST
                     LIMIT 20
-                """, start_date, end_date)
+                """, tenant_id, start_date, end_date)
 
-            # Get overall insights
+            # Get overall insights - tenant filtered
             overall = await conn.fetchrow("""
                 SELECT
                     COUNT(DISTINCT customer_id) as total_customers,
@@ -543,11 +570,11 @@ async def get_customer_insights(
                         COUNT(id) as job_count,
                         SUM(total_amount) as total_revenue
                     FROM jobs
-                    WHERE created_at BETWEEN $1 AND $2
+                    WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3
                     GROUP BY customer_id
                     HAVING COUNT(id) > 0
                 ) as customer_stats
-            """, start_date, end_date)
+            """, tenant_id, start_date, end_date)
 
         customers = []
         for row in rows:
@@ -609,10 +636,15 @@ async def get_revenue_forecast(
     current_user: dict = Depends(get_current_user),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ) -> dict:
-    """Generate revenue forecast based on historical data"""
+    """Generate revenue forecast based on historical data - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         async with pool.acquire() as conn:
-            # Get historical revenue data for trend analysis
+            # Get historical revenue data for trend analysis - tenant filtered
             rows = await conn.fetch("""
                 SELECT
                     DATE_TRUNC('month', created_at) as month,
@@ -620,11 +652,11 @@ async def get_revenue_forecast(
                     SUM(total_amount) as total_revenue,
                     AVG(total_amount) as avg_revenue
                 FROM jobs
-                WHERE created_at >= NOW() - INTERVAL '12 months'
+                WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '12 months'
                     AND total_amount IS NOT NULL
                 GROUP BY DATE_TRUNC('month', created_at)
                 ORDER BY month
-            """)
+            """, tenant_id)
 
         historical_data = []
         for row in rows:

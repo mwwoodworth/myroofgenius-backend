@@ -1,6 +1,7 @@
 """
 Invoice Management System
 Handles invoice creation, payment tracking, and financial management
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
@@ -101,12 +102,17 @@ async def create_invoice(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> InvoiceResponse:
-    """Create a new invoice"""
+    """Create a new invoice - tenant isolated"""
     try:
-        # Verify customer exists
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify customer exists and belongs to tenant
         customer = db.execute(
-            text("SELECT id, name, email FROM customers WHERE id = :id"),
-            {"id": invoice.customer_id}
+            text("SELECT id, name, email FROM customers WHERE id = :id AND tenant_id = :tenant_id"),
+            {"id": invoice.customer_id, "tenant_id": tenant_id}
         ).fetchone()
 
         if not customer:
@@ -115,9 +121,10 @@ async def create_invoice(
                 detail="Customer not found"
             )
 
-        # Generate invoice number
+        # Generate invoice number - tenant scoped
         invoice_count = db.execute(
-            text("SELECT COUNT(*) FROM invoices WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE)")
+            text("SELECT COUNT(*) FROM invoices WHERE tenant_id = :tenant_id AND created_at >= DATE_TRUNC('year', CURRENT_DATE)"),
+            {"tenant_id": tenant_id}
         ).scalar()
         invoice_number = f"INV-{datetime.now().year}-{str(invoice_count + 1).zfill(5)}"
 
@@ -138,13 +145,13 @@ async def create_invoice(
                     id, invoice_number, customer_id, job_id, estimate_id,
                     status, due_date, subtotal, discount_amount, tax_rate,
                     tax_amount, total_amount, amount_paid, amount_due,
-                    notes, terms, created_by, created_at, updated_at
+                    notes, terms, created_by, created_at, updated_at, tenant_id
                 )
                 VALUES (
                     :id, :invoice_number, :customer_id, :job_id, :estimate_id,
                     :status, :due_date, :subtotal, :discount_amount, :tax_rate,
                     :tax_amount, :total_amount, 0, :total_amount,
-                    :notes, :terms, :created_by, NOW(), NOW()
+                    :notes, :terms, :created_by, NOW(), NOW(), :tenant_id
                 )
                 RETURNING *
             """),
@@ -163,7 +170,8 @@ async def create_invoice(
                 "total_amount": 0,
                 "notes": invoice.notes,
                 "terms": invoice.terms,
-                "created_by": current_user["id"]
+                "created_by": current_user["id"],
+                "tenant_id": tenant_id
             }
         )
 
@@ -296,9 +304,14 @@ async def list_invoices(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """List invoices with filtering"""
+    """List invoices with filtering - tenant isolated"""
     try:
-        # Build query
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Build query with tenant filter
         query = """
             SELECT
                 i.*,
@@ -310,9 +323,9 @@ async def list_invoices(
             LEFT JOIN customers c ON i.customer_id = c.id
             LEFT JOIN jobs j ON i.job_id = j.id
             LEFT JOIN invoice_line_items ili ON i.id = ili.invoice_id
-            WHERE 1=1
+            WHERE i.tenant_id = :tenant_id
         """
-        params = {}
+        params = {"tenant_id": tenant_id}
 
         if customer_id:
             query += " AND i.customer_id = :customer_id"
@@ -390,9 +403,14 @@ async def get_invoice_details(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """Get detailed invoice information"""
+    """Get detailed invoice information - tenant isolated"""
     try:
-        # Get invoice
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Get invoice with tenant filter
         result = db.execute(
             text("""
                 SELECT
@@ -408,9 +426,9 @@ async def get_invoice_details(
                 LEFT JOIN customers c ON i.customer_id = c.id
                 LEFT JOIN jobs j ON i.job_id = j.id
                 LEFT JOIN users u ON i.created_by = u.id
-                WHERE i.id = :id
+                WHERE i.id = :id AND i.tenant_id = :tenant_id
             """),
-            {"id": invoice_id}
+            {"id": invoice_id, "tenant_id": tenant_id}
         )
 
         invoice = result.fetchone()
@@ -529,12 +547,17 @@ async def record_payment(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """Record a payment for an invoice"""
+    """Record a payment for an invoice - tenant isolated"""
     try:
-        # Get invoice
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Get invoice with tenant filter
         invoice = db.execute(
-            text("SELECT * FROM invoices WHERE id = :id"),
-            {"id": invoice_id}
+            text("SELECT * FROM invoices WHERE id = :id AND tenant_id = :tenant_id"),
+            {"id": invoice_id, "tenant_id": tenant_id}
         ).fetchone()
 
         if not invoice:
@@ -641,9 +664,14 @@ async def send_invoice(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """Send invoice to customer"""
+    """Send invoice to customer - tenant isolated"""
     try:
-        # Get invoice and customer
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Get invoice and customer with tenant filter
         result = db.execute(
             text("""
                 SELECT
@@ -652,9 +680,9 @@ async def send_invoice(
                     c.name as customer_name
                 FROM invoices i
                 JOIN customers c ON i.customer_id = c.id
-                WHERE i.id = :id
+                WHERE i.id = :id AND i.tenant_id = :tenant_id
             """),
-            {"id": invoice_id}
+            {"id": invoice_id, "tenant_id": tenant_id}
         ).fetchone()
 
         if not result:
@@ -718,8 +746,13 @@ async def get_overdue_invoices(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """Get list of overdue invoices"""
+    """Get list of overdue invoices - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         query = """
             SELECT
                 i.*,
@@ -729,10 +762,11 @@ async def get_overdue_invoices(
                 DATE_PART('day', CURRENT_DATE - i.due_date) as days_overdue
             FROM invoices i
             JOIN customers c ON i.customer_id = c.id
-            WHERE i.due_date < CURRENT_DATE
+            WHERE i.tenant_id = :tenant_id
+                AND i.due_date < CURRENT_DATE
                 AND i.status NOT IN ('paid', 'cancelled')
         """
-        params = {}
+        params = {"tenant_id": tenant_id}
 
         if days_overdue:
             query += " AND i.due_date <= CURRENT_DATE - INTERVAL ':days days'"
@@ -782,8 +816,13 @@ async def get_invoice_summary(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> dict:
-    """Get invoice summary statistics"""
+    """Get invoice summary statistics - tenant isolated"""
     try:
+        # Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Default to current month
         if not end_date:
             end_date = date.today()
@@ -792,10 +831,11 @@ async def get_invoice_summary(
 
         params = {
             "start_date": start_date,
-            "end_date": end_date
+            "end_date": end_date,
+            "tenant_id": tenant_id
         }
 
-        # Get summary stats
+        # Get summary stats with tenant filter
         result = db.execute(
             text("""
                 SELECT
@@ -817,12 +857,12 @@ async def get_invoice_summary(
                         END
                     ), 0) as avg_days_to_payment
                 FROM invoices
-                WHERE created_at BETWEEN :start_date AND :end_date
+                WHERE tenant_id = :tenant_id AND created_at BETWEEN :start_date AND :end_date
             """),
             params
         ).fetchone()
 
-        # Get top customers by invoice value
+        # Get top customers by invoice value with tenant filter
         top_customers = db.execute(
             text("""
                 SELECT
@@ -833,7 +873,7 @@ async def get_invoice_summary(
                     SUM(i.amount_paid) as amount_paid
                 FROM invoices i
                 JOIN customers c ON i.customer_id = c.id
-                WHERE i.created_at BETWEEN :start_date AND :end_date
+                WHERE i.tenant_id = :tenant_id AND i.created_at BETWEEN :start_date AND :end_date
                 GROUP BY c.id, c.name
                 ORDER BY total_amount DESC
                 LIMIT 5
