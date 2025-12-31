@@ -19,7 +19,7 @@ class MCPBridgeClient:
 
     def __init__(self):
         self.base_url = os.getenv("MCP_BRIDGE_URL", "https://brainops-mcp-bridge.onrender.com")
-        self.api_key = os.getenv("BRAINOPS_API_KEY", "brainops_prod_key_2025")
+        self.api_key = os.getenv("BRAINOPS_API_KEY", "")
         self._tools_cache: Optional[Dict] = None
         self._servers_cache: Optional[List] = None
         self._cache_time: Optional[datetime] = None
