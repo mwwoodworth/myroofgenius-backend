@@ -3,69 +3,260 @@ Data Governance Module - Task 98
 Data quality, lineage, and compliance
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, status
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-import asyncpg
+from sqlalchemy import Column, String, Boolean, JSON, DateTime, ForeignKey, Text
+from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.dialects.postgresql import UUID
 import uuid
-import json
 
-router = APIRouter()
+from database import get_db, engine
+from core.supabase_auth import get_current_user
 
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
+router = APIRouter() # Prefix is likely handled by route loader, but can be explicit if needed. Loader usually uses file name or internal prefix. The file had router = APIRouter().
 
-    async with pool.acquire() as conn:
-        yield conn
+# Local Base for internal models
+Base = declarative_base()
 
+# ============================================================================
+# MODELS
+# ============================================================================
 
-class DataPolicyCreate(BaseModel):
+class DataPolicy(Base):
+    __tablename__ = "data_policies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    policy_name = Column(String, nullable=False)
+    policy_type = Column(String, nullable=False) # retention, access, quality, privacy
+    rules = Column(JSON, default={})
+    applies_to = Column(JSON, default=[]) # tables or data categories
+    is_active = Column(Boolean, default=True)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DataQualityRule(Base):
+    __tablename__ = "data_quality_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    table_name = Column(String, nullable=False)
+    column_name = Column(String, nullable=False)
+    rule_type = Column(String, nullable=False) # not_null, unique, range, format, custom
+    rule_config = Column(JSON, default={})
+    is_active = Column(Boolean, default=True)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Ensure tables exist
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception:
+    pass # Fail silently if DB not ready during import
+
+# ============================================================================
+# SCHEMAS
+# ============================================================================
+
+class DataPolicyBase(BaseModel):
     policy_name: str
-    policy_type: str  # retention, access, quality, privacy
-    rules: Dict[str, Any]
-    applies_to: List[str]  # tables or data categories
+    policy_type: str
+    rules: Dict[str, Any] = {}
+    applies_to: List[str] = []
     is_active: bool = True
 
-@router.post("/policies")
+class DataPolicyCreate(DataPolicyBase):
+    pass
+
+class DataPolicyUpdate(BaseModel):
+    policy_name: Optional[str] = None
+    policy_type: Optional[str] = None
+    rules: Optional[Dict[str, Any]] = None
+    applies_to: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+
+class DataPolicyResponse(DataPolicyBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DataQualityRuleBase(BaseModel):
+    table_name: str
+    column_name: str
+    rule_type: str
+    rule_config: Dict[str, Any] = {}
+    is_active: bool = True
+
+class DataQualityRuleCreate(DataQualityRuleBase):
+    pass
+
+class DataQualityRuleResponse(DataQualityRuleBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# ============================================================================
+# ROUTES
+# ============================================================================
+
+@router.post("/policies", response_model=DataPolicyResponse, status_code=status.HTTP_201_CREATED)
 async def create_data_policy(
     policy: DataPolicyCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Create data governance policy"""
-    query = """
-        INSERT INTO data_policies (
-            policy_name, policy_type, rules,
-            applies_to, is_active
-        ) VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-    """
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(
-        query,
-        policy.policy_name,
-        policy.policy_type,
-        json.dumps(policy.rules),
-        json.dumps(policy.applies_to),
-        policy.is_active
-    )
+        db_policy = DataPolicy(**policy.dict(), tenant_id=tenant_id)
+        db.add(db_policy)
+        db.commit()
+        db.refresh(db_policy)
+        return db_policy
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        **dict(result),
-        "id": str(result['id'])
-    }
+@router.get("/policies", response_model=List[DataPolicyResponse])
+async def list_data_policies(
+    skip: int = 0,
+    limit: int = 100,
+    policy_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """List data policies"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        query = db.query(DataPolicy).filter(DataPolicy.tenant_id == tenant_id)
+        if policy_type:
+            query = query.filter(DataPolicy.policy_type == policy_type)
+        
+        return query.offset(skip).limit(limit).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/policies/{policy_id}", response_model=DataPolicyResponse)
+async def get_data_policy(
+    policy_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get specific data policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(DataPolicy).filter(DataPolicy.id == policy_id, DataPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return policy
+
+@router.put("/policies/{policy_id}", response_model=DataPolicyResponse)
+async def update_data_policy(
+    policy_id: uuid.UUID,
+    policy_update: DataPolicyUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update data policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(DataPolicy).filter(DataPolicy.id == policy_id, DataPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    
+    for key, value in policy_update.dict(exclude_unset=True).items():
+        setattr(policy, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(policy)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    return policy
+
+@router.delete("/policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_data_policy(
+    policy_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete data policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(DataPolicy).filter(DataPolicy.id == policy_id, DataPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    
+    db.delete(policy)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/quality/rules", response_model=DataQualityRuleResponse, status_code=status.HTTP_201_CREATED)
+async def define_quality_rule(
+    rule: DataQualityRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Define data quality rule"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+            
+        db_rule = DataQualityRule(**rule.dict(), tenant_id=tenant_id)
+        db.add(db_rule)
+        db.commit()
+        db.refresh(db_rule)
+        return db_rule
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/quality/rules", response_model=List[DataQualityRuleResponse])
+async def list_quality_rules(
+    skip: int = 0,
+    limit: int = 100,
+    table: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """List data quality rules"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        query = db.query(DataQualityRule).filter(DataQualityRule.tenant_id == tenant_id)
+        if table:
+            query = query.filter(DataQualityRule.table_name == table)
+        return query.offset(skip).limit(limit).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/lineage/{table_name}")
 async def get_data_lineage(
     table_name: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get data lineage for a table"""
-    # Simplified lineage tracking
-    lineage = {
+    # Simplified lineage tracking (Mock)
+    return {
         "table": table_name,
         "sources": [
             {"system": "CRM", "table": "contacts", "sync_frequency": "hourly"},
@@ -80,14 +271,12 @@ async def get_data_lineage(
             {"system": "data_warehouse", "table": f"dim_{table_name}"},
             {"system": "analytics", "table": f"fact_{table_name}"}
         ],
-        "last_updated": datetime.now().isoformat()
+        "last_updated": datetime.utcnow()
     }
-
-    return lineage
 
 @router.get("/compliance/gdpr")
 async def check_gdpr_compliance(
-    conn: asyncpg.Connection = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
     """Check GDPR compliance status"""
     return {
@@ -108,44 +297,12 @@ async def check_gdpr_compliance(
         "last_audit": "2025-09-15"
     }
 
-@router.post("/quality/rules")
-async def define_quality_rule(
-    table: str,
-    column: str,
-    rule_type: str,  # not_null, unique, range, format, custom
-    rule_config: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Define data quality rule"""
-    query = """
-        INSERT INTO data_quality_rules (
-            table_name, column_name, rule_type, rule_config, is_active
-        ) VALUES ($1, $2, $3, $4, true)
-        RETURNING id
-    """
-
-    result = await conn.fetchrow(
-        query,
-        table,
-        column,
-        rule_type,
-        json.dumps(rule_config)
-    )
-
-    return {
-        "id": str(result['id']),
-        "table": table,
-        "column": column,
-        "rule_type": rule_type,
-        "status": "created"
-    }
-
 @router.get("/catalog")
 async def get_data_catalog(
-    conn: asyncpg.Connection = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get data catalog"""
-    catalog = {
+    return {
         "databases": 1,
         "schemas": 5,
         "tables": 1014,
@@ -168,5 +325,3 @@ async def get_data_catalog(
         ],
         "metadata_completeness": 78.5
     }
-
-    return catalog

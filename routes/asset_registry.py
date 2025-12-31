@@ -1,172 +1,196 @@
 """
-Asset registry Module - Auto-generated
-Part of complete ERP implementation
+Asset Registry Module
+Handles CRUD operations for assets.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date
-import asyncpg
+from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from database import get_db
 import uuid
 import json
 
 router = APIRouter()
 
-# Database connection
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
-
-    async with pool.acquire() as conn:
-        yield conn
-
-
 # Models
-class AssetRegistryBase(BaseModel):
-    name: str = Field(..., description="Name")
+class AssetBase(BaseModel):
+    name: str = Field(..., description="Name of the asset")
     description: Optional[str] = None
     status: str = "active"
     data: Optional[Dict[str, Any]] = {}
 
-class AssetRegistryCreate(AssetRegistryBase):
+class AssetCreate(AssetBase):
     pass
 
-class AssetRegistryResponse(AssetRegistryBase):
+class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class AssetResponse(AssetBase):
     id: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 # Endpoints
-@router.post("/", response_model=AssetRegistryResponse)
-async def create_asset_registry(
-    item: AssetRegistryCreate,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Create new asset registry record"""
-    query = """
-        INSERT INTO asset_registry (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at
-    """
 
-    result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
-    )
-
-    return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
-    }
-
-@router.get("/", response_model=List[AssetRegistryResponse])
-async def list_asset_registry(
-    status: Optional[str] = None,
+@router.get("/", response_model=List[AssetResponse])
+def list_assets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
-    """List asset registry records"""
-    query = "SELECT * FROM asset_registry WHERE 1=1"
-    params = []
-    param_count = 0
+    """List all assets"""
+    try:
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM asset_registry
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :skip
+        """), {"limit": limit, "skip": skip}).fetchall()
 
-    if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        assets = []
+        for row in result:
+            assets.append({
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "status": row[3],
+                "data": json.loads(row[4]) if isinstance(row[4], str) else row[4] if row[4] else {},
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        return assets
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
-    params.extend([limit, skip])
+@router.post("/", response_model=AssetResponse)
+def create_asset(
+    item: AssetCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new asset"""
+    try:
+        new_id = uuid.uuid4()
+        timestamp = datetime.now()
+        
+        db.execute(text("""
+            INSERT INTO asset_registry (id, name, description, status, data, created_at, updated_at)
+            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+        """), {
+            "id": new_id,
+            "name": item.name,
+            "description": item.description,
+            "status": item.status,
+            "data": json.dumps(item.data) if item.data else None,
+            "created_at": timestamp,
+            "updated_at": timestamp
+        })
+        db.commit()
 
-    rows = await conn.fetch(query, *params)
-
-    return [
-        {
-            **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
+        return {
+            **item.dict(),
+            "id": str(new_id),
+            "created_at": timestamp,
+            "updated_at": timestamp
         }
-        for row in rows
-    ]
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{item_id}", response_model=AssetRegistryResponse)
-async def get_asset_registry(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+@router.get("/{id}", response_model=AssetResponse)
+def get_asset(
+    id: str,
+    db: Session = Depends(get_db)
 ):
-    """Get specific asset registry record"""
-    query = "SELECT * FROM asset_registry WHERE id = $1"
+    """Get a single asset by ID"""
+    try:
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM asset_registry
+            WHERE id = :id
+        """), {"id": id}).fetchone()
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="Asset registry not found")
+        if not result:
+            raise HTTPException(status_code=404, detail="Asset not found")
 
-    return {
-        **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
-    }
+        return {
+            "id": str(result[0]),
+            "name": result[1],
+            "description": result[2],
+            "status": result[3],
+            "data": json.loads(result[4]) if isinstance(result[4], str) else result[4] if result[4] else {},
+            "created_at": result[5],
+            "updated_at": result[6]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/{item_id}")
-async def update_asset_registry(
-    item_id: str,
-    updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+@router.put("/{id}", response_model=AssetResponse)
+def update_asset(
+    id: str,
+    item: AssetUpdate,
+    db: Session = Depends(get_db)
 ):
-    """Update asset registry record"""
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
+    """Update an asset"""
+    try:
+        # Check if exists
+        exists = db.execute(text("SELECT id FROM asset_registry WHERE id = :id"), {"id": id}).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Asset not found")
 
-    set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
-        params.append(value)
+        updates = []
+        params = {"id": id, "updated_at": datetime.now()}
 
-    params.append(uuid.UUID(item_id))
-    query = f"""
-        UPDATE asset_registry
-        SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
-        RETURNING id
-    """
+        if item.name is not None:
+            updates.append("name = :name")
+            params["name"] = item.name
+        if item.description is not None:
+            updates.append("description = :description")
+            params["description"] = item.description
+        if item.status is not None:
+            updates.append("status = :status")
+            params["status"] = item.status
+        if item.data is not None:
+            updates.append("data = :data")
+            params["data"] = json.dumps(item.data)
 
-    result = await conn.fetchrow(query, *params)
-    if not result:
-        raise HTTPException(status_code=404, detail="Asset registry not found")
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
 
-    return {"message": "Asset registry updated", "id": str(result['id'])}
+        updates.append("updated_at = :updated_at")
+        
+        query = f"UPDATE asset_registry SET {', '.join(updates)} WHERE id = :id"
+        db.execute(text(query), params)
+        db.commit()
 
-@router.delete("/{item_id}")
-async def delete_asset_registry(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+        # Fetch updated
+        return get_asset(id, db)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{id}")
+def delete_asset(
+    id: str,
+    db: Session = Depends(get_db)
 ):
-    """Delete asset registry record"""
-    query = "DELETE FROM asset_registry WHERE id = $1 RETURNING id"
-
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="Asset registry not found")
-
-    return {"message": "Asset registry deleted", "id": str(result['id'])}
-
-@router.get("/stats/summary")
-async def get_asset_registry_stats(conn: asyncpg.Connection = Depends(get_db)):
-    """Get asset registry statistics"""
-    query = """
-        SELECT
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-            COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
-        FROM asset_registry
-    """
-
-    result = await conn.fetchrow(query)
-    return dict(result)
+    """Delete an asset"""
+    try:
+        result = db.execute(text("DELETE FROM asset_registry WHERE id = :id RETURNING id"), {"id": id}).fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        db.commit()
+        return {"message": "Asset deleted successfully", "id": id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

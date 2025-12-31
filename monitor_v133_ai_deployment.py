@@ -4,6 +4,8 @@ Monitor v133.0.0 deployment with comprehensive AI service integration
 Tests all new AI endpoints to ensure full functionality
 """
 
+import os
+
 import time
 import requests
 import json
@@ -12,7 +14,7 @@ import base64
 print("🚀 Monitoring BrainOps Backend v133.0.0 FULL AI DEPLOYMENT...")
 print("=" * 60)
 
-api_key = "rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx"
+api_key = os.environ.get("RENDER_API_KEY")
 service_id = "srv-d1tfs4idbo4c73di6k00"
 
 # Monitor deployment status

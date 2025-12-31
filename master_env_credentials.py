@@ -19,7 +19,7 @@ class MasterCredentialsManager:
     def __init__(self):
         self.env_vars = {}
         self.db_conn = None
-        self.notion_token = "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"  # Correct token
+        self.notion_token = os.environ.get("NOTION_TOKEN")
         self.errors = []
         self.warnings = []
 

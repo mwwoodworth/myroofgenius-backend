@@ -1,3 +1,4 @@
+import os
 """
 Production monitoring and analytics system
 """
@@ -299,7 +300,9 @@ class HealthChecker:
         # Check Stripe
         try:
             import stripe
-            stripe.api_key = "sk_test_REDACTED"  # Use dummy key for health check
+            stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+            if not stripe.api_key:
+                return {"stripe": "not_configured"}
             # This will fail but confirms the library works
             services["stripe"] = {"status": "configured"}
         except:

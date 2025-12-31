@@ -1,172 +1,207 @@
 """
-Password policies Module - Auto-generated
-Part of complete ERP implementation
+Password Policies Module
+Managed password security rules and compliance using SQLAlchemy models.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, status
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date
-import asyncpg
+from datetime import datetime, timedelta
+from sqlalchemy import Column, String, Boolean, JSON, DateTime, ForeignKey, Text
+from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.dialects.postgresql import UUID
 import uuid
-import json
+
+from database import get_db, engine
+from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
-# Database connection
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
+# Local Base for internal models
+Base = declarative_base()
 
-    async with pool.acquire() as conn:
-        yield conn
+# ============================================================================
+# MODELS
+# ============================================================================
 
+class PasswordPolicy(Base):
+    __tablename__ = "password_policies"
 
-# Models
-class PasswordPoliciesBase(BaseModel):
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    status = Column(String, default="active")
+    data = Column(JSON, default={})
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Ensure tables exist
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception:
+    pass
+
+# ============================================================================
+# SCHEMAS
+# ============================================================================
+
+class PasswordPolicyBase(BaseModel):
     name: str = Field(..., description="Name")
     description: Optional[str] = None
     status: str = "active"
     data: Optional[Dict[str, Any]] = {}
 
-class PasswordPoliciesCreate(PasswordPoliciesBase):
+class PasswordPolicyCreate(PasswordPolicyBase):
     pass
 
-class PasswordPoliciesResponse(PasswordPoliciesBase):
-    id: str
+class PasswordPolicyUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class PasswordPolicyResponse(PasswordPolicyBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
 
-# Endpoints
-@router.post("/", response_model=PasswordPoliciesResponse)
-async def create_password_policies(
-    item: PasswordPoliciesCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    class Config:
+        from_attributes = True
+
+class StatsResponse(BaseModel):
+    total: int
+    active: int
+    recent: int
+
+# ============================================================================
+# ROUTES
+# ============================================================================
+
+@router.post("/", response_model=PasswordPolicyResponse, status_code=status.HTTP_201_CREATED)
+async def create_password_policy(
+    policy: PasswordPolicyCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Create new password policies record"""
-    query = """
-        INSERT INTO password_policies (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at
-    """
+    """Create new password policy"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
-    )
+        db_policy = PasswordPolicy(**policy.dict(), tenant_id=tenant_id)
+        db.add(db_policy)
+        db.commit()
+        db.refresh(db_policy)
+        return db_policy
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
-    }
-
-@router.get("/", response_model=List[PasswordPoliciesResponse])
+@router.get("/", response_model=List[PasswordPolicyResponse])
 async def list_password_policies(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """List password policies records"""
-    query = "SELECT * FROM password_policies WHERE 1=1"
-    params = []
-    param_count = 0
+    """List password policies"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        query = db.query(PasswordPolicy).filter(PasswordPolicy.tenant_id == tenant_id)
+        if status:
+            query = query.filter(PasswordPolicy.status == status)
+        
+        return query.order_by(PasswordPolicy.created_at.desc()).offset(skip).limit(limit).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
-    params.extend([limit, skip])
-
-    rows = await conn.fetch(query, *params)
-
-    return [
-        {
-            **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
-        }
-        for row in rows
-    ]
-
-@router.get("/{item_id}", response_model=PasswordPoliciesResponse)
-async def get_password_policies(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+@router.get("/{policy_id}", response_model=PasswordPolicyResponse)
+async def get_password_policy(
+    policy_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Get specific password policies record"""
-    query = "SELECT * FROM password_policies WHERE id = $1"
+    """Get specific password policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(PasswordPolicy).filter(PasswordPolicy.id == policy_id, PasswordPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Password policy not found")
+    return policy
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="Password policies not found")
-
-    return {
-        **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
-    }
-
-@router.put("/{item_id}")
-async def update_password_policies(
-    item_id: str,
-    updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+@router.put("/{policy_id}", response_model=PasswordPolicyResponse)
+async def update_password_policy(
+    policy_id: uuid.UUID,
+    policy_update: PasswordPolicyUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Update password policies record"""
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
+    """Update password policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(PasswordPolicy).filter(PasswordPolicy.id == policy_id, PasswordPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Password policy not found")
+    
+    for key, value in policy_update.dict(exclude_unset=True).items():
+        setattr(policy, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(policy)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    return policy
 
-    set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
-        params.append(value)
-
-    params.append(uuid.UUID(item_id))
-    query = f"""
-        UPDATE password_policies
-        SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
-        RETURNING id
-    """
-
-    result = await conn.fetchrow(query, *params)
-    if not result:
-        raise HTTPException(status_code=404, detail="Password policies not found")
-
-    return {"message": "Password policies updated", "id": str(result['id'])}
-
-@router.delete("/{item_id}")
-async def delete_password_policies(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+@router.delete("/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_password_policy(
+    policy_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Delete password policies record"""
-    query = "DELETE FROM password_policies WHERE id = $1 RETURNING id"
+    """Delete password policy"""
+    tenant_id = current_user.get("tenant_id")
+    policy = db.query(PasswordPolicy).filter(PasswordPolicy.id == policy_id, PasswordPolicy.tenant_id == tenant_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Password policy not found")
+    
+    db.delete(policy)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="Password policies not found")
-
-    return {"message": "Password policies deleted", "id": str(result['id'])}
-
-@router.get("/stats/summary")
-async def get_password_policies_stats(conn: asyncpg.Connection = Depends(get_db)):
+@router.get("/stats/summary", response_model=StatsResponse)
+async def get_password_policies_stats(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get password policies statistics"""
-    query = """
-        SELECT
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-            COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
-        FROM password_policies
-    """
-
-    result = await conn.fetchrow(query)
-    return dict(result)
+    try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+             raise HTTPException(status_code=403, detail="Tenant assignment required")
+             
+        total = db.query(PasswordPolicy).filter(PasswordPolicy.tenant_id == tenant_id).count()
+        active = db.query(PasswordPolicy).filter(PasswordPolicy.tenant_id == tenant_id, PasswordPolicy.status == 'active').count()
+        
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        recent = db.query(PasswordPolicy).filter(
+            PasswordPolicy.tenant_id == tenant_id,
+            PasswordPolicy.created_at > cutoff
+        ).count()
+        
+        return {
+            "total": total,
+            "active": active,
+            "recent": recent
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,172 +1,128 @@
 """
-System settings Module - Auto-generated
-Part of complete ERP implementation
+System Settings Module
+Handles system-wide settings management.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date
-import asyncpg
+from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from database import get_db
 import uuid
 import json
 
 router = APIRouter()
 
-# Database connection
-async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=503, detail="Database connection not available")
-
-    async with pool.acquire() as conn:
-        yield conn
-
-
 # Models
-class SystemSettingsBase(BaseModel):
-    name: str = Field(..., description="Name")
+class SettingBase(BaseModel):
+    name: str = Field(..., description="Key/Name of the setting")
     description: Optional[str] = None
     status: str = "active"
     data: Optional[Dict[str, Any]] = {}
 
-class SystemSettingsCreate(SystemSettingsBase):
-    pass
+class SettingUpdate(BaseModel):
+    description: Optional[str] = None
+    status: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
-class SystemSettingsResponse(SystemSettingsBase):
+class SettingResponse(SettingBase):
     id: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 # Endpoints
-@router.post("/", response_model=SystemSettingsResponse)
-async def create_system_settings(
-    item: SystemSettingsCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+
+@router.get("/", response_model=List[SettingResponse])
+def list_settings(
+    db: Session = Depends(get_db)
 ):
-    """Create new system settings record"""
-    query = """
-        INSERT INTO system_settings (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at
-    """
+    """Get all settings"""
+    try:
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM system_settings
+            ORDER BY name ASC
+        """)).fetchall()
 
-    result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
-    )
+        settings = []
+        for row in result:
+            settings.append({
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "status": row[3],
+                "data": json.loads(row[4]) if isinstance(row[4], str) else row[4] if row[4] else {},
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        return settings
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
-    }
-
-@router.get("/", response_model=List[SystemSettingsResponse])
-async def list_system_settings(
-    status: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+@router.put("/{key}", response_model=SettingResponse)
+def update_setting(
+    key: str,
+    item: SettingUpdate,
+    db: Session = Depends(get_db)
 ):
-    """List system settings records"""
-    query = "SELECT * FROM system_settings WHERE 1=1"
-    params = []
-    param_count = 0
+    """Update setting by key (name)"""
+    try:
+        # Check if exists by name (key)
+        existing = db.execute(text("SELECT id FROM system_settings WHERE name = :name"), {"name": key}).fetchone()
+        
+        # If not found, maybe create it? Or 404? 
+        # Usually settings are pre-defined, but let's allow creation if it doesn't exist?
+        # The prompt says 'update setting'. I'll return 404 if not found to be safe, or upsert.
+        # Let's do strict update for now as per 'PUT'.
+        
+        if not existing:
+             raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
-    if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        id = existing[0]
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
-    params.extend([limit, skip])
+        updates = []
+        params = {"id": id, "updated_at": datetime.now()}
 
-    rows = await conn.fetch(query, *params)
+        if item.description is not None:
+            updates.append("description = :description")
+            params["description"] = item.description
+        if item.status is not None:
+            updates.append("status = :status")
+            params["status"] = item.status
+        if item.data is not None:
+            updates.append("data = :data")
+            params["data"] = json.dumps(item.data)
 
-    return [
-        {
-            **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
+        if not updates:
+             # Just return current state if nothing to update
+             pass
+        else:
+            updates.append("updated_at = :updated_at")
+            query = f"UPDATE system_settings SET {', '.join(updates)} WHERE id = :id"
+            db.execute(text(query), params)
+            db.commit()
+
+        # Fetch updated
+        result = db.execute(text("""
+            SELECT id, name, description, status, data, created_at, updated_at
+            FROM system_settings
+            WHERE id = :id
+        """), {"id": id}).fetchone()
+
+        return {
+            "id": str(result[0]),
+            "name": result[1],
+            "description": result[2],
+            "status": result[3],
+            "data": json.loads(result[4]) if isinstance(result[4], str) else result[4] if result[4] else {},
+            "created_at": result[5],
+            "updated_at": result[6]
         }
-        for row in rows
-    ]
 
-@router.get("/{item_id}", response_model=SystemSettingsResponse)
-async def get_system_settings(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Get specific system settings record"""
-    query = "SELECT * FROM system_settings WHERE id = $1"
-
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not row:
-        raise HTTPException(status_code=404, detail="System settings not found")
-
-    return {
-        **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
-    }
-
-@router.put("/{item_id}")
-async def update_system_settings(
-    item_id: str,
-    updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Update system settings record"""
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
-
-    set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
-        params.append(value)
-
-    params.append(uuid.UUID(item_id))
-    query = f"""
-        UPDATE system_settings
-        SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
-        RETURNING id
-    """
-
-    result = await conn.fetchrow(query, *params)
-    if not result:
-        raise HTTPException(status_code=404, detail="System settings not found")
-
-    return {"message": "System settings updated", "id": str(result['id'])}
-
-@router.delete("/{item_id}")
-async def delete_system_settings(
-    item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
-):
-    """Delete system settings record"""
-    query = "DELETE FROM system_settings WHERE id = $1 RETURNING id"
-
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="System settings not found")
-
-    return {"message": "System settings deleted", "id": str(result['id'])}
-
-@router.get("/stats/summary")
-async def get_system_settings_stats(conn: asyncpg.Connection = Depends(get_db)):
-    """Get system settings statistics"""
-    query = """
-        SELECT
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-            COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
-        FROM system_settings
-    """
-
-    result = await conn.fetchrow(query)
-    return dict(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

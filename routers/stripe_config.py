@@ -51,7 +51,9 @@ STRIPE_PRODUCTS = {
 }
 
 # Stripe webhook endpoint secret
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_REDACTED")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+if not STRIPE_WEBHOOK_SECRET:
+    raise ValueError("STRIPE_WEBHOOK_SECRET not configured")
 
 # Trial period in days
 TRIAL_PERIOD_DAYS = 14
