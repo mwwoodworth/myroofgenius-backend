@@ -60,6 +60,9 @@ class RLSMiddleware(BaseHTTPMiddleware):
                 user_id = payload.get("sub")
                 user_role = payload.get("role", "user")
 
+                # Extract tenant_id from JWT claims
+                tenant_id = payload.get("tenant_id") or (payload.get("user_metadata") or {}).get("tenant_id")
+
                 # Set RLS context in database
                 if user_id and hasattr(request.app.state, "db"):
                     db = request.app.state.db
@@ -73,6 +76,12 @@ class RLSMiddleware(BaseHTTPMiddleware):
                             text("SELECT set_config('app.current_user_role', :role, false)"),
                             {"role": user_role}
                         )
+                        # CRITICAL: Set tenant_id for RLS policies
+                        if tenant_id:
+                            db.execute(
+                                text("SELECT set_config('app.current_tenant_id', :tenant_id, false)"),
+                                {"tenant_id": tenant_id}
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to set RLS context: {e}")
 
@@ -92,6 +101,7 @@ class RLSMiddleware(BaseHTTPMiddleware):
                 db = request.app.state.db
                 db.execute(text("SELECT set_config('app.current_user_id', '', false)"))
                 db.execute(text("SELECT set_config('app.current_user_role', '', false)"))
+                db.execute(text("SELECT set_config('app.current_tenant_id', '', false)"))
             except:
                 pass
 

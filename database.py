@@ -1,13 +1,21 @@
 """
 Database connection module for BrainOps AI OS
+
+SECURITY: This module provides tenant-isolated database connections.
+All connections set the tenant context via PostgreSQL session variables,
+which are used by RLS policies to enforce data isolation.
 """
 
 import os
 import asyncpg
 import asyncio
+import logging
 from typing import Optional
-from sqlalchemy import create_engine
+from contextlib import asynccontextmanager
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
+
+logger = logging.getLogger(__name__)
 
 def _resolve_database_url() -> Optional[str]:
     """Resolve the database URL without embedding secrets in code."""
@@ -85,13 +93,49 @@ async def close_db_connection():
         await _connection_pool.close()
         _connection_pool = None
 
+# Tenant-aware connection context manager
+@asynccontextmanager
+async def get_tenant_connection(pool: asyncpg.Pool, tenant_id: Optional[str] = None, user_id: Optional[str] = None):
+    """
+    Acquire a connection with tenant context set for RLS enforcement.
+
+    SECURITY: This is the preferred way to get database connections.
+    It sets PostgreSQL session variables that RLS policies use for isolation.
+
+    Usage:
+        async with get_tenant_connection(pool, tenant_id="...") as conn:
+            await conn.fetch("SELECT * FROM customers")  # RLS filters to tenant
+    """
+    async with pool.acquire() as conn:
+        try:
+            if tenant_id:
+                await conn.execute("SELECT set_config('app.current_tenant_id', $1, false)", tenant_id)
+            if user_id:
+                await conn.execute("SELECT set_config('app.current_user_id', $1, false)", user_id)
+            yield conn
+        finally:
+            # Clear context after use
+            await conn.execute("SELECT set_config('app.current_tenant_id', '', false)")
+            await conn.execute("SELECT set_config('app.current_user_id', '', false)")
+
+
 # Simple database wrapper for compatibility
 class Database:
-    def __init__(self, pool):
+    def __init__(self, pool, tenant_id: Optional[str] = None, user_id: Optional[str] = None):
         self.pool = pool
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+
+    async def _set_context(self, conn):
+        """Set tenant context on connection for RLS enforcement"""
+        if self.tenant_id:
+            await conn.execute("SELECT set_config('app.current_tenant_id', $1, false)", self.tenant_id)
+        if self.user_id:
+            await conn.execute("SELECT set_config('app.current_user_id', $1, false)", self.user_id)
 
     async def fetch_one(self, query: str, values: dict = None):
         async with self.pool.acquire() as conn:
+            await self._set_context(conn)
             if values:
                 # Convert named parameters to positional
                 query_parts = query.split(':')
@@ -115,6 +159,7 @@ class Database:
 
     async def fetch_all(self, query: str, values: dict = None):
         async with self.pool.acquire() as conn:
+            await self._set_context(conn)
             if values:
                 # Similar parameter conversion
                 return await conn.fetch(query, *values.values())
@@ -123,6 +168,7 @@ class Database:
 
     async def execute(self, query: str, values: dict = None):
         async with self.pool.acquire() as conn:
+            await self._set_context(conn)
             if values:
                 return await conn.execute(query, *values.values())
             else:
@@ -143,11 +189,52 @@ def get_db():
         db.close()
 
 # Async get_db for asyncpg routes
-async def get_db_async():
+async def get_db_async(tenant_id: Optional[str] = None, user_id: Optional[str] = None):
     """
     Get database instance for FastAPI dependency injection (async)
+
+    Args:
+        tenant_id: Optional tenant ID for RLS enforcement
+        user_id: Optional user ID for RLS enforcement
+
+    Returns:
+        Database instance with tenant context set
     """
     pool = await get_db_connection()
-    return Database(pool)
+    return Database(pool, tenant_id=tenant_id, user_id=user_id)
 
-__all__ = ["get_db_connection", "close_db_connection", "get_db", "get_db_async", "Database", "SessionLocal", "engine"]
+
+# FastAPI dependency for tenant-aware database access
+async def get_tenant_db(request):
+    """
+    FastAPI dependency that provides tenant-isolated database access.
+
+    Usage in routes:
+        @router.get("/items")
+        async def get_items(db: Database = Depends(get_tenant_db)):
+            return await db.fetch_all("SELECT * FROM items")  # RLS enforced
+    """
+    from fastapi import Request
+    pool = await get_db_connection()
+
+    # Extract tenant_id and user_id from request state (set by auth middleware)
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
+
+    if not tenant_id:
+        logger.warning(f"No tenant_id in request to {request.url.path} - RLS may not filter correctly")
+
+    return Database(pool, tenant_id=tenant_id, user_id=user_id)
+
+
+__all__ = [
+    "get_db_connection",
+    "close_db_connection",
+    "get_db",
+    "get_db_async",
+    "get_tenant_db",
+    "get_tenant_connection",
+    "Database",
+    "SessionLocal",
+    "engine"
+]

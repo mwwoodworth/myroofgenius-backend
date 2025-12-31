@@ -2,9 +2,16 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.0.33"
-__build__ = "2025-12-26T02:30:00Z"
+__version__ = "163.1.0"
+__build__ = "2025-12-31T22:45:00Z"
 __status__ = "production"
+# v163.1.0: SECURITY - Tenant isolation hardening (P0 fix from Codex audit)
+# - Created brainops_backend DB role WITHOUT rolbypassrls (RLS now enforced)
+# - Added tenant-aware database connection wrapper (sets app.current_tenant_id)
+# - Database.py now sets PostgreSQL session variables for RLS enforcement
+# - Added get_tenant_db() FastAPI dependency for automatic tenant context
+# - Added get_tenant_connection() async context manager for direct pool use
+# - Updated RLS middleware to set app.current_tenant_id from JWT claims
 # v163.0.33: Fix log flooding from auth failures and Vercel log drain
 # - Rate-limited JWT verification error logging (once per minute per error type)
 # - Rate-limited authentication failure logging (once per minute per path)
