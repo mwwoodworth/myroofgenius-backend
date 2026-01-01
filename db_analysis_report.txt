@@ -1,0 +1,1336 @@
+========== DATABASE ANALYSIS REPORT ==========
+
+--- 1. TABLE ROW COUNTS (Top 50) ---
+ schemaname |        table_name         | row_count 
+------------+---------------------------+-----------
+ public     | memories                  |    278183
+ public     | ai_nerve_signals          |     95355
+ public     | ai_thought_stream         |     64245
+ public     | centerpoint_sync_status   |     62648
+ public     | production_memory         |     57924
+ public     | autonomic_decisions       |     54258
+ public     | aurea_state               |     37807
+ public     | unified_ai_memory         |     33387
+ public     | brainops_ops_stream       |     30566
+ public     | ai_vital_signs            |     30508
+ public     | brainops_machine_health   |     29980
+ public     | ai_system_insights        |     29194
+ public     | brainops_schema_index     |     22372
+ public     | registry_entities         |     20897
+ public     | registry_relations        |     20826
+ public     | jobs                      |     18332
+ public     | cron_job_history          |     15800
+ public     | codebase_nodes            |     14861
+ public     | aurea_decisions           |     14145
+ public     | customer_history          |     12636
+ public     | schedule_events           |     12110
+ public     | codebase_edges            |     11694
+ public     | customers                 |     10695
+ public     | always_know_state         |      8793
+ public     | ai_consciousness_state    |      8649
+ public     | healing_metrics_history   |      8555
+ public     | schedules                 |      8249
+ public     | ai_task_queue             |      7930
+ public     | memory_context_access_log |      7821
+ public     | memory_sync_events        |      7811
+ public     | memory_context_registry   |      7809
+ public     | ai_system_snapshot        |      7793
+ public     | audit_logs                |      7666
+ public     | ai_learning_insights      |      7414
+ public     | neural_pathways           |      6768
+ public     | ai_customer_interventions |      6732
+ public     | healing_reconciliations   |      6552
+ public     | project_tasks             |      6374
+ public     | aurea_cycle_metrics       |      5873
+ public     | agent_activation_log      |      5652
+ public     | ai_agent_executions       |      5508
+ public     | invoices                  |      5085
+ public     | aurea_patterns            |      4942
+ public     | estimates                 |      4272
+ public     | ai_autonomous_tasks       |      4220
+ public     | ai_decisions              |      4063
+ public     | chart_of_accounts         |      3874
+ public     | ai_scheduled_outreach     |      3542
+ public     | invoice_items             |      3353
+ public     | agent_executions          |      2749
+(50 rows)
+
+
+--- 2. CORE TABLE SCHEMAS ---
+[CUSTOMERS]
+                                                     Table "public.customers"
+            Column            |            Type             | Collation | Nullable |                   Default                    
+------------------------------+-----------------------------+-----------+----------+----------------------------------------------
+ id                           | uuid                        |           | not null | gen_random_uuid()
+ name                         | character varying(200)      |           | not null | 
+ email                        | character varying(255)      |           |          | 
+ phone                        | character varying(50)       |           |          | 
+ company_name                 | character varying(200)      |           |          | 
+ billing_address              | text                        |           |          | 
+ billing_city                 | character varying(100)      |           |          | 
+ billing_state                | character varying(50)       |           |          | 
+ billing_zip                  | character varying(20)       |           |          | 
+ billing_country              | character varying(2)        |           |          | 
+ service_address              | text                        |           |          | 
+ service_city                 | character varying(100)      |           |          | 
+ service_state                | character varying(50)       |           |          | 
+ service_zip                  | character varying(20)       |           |          | 
+ credit_limit                 | integer                     |           |          | 
+ payment_terms                | character varying(50)       |           |          | 
+ tax_exempt                   | boolean                     |           |          | 
+ tax_exempt_number            | character varying(100)      |           |          | 
+ source                       | character varying(50)       |           |          | 
+ tags                         | json                        |           |          | 
+ notes                        | text                        |           |          | 
+ is_active                    | boolean                     |           |          | 
+ created_at                   | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ updated_at                   | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ org_id                       | uuid                        |           | not null | '00000000-0000-0000-0000-000000000001'::uuid
+ mobile                       | text                        |           |          | 
+ address                      | jsonb                       |           |          | 
+ type                         | text                        |           |          | 'residential'::text
+ status                       | text                        |           |          | 'active'::text
+ lead_source                  | text                        |           |          | 
+ external_id                  | text                        |           |          | 
+ latitude                     | numeric(10,8)               |           |          | 
+ longitude                    | numeric(11,8)               |           |          | 
+ customer_type                | text                        |           |          | 'residential'::text
+ country                      | text                        |           |          | 'US'::text
+ city                         | text                        |           |          | 
+ state                        | text                        |           |          | 
+ zip                          | text                        |           |          | 
+ customer_id                  | uuid                        |           |          | gen_random_uuid()
+ organization_id              | uuid                        |           |          | '00000000-0000-0000-0000-000000000001'::uuid
+ address_line1                | text                        |           |          | 
+ address_line2                | text                        |           |          | 
+ stripe_customer_id           | text                        |           |          | 
+ lead_score                   | integer                     |           |          | 50
+ lifecycle_stage              | text                        |           |          | 'lead'::text
+ total_spent                  | numeric(10,2)               |           |          | 0
+ last_contact                 | timestamp without time zone |           |          | 
+ tenant_id                    | uuid                        |           | not null | current_tenant_id()
+ portal_enabled               | boolean                     |           |          | false
+ portal_password_hash         | character varying(255)      |           |          | 
+ portal_reset_token           | character varying(255)      |           |          | 
+ portal_reset_expires         | timestamp without time zone |           |          | 
+ portal_last_login            | timestamp without time zone |           |          | 
+ portal_preferences           | jsonb                       |           |          | '{}'::jsonb
+ portal_2fa_enabled           | boolean                     |           |          | false
+ portal_2fa_secret            | character varying(255)      |           |          | 
+ first_name                   | character varying(100)      |           |          | 
+ last_name                    | character varying(100)      |           |          | 
+ date_of_birth                | date                        |           |          | 
+ ssn_last_four                | character varying(4)        |           |          | 
+ preferred_contact_method     | character varying(50)       |           |          | 'email'::character varying
+ preferred_contact_time       | character varying(50)       |           |          | 
+ referral_source              | character varying(200)      |           |          | 
+ referral_customer_id         | uuid                        |           |          | 
+ lifetime_value               | numeric(12,2)               |           |          | 0
+ first_contact_date           | date                        |           |          | 
+ last_contact_date            | date                        |           |          | 
+ next_followup_date           | date                        |           |          | 
+ is_vip                       | boolean                     |           |          | false
+ merged_into_id               | uuid                        |           |          | 
+ duplicate_check_hash         | character varying(64)       |           |          | 
+ payment_method_id            | character varying(255)      |           |          | 
+ subscription_status          | character varying(50)       |           |          | 
+ customer_standing            | character varying(50)       |           |          | 'good'::character varying
+ ytd_service_revenue          | numeric(12,2)               |           |          | 0
+ ytd_production_revenue       | numeric(12,2)               |           |          | 0
+ service_transaction_count    | integer                     |           |          | 0
+ production_transaction_count | integer                     |           |          | 0
+ predicted_churn_risk         | numeric(4,2)                |           |          | 
+ payment_terms_days           | integer                     |           |          | 30
+ ai_relationship_score        | integer                     |           |          | 
+ metadata                     | jsonb                       |           |          | '{}'::jsonb
+ last_job_date                | timestamp without time zone |           |          | 
+ legacy_id                    | text                        |           |          | 
+ tax_info                     | text                        |           |          | 
+Indexes:
+    "customers_pkey" PRIMARY KEY, btree (id)
+    "customers_external_id_key" UNIQUE CONSTRAINT, btree (external_id)
+    "customers_legacy_id_key" UNIQUE CONSTRAINT, btree (legacy_id)
+    "idx_customer_active" btree (is_active)
+    "idx_customers_created" btree (created_at DESC)
+    "idx_customers_created_at" btree (created_at)
+    "idx_customers_customer_id" btree (customer_id)
+    "idx_customers_email" btree (email)
+    "idx_customers_external_id" btree (external_id)
+    "idx_customers_last_job_date" btree (last_job_date)
+    "idx_customers_merged_into" btree (merged_into_id) WHERE merged_into_id IS NOT NULL
+    "idx_customers_merged_into_id" btree (merged_into_id)
+    "idx_customers_org" btree (organization_id)
+    "idx_customers_org_id" btree (org_id)
+    "idx_customers_payment_method_id" btree (payment_method_id)
+    "idx_customers_phone" btree (phone) WHERE phone IS NOT NULL
+    "idx_customers_referral" btree (referral_customer_id) WHERE referral_customer_id IS NOT NULL
+    "idx_customers_referral_customer_id" btree (referral_customer_id)
+    "idx_customers_standing" btree (customer_standing)
+    "idx_customers_stripe_id" btree (stripe_customer_id)
+    "idx_customers_tenant" btree (tenant_id)
+    "idx_customers_tenant_email" btree (tenant_id, email) WHERE email IS NOT NULL
+    "idx_customers_tenant_id" btree (tenant_id)
+Foreign-key constraints:
+    "customers_merged_into_id_fkey" FOREIGN KEY (merged_into_id) REFERENCES customers(id)
+    "customers_referral_customer_id_fkey" FOREIGN KEY (referral_customer_id) REFERENCES customers(id)
+    "fk_customers_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "accounting_transactions" CONSTRAINT "accounting_transactions_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    TABLE "ai_crm_action_approvals" CONSTRAINT "ai_crm_action_approvals_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "ai_crm_action_overrides" CONSTRAINT "ai_crm_action_overrides_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "ai_lead_scores" CONSTRAINT "ai_lead_scores_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "ai_next_actions" CONSTRAINT "ai_next_actions_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "ai_roofing_estimates" CONSTRAINT "ai_roofing_estimates_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "appointments" CONSTRAINT "appointments_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "ar_aging" CONSTRAINT "ar_aging_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "cad_projects" CONSTRAINT "cad_projects_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "calendar_events" CONSTRAINT "calendar_events_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "calendar_events_enhanced" CONSTRAINT "calendar_events_enhanced_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    TABLE "collection_cases" CONSTRAINT "collection_cases_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "collections_accounts" CONSTRAINT "collections_accounts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "collections_actions" CONSTRAINT "collections_actions_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "communication_logs" CONSTRAINT "communication_logs_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "contracts" CONSTRAINT "contracts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "credit_actions_log" CONSTRAINT "credit_actions_log_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "credit_applications" CONSTRAINT "credit_applications_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "credit_checks" CONSTRAINT "credit_checks_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "credit_limit_history" CONSTRAINT "credit_limit_history_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "credit_write_offs" CONSTRAINT "credit_write_offs_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_activities" CONSTRAINT "customer_activities_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_alerts" CONSTRAINT "customer_alerts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_churn" CONSTRAINT "customer_churn_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_communications" CONSTRAINT "customer_communications_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "customer_contacts" CONSTRAINT "customer_contacts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_credit_profiles" CONSTRAINT "customer_credit_profiles_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_custom_fields" CONSTRAINT "customer_custom_fields_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_history" CONSTRAINT "customer_history_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_intelligence" CONSTRAINT "customer_intelligence_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_merges" CONSTRAINT "customer_merges_primary_customer_id_fkey" FOREIGN KEY (primary_customer_id) REFERENCES customers(id)
+    TABLE "customer_notes" CONSTRAINT "customer_notes_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_portal_access" CONSTRAINT "customer_portal_access_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_portals" CONSTRAINT "customer_portals_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "customer_reminder_settings" CONSTRAINT "customer_reminder_settings_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_reviews" CONSTRAINT "customer_reviews_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_segment_memberships" CONSTRAINT "customer_segment_memberships_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_surveys" CONSTRAINT "customer_surveys_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_tags" CONSTRAINT "customer_tags_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customer_trade_references" CONSTRAINT "customer_trade_references_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "customers" CONSTRAINT "customers_merged_into_id_fkey" FOREIGN KEY (merged_into_id) REFERENCES customers(id)
+    TABLE "customers" CONSTRAINT "customers_referral_customer_id_fkey" FOREIGN KEY (referral_customer_id) REFERENCES customers(id)
+    TABLE "dispute_ratings" CONSTRAINT "dispute_ratings_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "disputes" CONSTRAINT "disputes_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "estimate_takeoffs" CONSTRAINT "estimate_takeoffs_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "estimates_advanced" CONSTRAINT "estimates_advanced_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    TABLE "estimates" CONSTRAINT "estimates_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "estimations_v2" CONSTRAINT "estimations_v2_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "field_inspections" CONSTRAINT "field_inspections_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    TABLE "estimates" CONSTRAINT "fk_estimates_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE "invoices" CONSTRAINT "fk_invoices_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE RESTRICT
+    TABLE "jobs" CONSTRAINT "fk_jobs_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE "invoices" CONSTRAINT "invoices_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "itb_projects" CONSTRAINT "itb_projects_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "jobs" CONSTRAINT "jobs_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "leads" CONSTRAINT "leads_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "maintenance_schedules" CONSTRAINT "maintenance_schedules_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "media_assets" CONSTRAINT "media_assets_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "opportunities" CONSTRAINT "opportunities_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "payment_methods" CONSTRAINT "payment_methods_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "payments" CONSTRAINT "payments_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "portal_activity_log" CONSTRAINT "portal_activity_log_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "predictive_maintenance_alerts" CONSTRAINT "predictive_maintenance_alerts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "recurring_invoices" CONSTRAINT "recurring_invoices_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "referral_programs" CONSTRAINT "referral_programs_referrer_id_fkey" FOREIGN KEY (referrer_id) REFERENCES customers(id)
+    TABLE "revenue_events" CONSTRAINT "revenue_events_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "revenue_transactions" CONSTRAINT "revenue_transactions_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "roof_measurements" CONSTRAINT "roof_measurements_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "sales_opportunities" CONSTRAINT "sales_opportunities_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "saved_payment_methods" CONSTRAINT "saved_payment_methods_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "schedule_events" CONSTRAINT "schedule_events_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "serial_numbers" CONSTRAINT "serial_numbers_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "service_agreements" CONSTRAINT "service_agreements_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    TABLE "service_contracts" CONSTRAINT "service_contracts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "service_properties" CONSTRAINT "service_properties_company_id_fkey" FOREIGN KEY (company_id) REFERENCES customers(id)
+    TABLE "service_properties" CONSTRAINT "service_properties_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "service_tickets" CONSTRAINT "service_tickets_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "service_warranties" CONSTRAINT "service_warranties_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    TABLE "shopping_carts" CONSTRAINT "shopping_carts_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "subscriptions" CONSTRAINT "subscriptions_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "tickets" CONSTRAINT "tickets_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "user_sessions" CONSTRAINT "user_sessions_user_id_fkey" FOREIGN KEY (user_id) REFERENCES customers(id)
+    TABLE "warranties" CONSTRAINT "warranties_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "warranty_claims" CONSTRAINT "warranty_claims_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    TABLE "warranty_transfers" CONSTRAINT "warranty_transfers_from_customer_id_fkey" FOREIGN KEY (from_customer_id) REFERENCES customers(id)
+    TABLE "warranty_transfers" CONSTRAINT "warranty_transfers_to_customer_id_fkey" FOREIGN KEY (to_customer_id) REFERENCES customers(id)
+Policies (forced row security enabled):
+    POLICY "customers_service_role_all"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+    POLICY "customers_tenant_access"
+      TO authenticated
+      USING ((org_id = current_tenant_id()))
+      WITH CHECK ((org_id = current_tenant_id()))
+Triggers:
+    customer_history_trigger AFTER INSERT OR UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION track_customer_history()
+    customers_sync_trigger AFTER INSERT OR UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION sync_centerpoint_changes()
+    new_customer_trigger AFTER INSERT ON customers FOR EACH ROW EXECUTE FUNCTION trigger_lead_nurturing()
+    tr_audit_customers AFTER INSERT OR DELETE OR UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION audit_trigger()
+    update_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at()
+
+[JOBS]
+                                                       Table "public.jobs"
+           Column            |            Type             | Collation | Nullable |                   Default                    
+-----------------------------+-----------------------------+-----------+----------+----------------------------------------------
+ id                          | uuid                        |           | not null | gen_random_uuid()
+ job_number                  | character varying(50)       |           |          | 
+ customer_id                 | uuid                        |           |          | 
+ estimate_id                 | uuid                        |           |          | 
+ title                       | character varying(200)      |           |          | 
+ description                 | text                        |           |          | 
+ job_address                 | text                        |           |          | 
+ job_city                    | character varying(100)      |           |          | 
+ job_state                   | character varying(50)       |           |          | 
+ job_zip                     | character varying(20)       |           |          | 
+ scheduled_start             | date                        |           |          | 
+ scheduled_end               | date                        |           |          | 
+ actual_start                | date                        |           |          | 
+ actual_end                  | date                        |           |          | 
+ estimated_revenue           | integer                     |           |          | 0
+ actual_revenue              | integer                     |           |          | 
+ estimated_costs             | integer                     |           |          | 
+ actual_costs                | integer                     |           |          | 
+ status                      | character varying(20)       |           |          | 
+ completion_percentage       | integer                     |           |          | 
+ invoice_id                  | uuid                        |           |          | 
+ is_billable                 | boolean                     |           |          | 
+ created_by                  | uuid                        |           |          | 
+ created_at                  | timestamp without time zone |           |          | now()
+ updated_at                  | timestamp without time zone |           |          | now()
+ org_id                      | uuid                        |           | not null | '00000000-0000-0000-0000-000000000001'::uuid
+ priority                    | text                        |           |          | 'MEDIUM'::text
+ metadata                    | jsonb                       |           |          | '{}'::jsonb
+ location                    | jsonb                       |           |          | 
+ external_id                 | text                        |           |          | 
+ job_type                    | text                        |           |          | 
+ total_amount                | numeric(12,2)               |           |          | 0
+ paid_amount                 | numeric(12,2)               |           |          | 0
+ start_date                  | date                        |           |          | 
+ end_date                    | date                        |           |          | 
+ address                     | text                        |           |          | 
+ city                        | text                        |           |          | 
+ state                       | text                        |           |          | 
+ zip                         | text                        |           |          | 
+ source                      | text                        |           |          | 'manual'::text
+ crew_id                     | uuid                        |           |          | 
+ scheduled_date              | date                        |           |          | 
+ started_at                  | timestamp with time zone    |           |          | 
+ completed_at                | timestamp with time zone    |           |          | 
+ revenue_cents               | bigint                      |           |          | 0
+ notes                       | text                        |           |          | 
+ archived                    | boolean                     |           |          | false
+ organization_id             | uuid                        |           |          | '00000000-0000-0000-0000-000000000001'::uuid
+ name                        | character varying(255)      |           |          | 
+ type                        | character varying(50)       |           |          | 
+ start_at                    | timestamp without time zone |           |          | 
+ end_at                      | timestamp without time zone |           |          | 
+ crew_size                   | integer                     |           |          | 2
+ estimated_hours             | numeric(5,2)                |           |          | 0
+ customer_name               | character varying(255)      |           |          | 
+ customer_email              | character varying(255)      |           |          | 
+ estimated_duration_days     | integer                     |           |          | 
+ actual_duration_days        | integer                     |           |          | 
+ total_cost                  | numeric(12,2)               |           |          | 
+ total_revenue               | numeric(12,2)               |           |          | 
+ gross_profit                | numeric(12,2)               |           |          | 
+ gross_margin_percent        | numeric(5,2)                |           |          | 
+ sales_rep_id                | uuid                        |           |          | 
+ actual_hours                | numeric(10,2)               |           |          | 
+ hourly_rate                 | numeric(10,2)               |           |          | 
+ material_cost               | numeric(15,2)               |           |          | 
+ tenant_id                   | uuid                        |           | not null | 
+ estimated_cost              | numeric(12,2)               |           |          | 
+ actual_cost                 | numeric(12,2)               |           |          | 
+ cancelled_at                | timestamp without time zone |           |          | 
+ cancelled_by                | uuid                        |           |          | 
+ cancellation_reason         | text                        |           |          | 
+ assigned_crew_id            | uuid                        |           |          | 
+ service_address             | character varying(255)      |           |          | 
+ service_city                | character varying(100)      |           |          | 
+ service_state               | character varying(2)        |           |          | 
+ service_zip                 | character varying(10)       |           |          | 
+ tags                        | jsonb                       |           |          | '[]'::jsonb
+ custom_fields               | jsonb                       |           |          | '{}'::jsonb
+ property_address            | text                        |           |          | 
+ completed_date              | date                        |           |          | 
+ assigned_to                 | uuid[]                      |           |          | 
+ materials_list              | jsonb                       |           |          | 
+ square_footage              | numeric                     |           |          | 
+ workflow_stage              | character varying(100)      |           |          | 
+ ai_optimized_schedule       | timestamp with time zone    |           |          | 
+ weather_delay_hours         | integer                     |           |          | 0
+ actual_labor_hours          | numeric(8,2)                |           |          | 
+ estimated_labor_hours       | numeric(8,2)                |           |          | 
+ variance_percentage         | numeric(5,2)                |           |          | 
+ quality_score               | integer                     |           |          | 
+ safety_incidents            | integer                     |           |          | 0
+ customer_satisfaction_score | integer                     |           |          | 
+ margin_actual               | numeric(12,2)               |           |          | 
+ ai_delay_prediction_hours   | integer                     |           |          | 
+ contract_amount             | numeric(12,2)               |           |          | 
+ current_total               | numeric(12,2)               |           |          | 0
+ latitude                    | numeric(10,8)               |           |          | 
+ longitude                   | numeric(11,8)               |           |          | 
+ job_category                | text                        |           | not null | 'construction'::text
+ job_name                    | text                        |           |          | 
+Indexes:
+    "jobs_pkey" PRIMARY KEY, btree (id)
+    "idx_active_jobs" btree (tenant_id, status) WHERE status::text = ANY (ARRAY['scheduled'::character varying, 'in_progress'::character varying]::text[])
+    "idx_job_dates" btree (scheduled_start, scheduled_end)
+    "idx_jobs_assigned_crew_id" btree (assigned_crew_id)
+    "idx_jobs_created_at" btree (created_at DESC)
+    "idx_jobs_created_by" btree (created_by)
+    "idx_jobs_crew_id" btree (crew_id)
+    "idx_jobs_customer" btree (customer_id)
+    "idx_jobs_customer_id" btree (customer_id)
+    "idx_jobs_dashboard_stats" btree (status, created_at DESC, total_amount) WHERE status::text = ANY (ARRAY['pending'::character varying, 'in_progress'::character varying, 'scheduled'::character varying]::text[])
+    "idx_jobs_estimate_id" btree (estimate_id)
+    "idx_jobs_invoice_id" btree (invoice_id)
+    "idx_jobs_org" btree (organization_id)
+    "idx_jobs_org_id" btree (org_id)
+    "idx_jobs_priority" btree (priority)
+    "idx_jobs_quality" btree (quality_score)
+    "idx_jobs_sales_rep_id" btree (sales_rep_id)
+    "idx_jobs_satisfaction" btree (customer_satisfaction_score)
+    "idx_jobs_scheduled_date" btree (scheduled_date) WHERE scheduled_date IS NOT NULL
+    "idx_jobs_status" btree (status)
+    "idx_jobs_status_date" btree (status, scheduled_date)
+    "idx_jobs_status_scheduled" btree (status, scheduled_date) WHERE status IS NOT NULL AND scheduled_date IS NOT NULL
+    "idx_jobs_tenant_created" btree (tenant_id, created_at DESC)
+    "idx_jobs_tenant_customer" btree (tenant_id, customer_id) WHERE customer_id IS NOT NULL
+    "idx_jobs_tenant_id" btree (tenant_id)
+    "idx_jobs_tenant_status" btree (tenant_id, status)
+    "idx_jobs_workflow_stage" btree (workflow_stage)
+    "jobs_external_id_unique" UNIQUE CONSTRAINT, btree (external_id)
+Check constraints:
+    "chk_job_dates" CHECK (scheduled_end IS NULL OR scheduled_end >= scheduled_start)
+    "job_category_valid" CHECK (job_category = ANY (ARRAY['construction'::text, 'service'::text]))
+Foreign-key constraints:
+    "fk_jobs_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+    "fk_jobs_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    "jobs_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    "jobs_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    "jobs_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    "jobs_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+Referenced by:
+    TABLE "appointments" CONSTRAINT "appointments_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "cad_projects" CONSTRAINT "cad_projects_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "calendar_events_enhanced" CONSTRAINT "calendar_events_enhanced_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "calendar_events" CONSTRAINT "calendar_events_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "change_orders" CONSTRAINT "change_orders_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "compliance_tasks" CONSTRAINT "compliance_tasks_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "contracts" CONSTRAINT "contracts_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "customer_reviews" CONSTRAINT "customer_reviews_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "customer_surveys" CONSTRAINT "customer_surveys_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "daily_field_reports" CONSTRAINT "daily_field_reports_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "disputes" CONSTRAINT "disputes_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "employee_jobs" CONSTRAINT "employee_jobs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "equipment_checkouts" CONSTRAINT "equipment_checkouts_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "equipment_costs" CONSTRAINT "equipment_costs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "equipment_usage" CONSTRAINT "equipment_usage_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "equipment_usage_logs" CONSTRAINT "equipment_usage_logs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "estimates" CONSTRAINT "estimates_converted_job_id_fkey" FOREIGN KEY (converted_job_id) REFERENCES jobs(id)
+    TABLE "estimates" CONSTRAINT "estimates_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "expenses" CONSTRAINT "expenses_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "field_crews" CONSTRAINT "field_crews_current_job_id_fkey" FOREIGN KEY (current_job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "field_inspections" CONSTRAINT "field_inspections_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "field_operations" CONSTRAINT "field_operations_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "estimates" CONSTRAINT "fk_estimates_job" FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE "invoices" CONSTRAINT "fk_invoices_job" FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE "job_materials" CONSTRAINT "fk_job_materials_job" FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE "inventory_usage" CONSTRAINT "inventory_usage_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "invoices" CONSTRAINT "invoices_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "iot_sensors" CONSTRAINT "iot_sensors_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "job_assignments" CONSTRAINT "job_assignments_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_costs" CONSTRAINT "job_costs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "job_documents" CONSTRAINT "job_documents_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "job_equipment" CONSTRAINT "job_equipment_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_expenses" CONSTRAINT "job_expenses_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_labor_entries" CONSTRAINT "job_labor_entries_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_material_usage" CONSTRAINT "job_material_usage_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_milestones" CONSTRAINT "job_milestones_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_notes" CONSTRAINT "job_notes_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_notification_rules" CONSTRAINT "job_notification_rules_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_notifications" CONSTRAINT "job_notifications_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_phases" CONSTRAINT "job_phases_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "job_photos" CONSTRAINT "job_photos_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_pre_job_packets" CONSTRAINT "job_pre_job_packets_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_progress_logs" CONSTRAINT "job_progress_logs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_service_details" CONSTRAINT "job_service_details_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_status_history" CONSTRAINT "job_status_history_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_submittals" CONSTRAINT "job_submittals_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "job_tasks" CONSTRAINT "job_tasks_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "job_weather_constraints" CONSTRAINT "job_weather_constraints_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "media_assets" CONSTRAINT "media_assets_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "project_lifecycles" CONSTRAINT "project_lifecycles_project_id_fkey" FOREIGN KEY (project_id) REFERENCES jobs(id)
+    TABLE "purchase_order_items" CONSTRAINT "purchase_order_items_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "quality_checklists" CONSTRAINT "quality_checklists_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "revenue_transactions" CONSTRAINT "revenue_transactions_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "roof_measurements" CONSTRAINT "roof_measurements_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "roof_systems" CONSTRAINT "roof_systems_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+    TABLE "schedule_events" CONSTRAINT "schedule_events_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "serial_numbers" CONSTRAINT "serial_numbers_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "service_dispatches" CONSTRAINT "service_dispatches_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "service_jobs" CONSTRAINT "service_jobs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "service_tickets" CONSTRAINT "service_tickets_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "service_warranties" CONSTRAINT "service_warranties_related_job_id_fkey" FOREIGN KEY (related_job_id) REFERENCES jobs(id)
+    TABLE "subcontractor_jobs" CONSTRAINT "subcontractor_jobs_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "subcontractor_payments" CONSTRAINT "subcontractor_payments_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "time_clock" CONSTRAINT "time_clock_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "time_entries" CONSTRAINT "time_entries_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "timesheets" CONSTRAINT "timesheets_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "warranties" CONSTRAINT "warranties_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "weather_delays" CONSTRAINT "weather_delays_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+    TABLE "weather_missed_days" CONSTRAINT "weather_missed_days_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    TABLE "work_orders" CONSTRAINT "work_orders_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id)
+Policies (forced row security enabled):
+    POLICY "jobs_service_role_all"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+    POLICY "jobs_tenant_access"
+      TO authenticated
+      USING ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = jobs.customer_id) AND (c.org_id = current_tenant_id())))))
+      WITH CHECK ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = jobs.customer_id) AND (c.org_id = current_tenant_id())))))
+Triggers:
+    enforce_job_tenant_matches_customer BEFORE INSERT OR UPDATE OF customer_id, tenant_id ON jobs FOR EACH ROW EXECUTE FUNCTION validate_job_tenant_matches_customer()
+    job_auto_workflow AFTER UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION auto_workflow_trigger()
+    job_completion_trigger AFTER UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION trigger_quality_check()
+    jobs_sync_trigger AFTER INSERT OR UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION sync_centerpoint_changes()
+    set_job_number BEFORE INSERT ON jobs FOR EACH ROW EXECUTE FUNCTION generate_job_number()
+    tr_audit_jobs AFTER INSERT OR DELETE OR UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION audit_trigger()
+    trg_auto_update_job_status BEFORE INSERT OR UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION auto_update_job_status()
+    trg_enforce_tenant_jobs BEFORE INSERT ON jobs FOR EACH ROW EXECUTE FUNCTION enforce_tenant_isolation()
+
+[INVOICES]
+                                                                                            Table "public.invoices"
+          Column          |            Type             | Collation | Nullable |                                                            Default                                                            
+--------------------------+-----------------------------+-----------+----------+-------------------------------------------------------------------------------------------------------------------------------
+ id                       | uuid                        |           | not null | gen_random_uuid()
+ invoice_number           | character varying(50)       |           | not null | 
+ customer_id              | uuid                        |           | not null | 
+ estimate_id              | uuid                        |           |          | 
+ job_id                   | uuid                        |           |          | 
+ title                    | character varying(200)      |           | not null | 
+ description              | text                        |           |          | 
+ invoice_date             | date                        |           | not null | 
+ due_date                 | date                        |           | not null | 
+ subtotal_cents           | integer                     |           | not null | 
+ tax_cents                | integer                     |           |          | 
+ discount_cents           | integer                     |           |          | 
+ total_cents              | integer                     |           | not null | 
+ amount_paid_cents        | integer                     |           |          | 
+ balance_cents            | integer                     |           | not null | 
+ line_items               | json                        |           | not null | '[]'::json
+ tax_details              | json                        |           |          | 
+ terms_conditions         | text                        |           |          | 
+ notes                    | text                        |           |          | 
+ status                   | character varying(20)       |           |          | 
+ sent_date                | timestamp without time zone |           |          | 
+ viewed_date              | timestamp without time zone |           |          | 
+ paid_date                | timestamp without time zone |           |          | 
+ void_date                | timestamp without time zone |           |          | 
+ void_reason              | text                        |           |          | 
+ payment_method           | character varying(50)       |           |          | 
+ payment_reference        | character varying(100)      |           |          | 
+ stripe_invoice_id        | character varying(100)      |           |          | 
+ quickbooks_invoice_id    | character varying(100)      |           |          | 
+ created_by               | uuid                        |           |          | 
+ created_at               | timestamp without time zone |           |          | now()
+ updated_at               | timestamp without time zone |           |          | now()
+ org_id                   | uuid                        |           | not null | '00000000-0000-0000-0000-000000000001'::uuid
+ external_id              | text                        |           |          | 
+ organization_id          | uuid                        |           |          | '00000000-0000-0000-0000-000000000001'::uuid
+ subtotal_amount          | bigint                      |           |          | 0
+ tax_amount               | bigint                      |           |          | 0
+ total_amount             | bigint                      |           |          | 0
+ amount_cents             | bigint                      |           |          | 
+ sent_at                  | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ paid_at                  | timestamp without time zone |           |          | 
+ total_amount_cents       | bigint                      |           |          | 
+ paid_amount              | numeric(12,2)               |           |          | 0
+ stripe_payment_intent_id | character varying(255)      |           |          | 
+ payment_status           | character varying(50)       |           |          | 'pending'::character varying
+ amount                   | numeric(10,2)               |           |          | 0
+ customer_name            | character varying(255)      |           |          | 
+ customer_email           | character varying(255)      |           |          | 
+ payment_terms            | character varying(50)       |           |          | 
+ balance_due              | numeric(12,2)               |           |          | 
+ subtotal                 | numeric(15,2)               |           |          | 
+ tax                      | numeric(15,2)               |           |          | 
+ total                    | numeric(15,2)               |           |          | 
+ items                    | jsonb                       |           |          | 
+ stripe_payment_link      | text                        |           |          | 
+ stripe_price_id          | text                        |           |          | 
+ automated_reminders      | integer                     |           |          | 0
+ last_reminder_sent       | timestamp without time zone |           |          | 
+ issue_date               | date                        |           |          | CURRENT_DATE
+ internal_notes           | text                        |           |          | 
+ reminder_sent_count      | integer                     |           |          | 0
+ last_reminder_date       | timestamp with time zone    |           |          | 
+ overdue_date             | date                        |           |          | 
+ tenant_id                | uuid                        |           | not null | 
+ payment_predicted_date   | date                        |           |          | 
+ ai_collection_risk       | character varying(50)       |           |          | 
+ late_fee_amount          | numeric(10,2)               |           |          | 0
+ discount_amount          | numeric(10,2)               |           |          | 0
+ discount_reason          | text                        |           |          | 
+ amount_due               | numeric(12,2)               |           |          | generated always as ((COALESCE(total_amount::numeric / 100::numeric, 0::numeric) - COALESCE(paid_amount, 0::numeric))) stored
+ ai_payment_prediction    | jsonb                       |           |          | '{}'::jsonb
+ ai_collection_strategy   | jsonb                       |           |          | '{}'::jsonb
+ ai_risk_flags            | jsonb                       |           |          | '[]'::jsonb
+ ai_recommended_followup  | jsonb                       |           |          | '{}'::jsonb
+ quality_score            | integer                     |           |          | 100
+ last_ai_analysis         | timestamp with time zone    |           |          | 
+ metadata                 | jsonb                       |           |          | '{}'::jsonb
+Indexes:
+    "invoices_pkey" PRIMARY KEY, btree (id)
+    "idx_customer_ltv" btree (customer_id, status, total_amount) WHERE status::text = 'paid'::text
+    "idx_invoice_date" btree (invoice_date)
+    "idx_invoices_amount_due" btree (amount_due) WHERE amount_due > 0::numeric
+    "idx_invoices_balance_due" btree (balance_due) WHERE balance_due > 0::numeric
+    "idx_invoices_collection_risk" btree (ai_collection_risk)
+    "idx_invoices_created_at" btree (created_at DESC)
+    "idx_invoices_created_by" btree (created_by) WHERE created_by IS NOT NULL
+    "idx_invoices_customer" btree (customer_id)
+    "idx_invoices_customer_id" btree (customer_id)
+    "idx_invoices_due_date" btree (due_date)
+    "idx_invoices_estimate_id" btree (estimate_id)
+    "idx_invoices_invoice_number" btree (invoice_number)
+    "idx_invoices_issue_date" btree (issue_date)
+    "idx_invoices_job" btree (job_id)
+    "idx_invoices_job_id" btree (job_id) WHERE job_id IS NOT NULL
+    "idx_invoices_last_analysis" btree (last_ai_analysis)
+    "idx_invoices_org_id" btree (org_id)
+    "idx_invoices_organization_id" btree (organization_id)
+    "idx_invoices_overdue" btree (status, due_date) WHERE (status::text = ANY (ARRAY['sent'::character varying, 'overdue'::character varying]::text[])) AND due_date IS NOT NULL
+    "idx_invoices_paid_date" btree (paid_date) WHERE paid_date IS NOT NULL
+    "idx_invoices_payment_status" btree (payment_status)
+    "idx_invoices_predicted_date" btree (payment_predicted_date)
+    "idx_invoices_quality_score" btree (quality_score)
+    "idx_invoices_quickbooks_invoice_id" btree (quickbooks_invoice_id)
+    "idx_invoices_revenue" btree (status, paid_date, total_amount) WHERE status::text = 'paid'::text AND paid_date IS NOT NULL
+    "idx_invoices_status" btree (status)
+    "idx_invoices_status_created" btree (status, created_at DESC)
+    "idx_invoices_status_date" btree (status, invoice_date DESC)
+    "idx_invoices_stripe_invoice_id" btree (stripe_invoice_id)
+    "idx_invoices_stripe_payment_inten" btree (stripe_payment_intent_id)
+    "idx_invoices_stripe_price_id" btree (stripe_price_id)
+    "idx_invoices_tenant_customer" btree (tenant_id, customer_id)
+    "idx_invoices_tenant_due" btree (tenant_id, due_date)
+    "idx_invoices_tenant_id" btree (tenant_id)
+    "idx_invoices_tenant_payment_status" btree (tenant_id, payment_status)
+    "idx_invoices_tenant_status" btree (tenant_id, status)
+    "idx_pending_invoices" btree (tenant_id, status) WHERE status::text = ANY (ARRAY['pending'::character varying, 'overdue'::character varying]::text[])
+    "invoices_external_id_unique" UNIQUE CONSTRAINT, btree (external_id)
+    "ix_invoices_invoice_number" UNIQUE, btree (invoice_number)
+    "unique_invoice_number_per_tenant" UNIQUE CONSTRAINT, btree (tenant_id, invoice_number)
+Check constraints:
+    "chk_invoice_amounts" CHECK (total_amount >= 0 AND balance_due >= 0::numeric AND balance_due <= total_amount::numeric)
+    "invoices_quality_score_check" CHECK (quality_score >= 0 AND quality_score <= 100)
+Foreign-key constraints:
+    "fk_invoices_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE RESTRICT
+    "fk_invoices_job" FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE SET NULL
+    "invoices_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    "invoices_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    "invoices_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    "invoices_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    "invoices_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "accounting_transactions" CONSTRAINT "accounting_transactions_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+    TABLE "campaign_enrollments" CONSTRAINT "campaign_enrollments_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "collection_case_invoices" CONSTRAINT "collection_case_invoices_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "collections_actions" CONSTRAINT "collections_actions_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "collections_tracking" CONSTRAINT "collections_tracking_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "credit_write_offs" CONSTRAINT "credit_write_offs_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "dispute_refunds" CONSTRAINT "dispute_refunds_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "disputes" CONSTRAINT "disputes_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "estimates" CONSTRAINT "estimates_converted_to_invoice_id_fkey" FOREIGN KEY (converted_to_invoice_id) REFERENCES invoices(id)
+    TABLE "expenses" CONSTRAINT "expenses_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "financial_transactions" CONSTRAINT "financial_transactions_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "invoice_items" CONSTRAINT "fk_invoice_items_invoice" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE "payments" CONSTRAINT "fk_payments_invoice" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+    TABLE "invoice_activities" CONSTRAINT "invoice_activities_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "invoice_items" CONSTRAINT "invoice_items_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "invoice_line_items" CONSTRAINT "invoice_line_items_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "invoice_payments" CONSTRAINT "invoice_payments_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    TABLE "jobs" CONSTRAINT "jobs_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "payment_applications" CONSTRAINT "payment_applications_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "payments" CONSTRAINT "payments_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "recurring_invoice_instances" CONSTRAINT "recurring_invoice_instances_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "revenue_transactions" CONSTRAINT "revenue_transactions_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    TABLE "service_tickets" CONSTRAINT "service_tickets_invoice_id_fkey" FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+Policies (forced row security enabled):
+    POLICY "invoices_service_role_all"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+    POLICY "invoices_tenant_access"
+      TO authenticated
+      USING ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = invoices.customer_id) AND (c.org_id = current_tenant_id())))))
+      WITH CHECK ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = invoices.customer_id) AND (c.org_id = current_tenant_id())))))
+Triggers:
+    enforce_invoice_tenant BEFORE INSERT OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION enforce_tenant_from_customer()
+    invoices_sync_trigger AFTER INSERT OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION sync_centerpoint_changes()
+    set_invoices_updated_at BEFORE UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    tr_audit_invoices AFTER INSERT OR DELETE OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION audit_trigger()
+    trg_auto_update_invoice_status BEFORE INSERT OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION auto_update_invoice_status()
+    trg_enforce_tenant_invoices BEFORE INSERT ON invoices FOR EACH ROW EXECUTE FUNCTION enforce_tenant_isolation()
+    trigger_update_credit_balance AFTER INSERT OR DELETE OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION update_credit_profile_balance()
+    update_invoices_updated_at BEFORE UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+
+[ESTIMATES]
+                                                    Table "public.estimates"
+           Column           |            Type             | Collation | Nullable |                   Default                    
+----------------------------+-----------------------------+-----------+----------+----------------------------------------------
+ id                         | uuid                        |           | not null | gen_random_uuid()
+ inspection_id              | uuid                        |           |          | 
+ project_id                 | uuid                        |           |          | 
+ estimate_number            | character varying(50)       |           | not null | 
+ client_name                | character varying(200)      |           |          | 
+ client_email               | character varying(255)      |           |          | 
+ client_phone               | character varying(50)       |           |          | 
+ subtotal                   | double precision            |           |          | 0
+ tax_rate                   | double precision            |           |          | 
+ tax_amount                 | double precision            |           |          | 
+ discount_amount            | double precision            |           |          | 
+ total                      | double precision            |           |          | 0
+ line_items                 | json                        |           | not null | '[]'::json
+ status                     | character varying(20)       |           |          | 
+ valid_until                | date                        |           |          | 
+ created_by_id              | uuid                        |           |          | 
+ sent_at                    | timestamp without time zone |           |          | 
+ approved_at                | timestamp without time zone |           |          | 
+ created_at                 | timestamp without time zone |           |          | now()
+ updated_at                 | timestamp without time zone |           |          | now()
+ customer_id                | uuid                        |           | not null | 
+ title                      | character varying(200)      |           |          | 
+ description                | text                        |           |          | 
+ estimate_date              | date                        |           | not null | 
+ subtotal_cents             | integer                     |           | not null | 
+ tax_cents                  | integer                     |           |          | 
+ discount_cents             | integer                     |           |          | 
+ total_cents                | integer                     |           | not null | 
+ terms_conditions           | text                        |           |          | 
+ sent_date                  | timestamp without time zone |           |          | 
+ viewed_date                | timestamp without time zone |           |          | 
+ accepted_date              | timestamp without time zone |           |          | 
+ declined_date              | timestamp without time zone |           |          | 
+ converted_to_invoice_id    | uuid                        |           |          | 
+ created_by                 | uuid                        |           |          | 
+ org_id                     | uuid                        |           | not null | '00000000-0000-0000-0000-000000000001'::uuid
+ external_id                | text                        |           |          | 
+ job_id                     | uuid                        |           |          | 
+ notes                      | text                        |           |          | 
+ organization_id            | uuid                        |           |          | '00000000-0000-0000-0000-000000000001'::uuid
+ subtotal_amount            | bigint                      |           |          | 0
+ total_amount               | bigint                      |           |          | 0
+ name                       | character varying(255)      |           |          | 
+ valid_from                 | date                        |           |          | CURRENT_DATE
+ probability                | numeric(5,2)                |           |          | 50.00
+ sections                   | jsonb                       |           |          | '[]'::jsonb
+ payment_terms              | text                        |           |          | 
+ metadata                   | jsonb                       |           |          | '{}'::jsonb
+ customer_name              | character varying(255)      |           |          | 
+ customer_email             | character varying(255)      |           |          | 
+ customer_phone             | character varying(50)       |           |          | 
+ property_address           | text                        |           |          | 
+ roof_type                  | character varying(50)       |           |          | 
+ roof_size_sqft             | integer                     |           |          | 
+ project_address            | text                        |           |          | 
+ converted_to_job           | boolean                     |           |          | false
+ converted_at               | timestamp with time zone    |           |          | 
+ lead_id                    | uuid                        |           |          | 
+ project_name               | character varying(255)      |           |          | 
+ discount_percent           | numeric(5,2)                |           |          | 0
+ follow_up_count            | integer                     |           |          | 0
+ last_follow_up             | timestamp without time zone |           |          | 
+ conversion_probability     | numeric(3,2)                |           |          | 0.5
+ tenant_id                  | uuid                        |           | not null | 
+ created_from_template_id   | uuid                        |           |          | 
+ ai_confidence              | numeric(3,2)                |           |          | 0.85
+ ai_estimate_intelligence   | jsonb                       |           |          | '{}'::jsonb
+ ai_cost_predictions        | jsonb                       |           |          | '{}'::jsonb
+ property_location          | geometry(Point,4326)        |           |          | 
+ property_boundary          | geometry(Polygon,4326)      |           |          | 
+ total_roof_area            | numeric(10,2)               |           |          | 
+ roof_sections_count        | integer                     |           |          | 
+ complexity_rating          | integer                     |           |          | 
+ ai_confidence_score        | numeric(4,2)                |           |          | 
+ weather_risk_rating        | integer                     |           |          | 
+ estimated_duration_days    | integer                     |           |          | 
+ recommended_crew_size      | integer                     |           |          | 
+ margin_percentage          | numeric(5,2)                |           |          | 
+ labor_cost                 | numeric(10,2)               |           |          | 
+ materials_cost             | numeric(10,2)               |           |          | 
+ ai_competitive_analysis    | jsonb                       |           |          | '{}'::jsonb
+ ai_bid_strategy            | jsonb                       |           |          | '{}'::jsonb
+ ai_win_probability         | numeric(5,2)                |           |          | 
+ ai_material_optimization   | jsonb                       |           |          | '{}'::jsonb
+ ai_pricing_recommendations | jsonb                       |           |          | '{}'::jsonb
+ quality_score              | integer                     |           |          | 100
+ last_ai_analysis           | timestamp with time zone    |           |          | 
+ converted_job_id           | uuid                        |           |          | 
+ estimated_days             | integer                     |           |          | 
+ signature_data             | text                        |           |          | 
+ signed_at                  | timestamp with time zone    |           |          | 
+ signed_by                  | text                        |           |          | 
+ signer_ip                  | text                        |           |          | 
+ takeoff_data               | jsonb                       |           |          | 
+ custom_fields              | jsonb                       |           |          | '{}'::jsonb
+ itb_id                     | uuid                        |           |          | 
+Indexes:
+    "estimates_pkey" PRIMARY KEY, btree (id)
+    "estimates_estimate_number_key" UNIQUE CONSTRAINT, btree (estimate_number)
+    "estimates_external_id_unique" UNIQUE CONSTRAINT, btree (external_id)
+    "idx_estimate_status" btree (status)
+    "idx_estimates_boundary" gist (property_boundary)
+    "idx_estimates_converted_invoice" btree (converted_to_invoice_id) WHERE converted_to_invoice_id IS NOT NULL
+    "idx_estimates_converted_job" btree (converted_job_id)
+    "idx_estimates_converted_to_invoice" btree (converted_to_invoice_id)
+    "idx_estimates_created_at" btree (created_at DESC)
+    "idx_estimates_created_by" btree (created_by)
+    "idx_estimates_created_by_id" btree (created_by_id)
+    "idx_estimates_created_from_templat" btree (created_from_template_id)
+    "idx_estimates_customer_id" btree (customer_id)
+    "idx_estimates_estimate_number" btree (estimate_number)
+    "idx_estimates_inspection_id" btree (inspection_id)
+    "idx_estimates_itb_id" btree (itb_id)
+    "idx_estimates_job_id" btree (job_id)
+    "idx_estimates_lead_id" btree (lead_id)
+    "idx_estimates_location" gist (property_location)
+    "idx_estimates_org_id" btree (org_id)
+    "idx_estimates_organization_id" btree (organization_id)
+    "idx_estimates_project_id" btree (project_id)
+    "idx_estimates_quality_score" btree (quality_score)
+    "idx_estimates_signed_at" btree (signed_at)
+    "idx_estimates_status_tenant" btree (status, tenant_id)
+    "idx_estimates_template" btree (created_from_template_id) WHERE created_from_template_id IS NOT NULL
+    "idx_estimates_tenant_customer" btree (tenant_id, customer_id)
+    "idx_estimates_tenant_id" btree (tenant_id)
+    "idx_estimates_valid_until" btree (valid_until)
+    "idx_estimates_win_probability" btree (ai_win_probability) WHERE ai_win_probability IS NOT NULL
+    "ix_estimates_estimate_number" UNIQUE, btree (estimate_number)
+Check constraints:
+    "estimates_ai_win_probability_check" CHECK (ai_win_probability >= 0::numeric AND ai_win_probability <= 100::numeric)
+    "estimates_quality_score_check" CHECK (quality_score >= 0 AND quality_score <= 100)
+Foreign-key constraints:
+    "estimates_converted_job_id_fkey" FOREIGN KEY (converted_job_id) REFERENCES jobs(id)
+    "estimates_converted_to_invoice_id_fkey" FOREIGN KEY (converted_to_invoice_id) REFERENCES invoices(id)
+    "estimates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    "estimates_created_by_id_fkey" FOREIGN KEY (created_by_id) REFERENCES users(id)
+    "estimates_created_from_template_id_fkey" FOREIGN KEY (created_from_template_id) REFERENCES estimate_templates(id) ON DELETE SET NULL
+    "estimates_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    "estimates_inspection_id_fkey" FOREIGN KEY (inspection_id) REFERENCES inspections(id)
+    "estimates_itb_id_fkey" FOREIGN KEY (itb_id) REFERENCES itb_projects(id)
+    "estimates_job_id_fkey" FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    "estimates_project_id_fkey" FOREIGN KEY (project_id) REFERENCES projects(id)
+    "fk_estimates_customer" FOREIGN KEY (customer_id) REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+    "fk_estimates_job" FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE CASCADE
+    "fk_estimates_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "assembly_usage" CONSTRAINT "assembly_usage_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "cad_drawings" CONSTRAINT "cad_drawings_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "cad_projects" CONSTRAINT "cad_projects_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "cad_takeoff_features" CONSTRAINT "cad_takeoff_features_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "calendar_events" CONSTRAINT "calendar_events_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "contracts" CONSTRAINT "contracts_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "estimate_activity" CONSTRAINT "estimate_activity_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimate_approvals" CONSTRAINT "estimate_approvals_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimate_compliance_checks" CONSTRAINT "estimate_compliance_checks_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimate_items" CONSTRAINT "estimate_items_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "estimate_line_items" CONSTRAINT "estimate_line_items_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimate_templates" CONSTRAINT "estimate_templates_base_estimate_id_fkey" FOREIGN KEY (base_estimate_id) REFERENCES estimates(id) ON DELETE SET NULL
+    TABLE "estimation_ai_insights" CONSTRAINT "estimation_ai_insights_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimation_assemblies" CONSTRAINT "estimation_assemblies_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimation_labor" CONSTRAINT "estimation_labor_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimation_materials" CONSTRAINT "estimation_materials_estimation_id_fkey" FOREIGN KEY (estimation_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "estimate_items" CONSTRAINT "fk_estimate_items_estimate" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE "installability_windows" CONSTRAINT "installability_windows_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "invoices" CONSTRAINT "invoices_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "jobs" CONSTRAINT "jobs_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    TABLE "roof_systems" CONSTRAINT "roof_systems_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE SET NULL
+    TABLE "specification_requirements" CONSTRAINT "specification_requirements_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "takeoff_layer_assemblies" CONSTRAINT "takeoff_layer_assemblies_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "takeoff_projects" CONSTRAINT "takeoff_projects_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+    TABLE "takeoff_quantities" CONSTRAINT "takeoff_quantities_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES estimates(id) ON DELETE CASCADE
+Policies (forced row security enabled):
+    POLICY "estimates_service_role_all"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+    POLICY "estimates_tenant_access"
+      TO authenticated
+      USING ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = estimates.customer_id) AND (c.org_id = current_tenant_id())))))
+      WITH CHECK ((EXISTS ( SELECT 1
+   FROM customers c
+  WHERE ((c.id = estimates.customer_id) AND (c.org_id = current_tenant_id())))))
+Triggers:
+    enforce_estimate_tenant BEFORE INSERT OR UPDATE ON estimates FOR EACH ROW EXECUTE FUNCTION enforce_tenant_from_customer()
+    estimates_sync_trigger AFTER INSERT OR UPDATE ON estimates FOR EACH ROW EXECUTE FUNCTION sync_centerpoint_changes()
+    tr_audit_estimates AFTER INSERT OR DELETE OR UPDATE ON estimates FOR EACH ROW EXECUTE FUNCTION audit_trigger()
+    trg_enforce_tenant_estimates BEFORE INSERT ON estimates FOR EACH ROW EXECUTE FUNCTION enforce_tenant_isolation()
+    update_estimates_updated_at BEFORE UPDATE ON estimates FOR EACH ROW EXECUTE FUNCTION update_updated_at()
+
+[USERS (public)]
+                                            Table "public.users"
+          Column          |           Type           | Collation | Nullable |            Default            
+--------------------------+--------------------------+-----------+----------+-------------------------------
+ id                       | uuid                     |           | not null | uuid_generate_v4()
+ email                    | text                     |           | not null | 
+ password_hash            | text                     |           | not null | 
+ created_at               | timestamp with time zone |           |          | now()
+ tenant_id                | uuid                     |           |          | 
+ name                     | character varying(255)   |           |          | 
+ company                  | character varying(255)   |           |          | 
+ phone                    | character varying(50)    |           |          | 
+ role                     | character varying(50)    |           |          | 'customer'::character varying
+ status                   | character varying(50)    |           |          | 'active'::character varying
+ email_verified           | boolean                  |           |          | false
+ last_login               | timestamp with time zone |           |          | 
+ last_seen                | timestamp with time zone |           |          | 
+ updated_at               | timestamp with time zone |           |          | now()
+ marketing_emails_consent | boolean                  |           |          | false
+ unsubscribed_at          | timestamp with time zone |           |          | 
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+    "idx_users_email" btree (email)
+    "idx_users_tenant_id" btree (tenant_id)
+    "users_email_key" UNIQUE CONSTRAINT, btree (email)
+Foreign-key constraints:
+    "users_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "activities" CONSTRAINT "activities_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "ai_logs" CONSTRAINT "ai_logs_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "ai_usage_logs" CONSTRAINT "ai_usage_logs_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "analytics_events" CONSTRAINT "analytics_events_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "api_keys" CONSTRAINT "api_keys_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "campaigns" CONSTRAINT "campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "change_orders" CONSTRAINT "change_orders_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id)
+    TABLE "change_orders" CONSTRAINT "change_orders_requested_by_fkey" FOREIGN KEY (requested_by) REFERENCES users(id)
+    TABLE "channel_members" CONSTRAINT "channel_members_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "commissions" CONSTRAINT "commissions_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "communications" CONSTRAINT "communications_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "contacts" CONSTRAINT "contacts_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "contracts" CONSTRAINT "contracts_company_signed_by_fkey" FOREIGN KEY (company_signed_by) REFERENCES users(id)
+    TABLE "contracts" CONSTRAINT "contracts_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "crew_members" CONSTRAINT "crew_members_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "crews" CONSTRAINT "crews_foreman_id_fkey" FOREIGN KEY (foreman_id) REFERENCES users(id)
+    TABLE "customer_segments" CONSTRAINT "customer_segments_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "daily_field_reports" CONSTRAINT "daily_field_reports_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id)
+    TABLE "daily_field_reports" CONSTRAINT "daily_field_reports_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "dashboard_insights" CONSTRAINT "dashboard_insights_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "document_access_log" CONSTRAINT "document_access_log_accessed_by_fkey" FOREIGN KEY (accessed_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "document_shares" CONSTRAINT "document_shares_shared_by_fkey" FOREIGN KEY (shared_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "document_templates" CONSTRAINT "document_templates_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "email_verifications" CONSTRAINT "email_verifications_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "equipment" CONSTRAINT "equipment_assigned_to_user_fkey" FOREIGN KEY (assigned_to_user) REFERENCES users(id)
+    TABLE "equipment_usage" CONSTRAINT "equipment_usage_used_by_fkey" FOREIGN KEY (used_by) REFERENCES users(id)
+    TABLE "estimate_activity" CONSTRAINT "estimate_activity_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "estimate_templates" CONSTRAINT "estimate_templates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "estimates" CONSTRAINT "estimates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "estimates" CONSTRAINT "estimates_created_by_id_fkey" FOREIGN KEY (created_by_id) REFERENCES users(id)
+    TABLE "expenses" CONSTRAINT "expenses_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id)
+    TABLE "expenses" CONSTRAINT "expenses_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "expenses" CONSTRAINT "expenses_employee_id_fkey" FOREIGN KEY (employee_id) REFERENCES users(id)
+    TABLE "inspections" CONSTRAINT "inspections_inspector_id_fkey" FOREIGN KEY (inspector_id) REFERENCES users(id)
+    TABLE "integrations" CONSTRAINT "integrations_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "invoices" CONSTRAINT "invoices_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "job_documents" CONSTRAINT "job_documents_uploaded_by_fkey" FOREIGN KEY (uploaded_by) REFERENCES users(id)
+    TABLE "job_expenses" CONSTRAINT "job_expenses_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_expenses" CONSTRAINT "job_expenses_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_labor_entries" CONSTRAINT "job_labor_entries_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_material_usage" CONSTRAINT "job_material_usage_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_notification_rules" CONSTRAINT "job_notification_rules_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_notifications" CONSTRAINT "job_notifications_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_status_history" CONSTRAINT "job_status_history_changed_by_fkey" FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "job_tasks" CONSTRAINT "job_tasks_assigned_to_fkey" FOREIGN KEY (assigned_to) REFERENCES users(id)
+    TABLE "jobs" CONSTRAINT "jobs_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "leads" CONSTRAINT "leads_assigned_to_fkey" FOREIGN KEY (assigned_to) REFERENCES users(id)
+    TABLE "leads" CONSTRAINT "leads_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "locations" CONSTRAINT "locations_manager_id_fkey" FOREIGN KEY (manager_id) REFERENCES users(id)
+    TABLE "materials_master" CONSTRAINT "materials_master_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "notifications" CONSTRAINT "notifications_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "opportunities" CONSTRAINT "opportunities_assigned_to_fkey" FOREIGN KEY (assigned_to) REFERENCES users(id)
+    TABLE "opportunities" CONSTRAINT "opportunities_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "payments" CONSTRAINT "payments_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "project_members" CONSTRAINT "project_members_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "archive.project_tasks" CONSTRAINT "project_tasks_assignee_id_fkey" FOREIGN KEY (assignee_id) REFERENCES users(id)
+    TABLE "archive.project_tasks" CONSTRAINT "project_tasks_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "projects" CONSTRAINT "projects_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES users(id)
+    TABLE "purchases" CONSTRAINT "purchases_buyer_id_fkey" FOREIGN KEY (buyer_id) REFERENCES users(id)
+    TABLE "quality_checklists" CONSTRAINT "quality_checklists_inspector_id_fkey" FOREIGN KEY (inspector_id) REFERENCES users(id)
+    TABLE "reviews" CONSTRAINT "reviews_reviewer_id_fkey" FOREIGN KEY (reviewer_id) REFERENCES users(id)
+    TABLE "sales_goals" CONSTRAINT "sales_goals_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "sales_goals" CONSTRAINT "sales_goals_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "saved_searches" CONSTRAINT "saved_searches_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "sessions" CONSTRAINT "sessions_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "archive.task_comments" CONSTRAINT "task_comments_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "task_status_history" CONSTRAINT "task_status_history_changed_by_fkey" FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "archive.task_templates" CONSTRAINT "task_templates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    TABLE "team_members" CONSTRAINT "team_members_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "teams" CONSTRAINT "teams_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES users(id)
+    TABLE "time_entries" CONSTRAINT "time_entries_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id)
+    TABLE "time_entries" CONSTRAINT "time_entries_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "user_notification_preferences" CONSTRAINT "user_notification_preferences_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "warranties" CONSTRAINT "warranties_registered_by_fkey" FOREIGN KEY (registered_by) REFERENCES users(id)
+    TABLE "warranty_claims" CONSTRAINT "warranty_claims_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id)
+    TABLE "warranty_claims" CONSTRAINT "warranty_claims_decision_by_fkey" FOREIGN KEY (decision_by) REFERENCES users(id)
+    TABLE "warranty_claims" CONSTRAINT "warranty_claims_inspector_id_fkey" FOREIGN KEY (inspector_id) REFERENCES users(id)
+    TABLE "warranty_inspections" CONSTRAINT "warranty_inspections_inspector_id_fkey" FOREIGN KEY (inspector_id) REFERENCES users(id)
+    TABLE "warranty_transfers" CONSTRAINT "warranty_transfers_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES users(id)
+Policies (forced row security enabled):
+    POLICY "users_self_access" FOR SELECT
+      TO authenticated
+      USING ((id = auth.uid()))
+    POLICY "users_service_role_all"
+      TO service_role
+      USING (true)
+      WITH CHECK (true)
+
+[TENANTS]
+                                                 Table "public.tenants"
+         Column         |            Type             | Collation | Nullable |                  Default                  
+------------------------+-----------------------------+-----------+----------+-------------------------------------------
+ id                     | uuid                        |           | not null | gen_random_uuid()
+ subdomain              | character varying(100)      |           | not null | 
+ company_name           | character varying(255)      |           | not null | 
+ owner_email            | character varying(255)      |           | not null | 
+ subscription_tier      | character varying(50)       |           |          | 'professional'::character varying
+ subscription_status    | character varying(50)       |           |          | 'trialing'::character varying
+ stripe_customer_id     | character varying(255)      |           |          | 
+ stripe_subscription_id | character varying(255)      |           |          | 
+ trial_ends_at          | timestamp without time zone |           |          | 
+ activated_agents       | text[]                      |           |          | 
+ schema_name            | character varying(100)      |           | not null | 
+ created_at             | timestamp without time zone |           |          | now()
+ updated_at             | timestamp without time zone |           |          | now()
+ slug                   | text                        |           |          | 
+ status                 | text                        |           |          | 'active'::text
+ name                   | character varying(255)      |           | not null | 'Default Company Name'::character varying
+ settings               | jsonb                       |           |          | '{}'::jsonb
+Indexes:
+    "tenants_pkey" PRIMARY KEY, btree (id)
+    "idx_tenants_owner_email" btree (owner_email)
+    "idx_tenants_stripe_customer" btree (stripe_customer_id)
+    "idx_tenants_stripe_customer_id" btree (stripe_customer_id)
+    "idx_tenants_stripe_subscription_id" btree (stripe_subscription_id)
+    "idx_tenants_subdomain" btree (subdomain)
+    "idx_tenants_subscription_status" btree (subscription_status)
+    "tenants_schema_name_key" UNIQUE CONSTRAINT, btree (schema_name)
+    "tenants_subdomain_key" UNIQUE CONSTRAINT, btree (subdomain)
+Referenced by:
+    TABLE "ai_dispatch_recommendations" CONSTRAINT "ai_dispatch_recommendations_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "ai_job_action_approvals" CONSTRAINT "ai_job_action_approvals_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "audit_logs" CONSTRAINT "audit_logs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "audit_trail" CONSTRAINT "audit_trail_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "collections_actions" CONSTRAINT "collections_actions_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "compliance_records" CONSTRAINT "compliance_records_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "crew_assignments" CONSTRAINT "crew_assignments_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "customer_portals" CONSTRAINT "customer_portals_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "customer_reviews" CONSTRAINT "customer_reviews_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "customer_surveys" CONSTRAINT "customer_surveys_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "email_assignment_rules" CONSTRAINT "email_assignment_rules_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "email_inbox_activity" CONSTRAINT "email_inbox_activity_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "email_inbox_config" CONSTRAINT "email_inbox_config_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "email_inbox" CONSTRAINT "email_inbox_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "employee_feedback" CONSTRAINT "employee_feedback_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "equipment_maintenance_logs" CONSTRAINT "equipment_maintenance_logs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "equipment_usage" CONSTRAINT "equipment_usage_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "estimate_revisions" CONSTRAINT "estimate_revisions_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimates_advanced" CONSTRAINT "estimates_advanced_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_assemblies" CONSTRAINT "estimating_assemblies_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_assembly_materials" CONSTRAINT "estimating_assembly_materials_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_drawing_sets" CONSTRAINT "estimating_drawing_sets_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_dxf_layers" CONSTRAINT "estimating_dxf_layers_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_estimate_flags" CONSTRAINT "estimating_estimate_flags_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_estimate_items" CONSTRAINT "estimating_estimate_items_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_estimates" CONSTRAINT "estimating_estimates_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_installability_windows" CONSTRAINT "estimating_installability_windows_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_itb_files" CONSTRAINT "estimating_itb_files_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_itb_requests" CONSTRAINT "estimating_itb_requests_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_material_constraints" CONSTRAINT "estimating_material_constraints_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_materials" CONSTRAINT "estimating_materials_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_schedule_plans" CONSTRAINT "estimating_schedule_plans_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_takeoff_quantities" CONSTRAINT "estimating_takeoff_quantities_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimating_weather_hourly_cache" CONSTRAINT "estimating_weather_hourly_cache_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "finance_audit_log" CONSTRAINT "finance_audit_log_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "financial_accounts" CONSTRAINT "financial_accounts_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "financial_transactions" CONSTRAINT "financial_transactions_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "crews" CONSTRAINT "fk_crews_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "customers" CONSTRAINT "fk_customers_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "employees" CONSTRAINT "fk_employees_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "equipment" CONSTRAINT "fk_equipment_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "estimates" CONSTRAINT "fk_estimates_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "inventory_items" CONSTRAINT "fk_inventory_items_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "jobs" CONSTRAINT "fk_jobs_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "leads" CONSTRAINT "fk_leads_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+    TABLE "payments" CONSTRAINT "fk_payments_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "subscriptions" CONSTRAINT "fk_subscriptions_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "time_entries" CONSTRAINT "fk_time_entries_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "vendors" CONSTRAINT "fk_vendors_tenant" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "follow_ups" CONSTRAINT "follow_ups_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "hr_pto_requests" CONSTRAINT "hr_pto_requests_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "installability_windows" CONSTRAINT "installability_windows_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "invitations" CONSTRAINT "invitations_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "invoices" CONSTRAINT "invoices_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "itb_projects" CONSTRAINT "itb_projects_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "mrg_users" CONSTRAINT "mrg_users_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "orders" CONSTRAINT "orders_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "payroll_entries" CONSTRAINT "payroll_entries_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "payroll_runs" CONSTRAINT "payroll_runs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "permits" CONSTRAINT "permits_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "products" CONSTRAINT "products_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "profit_loss_reports" CONSTRAINT "profit_loss_reports_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "projects" CONSTRAINT "projects_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "purchase_order_receipts" CONSTRAINT "purchase_order_receipts_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "quickbooks_connections" CONSTRAINT "quickbooks_connections_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "quickbooks_entity_mappings" CONSTRAINT "quickbooks_entity_mappings_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "quickbooks_sync_logs" CONSTRAINT "quickbooks_sync_logs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "referral_programs" CONSTRAINT "referral_programs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "safety_incidents" CONSTRAINT "safety_incidents_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "scheduled_events" CONSTRAINT "scheduled_events_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "seo_blog_posts" CONSTRAINT "seo_blog_posts_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "service_agreements" CONSTRAINT "service_agreements_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "service_history" CONSTRAINT "service_history_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "service_materials_library" CONSTRAINT "service_materials_library_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "service_properties" CONSTRAINT "service_properties_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "service_tickets" CONSTRAINT "service_tickets_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "subcontractors" CONSTRAINT "subcontractors_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "support_tickets" CONSTRAINT "support_tickets_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "takeoff_layer_assemblies" CONSTRAINT "takeoff_layer_assemblies_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "takeoff_quantities" CONSTRAINT "takeoff_quantities_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "tenant_agents" CONSTRAINT "tenant_agents_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "tenant_events" CONSTRAINT "tenant_events_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "tenant_finance_config" CONSTRAINT "tenant_finance_config_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "tenant_memberships" CONSTRAINT "tenant_memberships_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "tenant_settings" CONSTRAINT "tenant_settings_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "tenant_usage" CONSTRAINT "tenant_usage_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "user_profiles" CONSTRAINT "user_profiles_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "user_tenants" CONSTRAINT "user_tenants_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "users" CONSTRAINT "users_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "warranty_inspections" CONSTRAINT "warranty_inspections_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "warranty_transfers" CONSTRAINT "warranty_transfers_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "weather_delays" CONSTRAINT "weather_delays_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "weather_forecast_cache" CONSTRAINT "weather_forecast_cache_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    TABLE "webhook_logs" CONSTRAINT "webhook_logs_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "work_orders" CONSTRAINT "work_orders_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    TABLE "workflow_failures" CONSTRAINT "workflow_failures_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+Policies:
+    POLICY "Service role can manage all tenants"
+      USING ((( SELECT auth.role() AS role) = 'service_role'::text))
+    POLICY "Users can view own tenant" FOR SELECT
+      TO authenticated
+      USING ((id IN ( SELECT user_tenants.tenant_id
+   FROM user_tenants
+  WHERE (user_tenants.user_id = auth.uid()))))
+    POLICY "Users can view their own tenant" FOR SELECT
+      USING ((id IN ( SELECT user_tenants.tenant_id
+   FROM user_tenants
+  WHERE (user_tenants.user_id = ( SELECT auth.uid() AS uid)))))
+    POLICY "tenant_isolation"
+      USING ((( SELECT auth.uid() AS uid) IN ( SELECT users.id
+   FROM users
+  WHERE (users.tenant_id = tenants.id))))
+    POLICY "tenants_self_access" FOR SELECT
+      USING ((id = current_tenant_id()))
+Triggers:
+    trg_propagate_tenant_subscription AFTER UPDATE ON tenants FOR EACH ROW EXECUTE FUNCTION propagate_tenant_subscription_to_mrg_users()
+    update_tenants_updated_at BEFORE UPDATE ON tenants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+
+
+--- 3. FOREIGN KEY RELATIONSHIPS (Sample) ---
+         table_name          |     column_name     |  foreign_table_name   | foreign_column_name 
+-----------------------------+---------------------+-----------------------+---------------------
+ ab_test_assignments         | test_id             | ab_tests              | id
+ accounting_transactions     | customer_id         | customers             | id
+ accounting_transactions     | invoice_id          | invoices              | id
+ accounting_transactions     | vendor_id           | vendors               | id
+ acquisition_activities      | target_id           | acquisition_targets   | id
+ activities                  | user_id             | users                 | id
+ ad_performance              | campaign_id         | ad_campaigns          | id
+ adjustment_items            | adjustment_id       | inventory_adjustments | id
+ adjustment_items            | item_id             | inventory_items       | id
+ adjustment_items            | location_id         | warehouse_locations   | id
+ advanced_lead_metrics       | lead_id             | revenue_leads         | id
+ aerial_imagery_rasters      | project_id          | cad_projects          | id
+ agent_calls                 | workflow_id         | workflow_states       | id
+ agent_communication_logs    | message_id          | agent_messages        | id
+ agent_communication_logs    | pathway_id          | neural_pathways       | id
+ agent_communications        | response_to         | agent_communications  | message_id
+ agent_event_log             | user_id             | profiles              | id
+ agent_health_alerts         | agent_id            | ai_agents             | id
+ agent_learning_feedback     | agent_id            | ai_agents             | id
+ agent_messages              | receiver_agent_id   | ai_agents             | id
+ agent_messages              | sender_agent_id     | ai_agents             | id
+ agent_restart_log           | agent_id            | ai_agents             | id
+ agent_schedules             | agent_id            | ai_agents             | id
+ agent_schedules             | agent_id            | ai_agents             | id
+ ai_agent_connections        | from_agent_id       | ai_agents             | id
+ ai_agent_connections        | to_agent_id         | ai_agents             | id
+ ai_agent_metrics            | agent_id            | ai_agents             | id
+ ai_agent_presence           | agent_name          | ai_agents             | name
+ ai_automation_rules         | ai_decision_model   | ai_models             | id
+ ai_autonomous_tasks         | agent_id            | ai_agents             | id
+ ai_code_changes             | session_id          | ai_sessions           | id
+ ai_communication_log        | response_to         | ai_communication_log  | id
+ ai_competitor_analysis      | lead_id             | revenue_leads         | id
+ ai_consensus_decisions      | initiator_agent_id  | ai_agents             | id
+ ai_context_memory           | session_id          | ai_sessions           | id
+ ai_conversation_snapshots   | conversation_id     | ai_conversations      | id
+ ai_crm_action_approvals     | customer_id         | customers             | id
+ ai_crm_action_overrides     | customer_id         | customers             | id
+ ai_decision_audit_trail     | decision_id         | ai_decision_history   | decision_id
+ ai_decision_engine          | agent_id            | ai_agents             | id
+ ai_decision_history         | tree_id             | ai_decision_trees     | id
+ ai_decision_log             | session_id          | ai_sessions           | id
+ ai_decision_logs            | agent_id            | ai_agents             | id
+ ai_decision_logs            | neural_pathway_id   | ai_neural_pathways    | id
+ ai_decision_metrics         | tree_id             | ai_decision_trees     | id
+ ai_decision_nodes           | tree_id             | ai_decision_trees     | id
+ ai_decision_outcomes        | decision_id         | ai_decision_history   | decision_id
+ ai_development_tasks        | assigned_agent_id   | ai_agents             | id
+ ai_development_tasks        | tasks_enhanced_id   | tasks_enhanced        | id
+ ai_dispatch_recommendations | recommended_crew_id | crews                 | id
+(50 rows)
+
+
+--- 4. TABLES WITHOUT RLS (Security Risk) ---
+       tablename       
+-----------------------
+ checkout_sessions
+ render_webhook_events
+ spatial_ref_sys
+ unified_events
+(4 rows)
+
+
+--- 5. ORPHAN RECORDS CHECK (Rows with NULL tenant_id) ---
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table aurea_actions has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table customer_surveys has 100 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table roofing_assemblies has 29 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table tasks has 10 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table invoice_items has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table roofing_components has 14 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_development_tasks has 874 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table estimate_items has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_task_manager has 10 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table api_keys has 2 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table app_users has 175 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table equipment_activity_log has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table expenses has 500 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table invoice_payments has 15 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table landing_productions has 106 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table materials_master has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table roof_planes has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table revenue_targets has 12 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table customer_history has 3062 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table leads has 15 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_roofing_estimates has 61 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table cad_drawings has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table audit_logs has 6381 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table automation_definitions has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table contacts has 2151 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table mrg_users has 18 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table workflows has 2 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table workflow_steps has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table blog_posts has 177 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table products has 500 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table analyses has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_task_intelligence has 6 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table takeoff_projects has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table aurea_conversations has 3 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table subcontractors has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table estimate_documents has 15 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table users has 9 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table roofing_assemblies_cache has 2 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table crews has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_memories has 3 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table marketing_campaigns has 3 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_learning_insights has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_task_queue has 7930 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table events has 12 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table memories has 67 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table journal_lines has 496 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table ai_task_history has 2 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table aurea_context has 6 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table aurea_messages has 12 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table cad_projects has 7 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table etl_sync_status has 3 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table agent_health_status has 67 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table inventory has 3 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table iot_sensors has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table materials_inventory has 10 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table system_alerts has 222 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table proposals has 10 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table revenue_transactions has 4 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table tickets has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table proposal_templates has 5 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table warehouses has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table memory_context_registry has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table field_inspections has 1 records with NULL tenant_id
+psql:analyze_db.sql:64: NOTICE:  ALERT: Table active_compliant_subcontractors has 5 records with NULL tenant_id
+DO
+
+--- 6. UNINDEXED FOREIGN KEYS (Performance Risk) ---
+        table_name        |    column_name    
+--------------------------+-------------------
+ warranty_claims          | customer_id
+ tasks                    | parent_task_id
+ app_jobs                 | customer_id
+ twin_metrics_history     | twin_id
+ twin_failure_predictions | twin_id
+ orchestrator_deployments | system_id
+ remediation_plans        | incident_id
+ warranty_transfers       | to_customer_id
+ warranty_transfers       | from_customer_id
+ warranty_transfers       | approved_by
+ warranty_inspections     | inspector_id
+ warehouse_transfers      | from_warehouse_id
+ warehouse_transfers      | to_warehouse_id
+ warehouse_transfer_items | transfer_id
+ warehouse_discrepancies  | warehouse_id
+ picking_tasks            | picking_order_id
+ picking_tasks            | warehouse_id
+ picking_exceptions       | picking_order_id
+ putaway_tasks            | receiving_id
+ shipping_order_items     | shipping_order_id
+ ab_test_assignments      | test_id
+ collection_actions       | case_id
+ payment_arrangements     | case_id
+ consent                  | policy_id
+ ad_performance           | campaign_id
+ notebook_lm_outcomes     | knowledge_id
+ ai_decision_audit_trail  | decision_id
+ ai_decision_outcomes     | decision_id
+ product_generation_queue | product_id
+ payroll_entries          | tenant_id
+ ai_sequence_touchpoints  | sequence_id
+ ai_sequence_touchpoints  | sequence_id
+ ai_lead_enrollments      | sequence_id
+ ai_touchpoint_executions | enrollment_id
+ ai_touchpoint_executions | enrollment_id
+ ai_touchpoint_executions | touchpoint_id
+ ai_nurture_ab_tests      | sequence_id
+ lead_engagement_history  | lead_id
+(38 rows)
+

@@ -279,7 +279,12 @@ async def list_estimates(
 ) -> dict:
     """List estimates with filtering"""
     try:
-        # Build query
+        # TENANT ISOLATION: Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant context required")
+
+        # Build query with tenant isolation
         query = """
             SELECT
                 e.*,
@@ -291,9 +296,9 @@ async def list_estimates(
             LEFT JOIN customers c ON e.customer_id = c.id
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN estimate_line_items eli ON e.id = eli.estimate_id
-            WHERE 1=1
+            WHERE e.tenant_id = :tenant_id
         """
-        params = {}
+        params = {"tenant_id": tenant_id}
 
         if customer_id:
             query += " AND e.customer_id = :customer_id"

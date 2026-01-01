@@ -1,0 +1,106 @@
+{
+  "timestamp": "2026-01-01T09:09:17.141462",
+  "duration": 3.401096820831299,
+  "summary": {
+    "total_tests": 12,
+    "passed": 3,
+    "failed": 9,
+    "success_rate": 25.0
+  },
+  "system_health": {
+    "status": "healthy",
+    "version": "163.0.33",
+    "database": "connected",
+    "offline_mode": false,
+    "cns": "not available",
+    "cns_info": {},
+    "pool_active": true,
+    "timestamp": "2026-01-01T16:09:14.721371+00:00"
+  },
+  "results": [
+    {
+      "test": "Root endpoint",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:14.062311",
+      "response_data": null
+    },
+    {
+      "test": "Health endpoint",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-01-01T09:09:14.383933",
+      "response_data": null
+    },
+    {
+      "test": "API Health endpoint",
+      "success": true,
+      "details": "Version: 163.0.33, DB: connected",
+      "timestamp": "2026-01-01T09:09:14.759982",
+      "response_data": null
+    },
+    {
+      "test": "Auth status",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:15.229381",
+      "response_data": null
+    },
+    {
+      "test": "User registration",
+      "success": false,
+      "details": "Status: 401, Response: {\"detail\":\"Missing authorization header\"}",
+      "timestamp": "2026-01-01T09:09:15.468684",
+      "response_data": null
+    },
+    {
+      "test": "Lead capture",
+      "success": false,
+      "details": "Status: 401, Response: {\"detail\":\"Missing authorization header\"}",
+      "timestamp": "2026-01-01T09:09:15.718250",
+      "response_data": null
+    },
+    {
+      "test": "Leads list",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:15.977698",
+      "response_data": null
+    },
+    {
+      "test": "Products endpoint",
+      "success": true,
+      "details": "Protected (requires auth)",
+      "timestamp": "2026-01-01T09:09:16.288058",
+      "response_data": null
+    },
+    {
+      "test": "Protected endpoints",
+      "success": false,
+      "details": "No auth token available",
+      "timestamp": "2026-01-01T09:09:16.288701",
+      "response_data": null
+    },
+    {
+      "test": "AI status",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:16.557889",
+      "response_data": null
+    },
+    {
+      "test": "AI analyze",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:16.793730",
+      "response_data": null
+    },
+    {
+      "test": "Debug routes",
+      "success": false,
+      "details": "Status: 401",
+      "timestamp": "2026-01-01T09:09:17.140426",
+      "response_data": null
+    }
+  ]
+}

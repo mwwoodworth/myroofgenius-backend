@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
@@ -43,17 +44,22 @@ class MobileFormsResponse(MobileFormsBase):
 @router.post("/", response_model=MobileFormsResponse)
 async def create_mobile_forms(
     item: MobileFormsCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Create new mobile forms record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
-        INSERT INTO mobile_forms (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO mobile_forms (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +75,17 @@ async def list_mobile_forms(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """List mobile forms records"""
-    query = "SELECT * FROM mobile_forms WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    query = "SELECT * FROM mobile_forms WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +109,17 @@ async def list_mobile_forms(
 @router.get("/{item_id}", response_model=MobileFormsResponse)
 async def get_mobile_forms(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific mobile forms record"""
-    query = "SELECT * FROM mobile_forms WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM mobile_forms WHERE tenant_id = $1 AND id = $2"
+
+    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not row:
         raise HTTPException(status_code=404, detail="Mobile forms not found")
 
@@ -117,23 +133,30 @@ async def get_mobile_forms(
 async def update_mobile_forms(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Update mobile forms record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
     set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
+    params = [tenant_id]
+    param_count = 1
+    for field, value in updates.items():
+        param_count += 1
+        set_clauses.append(f"{field} = ${param_count}")
         params.append(value)
 
     params.append(uuid.UUID(item_id))
     query = f"""
         UPDATE mobile_forms
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE tenant_id = $1 AND id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +169,40 @@ async def update_mobile_forms(
 @router.delete("/{item_id}")
 async def delete_mobile_forms(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete mobile forms record"""
-    query = "DELETE FROM mobile_forms WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM mobile_forms WHERE tenant_id = $1 AND id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not result:
         raise HTTPException(status_code=404, detail="Mobile forms not found")
 
     return {"message": "Mobile forms deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_mobile_forms_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_mobile_forms_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get mobile forms statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM mobile_forms
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

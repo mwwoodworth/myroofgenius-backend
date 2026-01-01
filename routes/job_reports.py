@@ -430,7 +430,12 @@ async def export_jobs_report_csv(
 ):
     """Export jobs report as CSV"""
     try:
-        # Build query
+        # TENANT ISOLATION: Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant context required")
+
+        # Build query with tenant isolation
         query = """
             SELECT
                 j.id as job_id,
@@ -449,9 +454,9 @@ async def export_jobs_report_csv(
             FROM jobs j
             LEFT JOIN customers c ON j.customer_id = c.id
             LEFT JOIN crews cr ON j.assigned_crew_id = cr.id
-            WHERE 1=1
+            WHERE j.tenant_id = :tenant_id
         """
-        params = {}
+        params = {"tenant_id": tenant_id}
 
         if start_date:
             query += " AND DATE(j.created_at) >= :start_date"

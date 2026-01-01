@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
@@ -43,17 +44,22 @@ class WarrantyTrackingResponse(WarrantyTrackingBase):
 @router.post("/", response_model=WarrantyTrackingResponse)
 async def create_warranty_tracking(
     item: WarrantyTrackingCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Create new warranty tracking record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
-        INSERT INTO warranty_tracking (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO warranty_tracking (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +75,17 @@ async def list_warranty_tracking(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """List warranty tracking records"""
-    query = "SELECT * FROM warranty_tracking WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    query = "SELECT * FROM warranty_tracking WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +109,17 @@ async def list_warranty_tracking(
 @router.get("/{item_id}", response_model=WarrantyTrackingResponse)
 async def get_warranty_tracking(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific warranty tracking record"""
-    query = "SELECT * FROM warranty_tracking WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM warranty_tracking WHERE tenant_id = $1 AND id = $2"
+
+    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not row:
         raise HTTPException(status_code=404, detail="Warranty tracking not found")
 

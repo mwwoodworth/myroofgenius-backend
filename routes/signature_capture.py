@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
@@ -43,17 +44,22 @@ class SignatureCaptureResponse(SignatureCaptureBase):
 @router.post("/", response_model=SignatureCaptureResponse)
 async def create_signature_capture(
     item: SignatureCaptureCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Create new signature capture record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
-        INSERT INTO signature_capture (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO signature_capture (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +75,17 @@ async def list_signature_capture(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """List signature capture records"""
-    query = "SELECT * FROM signature_capture WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    query = "SELECT * FROM signature_capture WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +109,17 @@ async def list_signature_capture(
 @router.get("/{item_id}", response_model=SignatureCaptureResponse)
 async def get_signature_capture(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific signature capture record"""
-    query = "SELECT * FROM signature_capture WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM signature_capture WHERE tenant_id = $1 AND id = $2"
+
+    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not row:
         raise HTTPException(status_code=404, detail="Signature capture not found")
 
@@ -117,23 +133,30 @@ async def get_signature_capture(
 async def update_signature_capture(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Update signature capture record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
     set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
+    params = [tenant_id]
+    param_count = 1
+    for field, value in updates.items():
+        param_count += 1
+        set_clauses.append(f"{field} = ${param_count}")
         params.append(value)
 
     params.append(uuid.UUID(item_id))
     query = f"""
         UPDATE signature_capture
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE tenant_id = $1 AND id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +169,40 @@ async def update_signature_capture(
 @router.delete("/{item_id}")
 async def delete_signature_capture(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete signature capture record"""
-    query = "DELETE FROM signature_capture WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM signature_capture WHERE tenant_id = $1 AND id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not result:
         raise HTTPException(status_code=404, detail="Signature capture not found")
 
     return {"message": "Signature capture deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_signature_capture_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_signature_capture_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get signature capture statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM signature_capture
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

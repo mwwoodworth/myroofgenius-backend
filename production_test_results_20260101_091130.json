@@ -1,0 +1,106 @@
+{
+  "timestamp": "2026-01-01T09:11:30.139208",
+  "duration": 4.16917872428894,
+  "summary": {
+    "total_tests": 12,
+    "passed": 5,
+    "failed": 7,
+    "success_rate": 41.66666666666667
+  },
+  "system_health": {
+    "status": "healthy",
+    "version": "163.0.33",
+    "database": "connected",
+    "offline_mode": false,
+    "cns": "not available",
+    "cns_info": {},
+    "pool_active": true,
+    "timestamp": "2026-01-01T16:11:26.847863+00:00"
+  },
+  "results": [
+    {
+      "test": "Root endpoint",
+      "success": true,
+      "details": "Version: unknown",
+      "timestamp": "2026-01-01T09:11:26.400879",
+      "response_data": null
+    },
+    {
+      "test": "Health endpoint",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-01-01T09:11:26.641205",
+      "response_data": null
+    },
+    {
+      "test": "API Health endpoint",
+      "success": true,
+      "details": "Version: 163.0.33, DB: connected",
+      "timestamp": "2026-01-01T09:11:26.885588",
+      "response_data": null
+    },
+    {
+      "test": "Auth status",
+      "success": false,
+      "details": "Status: 404",
+      "timestamp": "2026-01-01T09:11:27.095763",
+      "response_data": null
+    },
+    {
+      "test": "User registration",
+      "success": false,
+      "details": "Status: 404, Response: {\"detail\":\"Not Found\"}",
+      "timestamp": "2026-01-01T09:11:27.453017",
+      "response_data": null
+    },
+    {
+      "test": "Lead capture",
+      "success": false,
+      "details": "Status: 404, Response: {\"detail\":\"Not Found\"}",
+      "timestamp": "2026-01-01T09:11:27.704880",
+      "response_data": null
+    },
+    {
+      "test": "Leads list",
+      "success": false,
+      "details": "Status: 500",
+      "timestamp": "2026-01-01T09:11:28.633787",
+      "response_data": null
+    },
+    {
+      "test": "Products endpoint",
+      "success": true,
+      "details": "Public access",
+      "timestamp": "2026-01-01T09:11:29.183210",
+      "response_data": null
+    },
+    {
+      "test": "Protected endpoints",
+      "success": false,
+      "details": "No auth token available",
+      "timestamp": "2026-01-01T09:11:29.183301",
+      "response_data": null
+    },
+    {
+      "test": "AI status",
+      "success": true,
+      "details": "AI system: operational",
+      "timestamp": "2026-01-01T09:11:29.629592",
+      "response_data": null
+    },
+    {
+      "test": "AI analyze",
+      "success": false,
+      "details": "Status: 405",
+      "timestamp": "2026-01-01T09:11:29.829297",
+      "response_data": null
+    },
+    {
+      "test": "Debug routes",
+      "success": false,
+      "details": "Status: 404",
+      "timestamp": "2026-01-01T09:11:30.139093",
+      "response_data": null
+    }
+  ]
+}
