@@ -690,6 +690,13 @@ async def list_leads(
         # Get paginated results
         offset = (page - 1) * per_page
 
+        # SECURITY: Whitelist sort columns to prevent SQL injection (defense-in-depth)
+        ALLOWED_SORT_COLUMNS = {"score", "created_at", "updated_at", "name"}
+        if sort_by not in ALLOWED_SORT_COLUMNS:
+            sort_by = "score"
+        if sort_order.lower() not in ("asc", "desc"):
+            sort_order = "desc"
+
         cursor.execute(f"""
             SELECT l.*,
                    MAX(la.created_at) as last_activity
