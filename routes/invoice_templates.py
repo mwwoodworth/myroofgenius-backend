@@ -16,6 +16,7 @@ import asyncpg
 import os
 import logging
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +100,15 @@ async def get_db_connection():
 # ==================== Template Management ====================
 
 @router.post("/templates", tags=["Invoice Templates"])
-async def create_invoice_template(template: CreateInvoiceTemplate):
+async def create_invoice_template(
+    template: CreateInvoiceTemplate,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Create new invoice template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -111,12 +119,12 @@ async def create_invoice_template(template: CreateInvoiceTemplate):
                 await conn.execute("""
                     INSERT INTO invoice_templates (
                         id, template_name, description, category,
-                        payment_terms, default_notes, tax_rate, is_active
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        payment_terms, default_notes, tax_rate, is_active, tenant_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """, template_id, template.template_name, template.description,
                     template.category.value if template.category else 'custom',
                     template.payment_terms, template.default_notes,
-                    template.tax_rate, True)
+                    template.tax_rate, True, uuid.UUID(tenant_id))
                 
                 # Add template items
                 for idx, item in enumerate(template.items):
@@ -147,9 +155,14 @@ async def list_invoice_templates(
     is_active: bool = True,
     search: Optional[str] = None,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0)
+    offset: int = Query(default=0, ge=0),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List invoice templates"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -158,11 +171,11 @@ async def list_invoice_templates(
                 SELECT t.*, COUNT(DISTINCT i.id) as usage_count,
                        MAX(i.created_at) as last_used
                 FROM invoice_templates t
-                LEFT JOIN invoices i ON i.id::text LIKE '%template%' -- Simplified join
-                WHERE t.is_active = $1
+                LEFT JOIN invoices i ON i.id::text LIKE '%template%' AND i.tenant_id = t.tenant_id
+                WHERE t.is_active = $1 AND t.tenant_id = $2
             """
-            params = [is_active]
-            param_count = 1
+            params = [is_active, uuid.UUID(tenant_id)]
+            param_count = 2
             
             if category:
                 param_count += 1
@@ -220,13 +233,13 @@ async def list_invoice_templates(
             # Get total count
             count_query = """
                 SELECT COUNT(*) FROM invoice_templates
-                WHERE is_active = $1
+                WHERE is_active = $1 AND tenant_id = $2
             """
             if category:
-                count_query += " AND category = $2"
-                total = await conn.fetchval(count_query, is_active, category.value)
+                count_query += " AND category = $3"
+                total = await conn.fetchval(count_query, is_active, uuid.UUID(tenant_id), category.value)
             else:
-                total = await conn.fetchval(count_query, is_active)
+                total = await conn.fetchval(count_query, is_active, uuid.UUID(tenant_id))
             
             return {
                 "templates": templates,
@@ -241,15 +254,22 @@ async def list_invoice_templates(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/templates/{template_id}", tags=["Invoice Templates"])
-async def get_invoice_template(template_id: str):
+async def get_invoice_template(
+    template_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get invoice template details"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get template
             row = await conn.fetchrow("""
-                SELECT * FROM invoice_templates WHERE id = $1
-            """, uuid.UUID(template_id))
+                SELECT * FROM invoice_templates WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
             
             if not row:
                 raise HTTPException(status_code=404, detail="Template not found")
@@ -312,16 +332,21 @@ async def get_invoice_template(template_id: str):
 @router.put("/templates/{template_id}", tags=["Invoice Templates"])
 async def update_invoice_template(
     template_id: str,
-    update: UpdateInvoiceTemplate
+    update: UpdateInvoiceTemplate,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update invoice template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Check if template exists
             exists = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM invoice_templates WHERE id = $1)",
-                uuid.UUID(template_id)
+                "SELECT EXISTS(SELECT 1 FROM invoice_templates WHERE id = $1 AND tenant_id = $2)",
+                uuid.UUID(template_id), uuid.UUID(tenant_id)
             )
             
             if not exists:
@@ -372,10 +397,11 @@ async def update_invoice_template(
                 query = f"""
                     UPDATE invoice_templates
                     SET {', '.join(updates)}
-                    WHERE id = ${param_count}
+                    WHERE id = ${param_count} AND tenant_id = ${param_count + 1}
                     RETURNING *
                 """
                 params.append(uuid.UUID(template_id))
+                params.append(uuid.UUID(tenant_id))
                 
                 row = await conn.fetchrow(query, *params)
                 
@@ -405,8 +431,15 @@ async def update_invoice_template(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/templates/{template_id}", tags=["Invoice Templates"])
-async def delete_invoice_template(template_id: str):
+async def delete_invoice_template(
+    template_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Delete invoice template (soft delete by deactivating)"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -414,8 +447,8 @@ async def delete_invoice_template(template_id: str):
             result = await conn.execute("""
                 UPDATE invoice_templates
                 SET is_active = false, updated_at = NOW()
-                WHERE id = $1
-            """, uuid.UUID(template_id))
+                WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
             
             if result == "UPDATE 0":
                 raise HTTPException(status_code=404, detail="Template not found")
@@ -439,16 +472,21 @@ async def delete_invoice_template(template_id: str):
 @router.post("/templates/{template_id}/items", tags=["Invoice Templates"])
 async def add_template_item(
     template_id: str,
-    item: InvoiceTemplateItem
+    item: InvoiceTemplateItem,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Add item to template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Check if template exists
             exists = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM invoice_templates WHERE id = $1)",
-                uuid.UUID(template_id)
+                "SELECT EXISTS(SELECT 1 FROM invoice_templates WHERE id = $1 AND tenant_id = $2)",
+                uuid.UUID(template_id), uuid.UUID(tenant_id)
             )
             
             if not exists:
@@ -477,9 +515,9 @@ async def add_template_item(
             await conn.execute("""
                 UPDATE invoice_templates
                 SET updated_at = NOW()
-                WHERE id = $1
-            """, uuid.UUID(template_id))
-            
+                WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
+
             return {
                 "success": True,
                 "item_id": item_id,
@@ -496,26 +534,35 @@ async def add_template_item(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/templates/{template_id}/items/{item_id}", tags=["Invoice Templates"])
-async def remove_template_item(template_id: str, item_id: str):
+async def remove_template_item(
+    template_id: str,
+    item_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Remove item from template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
-            # Delete item
+            # Delete item - verify through template's tenant_id
             result = await conn.execute("""
                 DELETE FROM invoice_template_items
                 WHERE id = $1 AND template_id = $2
-            """, uuid.UUID(item_id), uuid.UUID(template_id))
-            
+                AND EXISTS (SELECT 1 FROM invoice_templates WHERE id = $2 AND tenant_id = $3)
+            """, uuid.UUID(item_id), uuid.UUID(template_id), uuid.UUID(tenant_id))
+
             if result == "DELETE 0":
                 raise HTTPException(status_code=404, detail="Item not found")
-            
+
             # Update template timestamp
             await conn.execute("""
                 UPDATE invoice_templates
                 SET updated_at = NOW()
-                WHERE id = $1
-            """, uuid.UUID(template_id))
+                WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
             
             return {
                 "success": True,
@@ -537,17 +584,22 @@ async def remove_template_item(template_id: str, item_id: str):
 async def generate_invoice_from_template(
     template_id: str,
     request: InvoiceFromTemplate,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Generate invoice from template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get template
             template = await conn.fetchrow("""
                 SELECT * FROM invoice_templates
-                WHERE id = $1 AND is_active = true
-            """, uuid.UUID(template_id))
+                WHERE id = $1 AND is_active = true AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
             
             if not template:
                 raise HTTPException(status_code=404, detail="Template not found or inactive")
@@ -606,8 +658,8 @@ async def generate_invoice_from_template(
                     id, invoice_number, customer_id, job_id,
                     title, description, invoice_date, due_date,
                     subtotal_cents, tax_cents, total_cents, balance_cents,
-                    line_items, notes, status, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+                    line_items, notes, status, created_at, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16)
             """, uuid.UUID(invoice_id), invoice_number,
                 uuid.UUID(request.customer_id),
                 uuid.UUID(request.job_id) if request.job_id else None,
@@ -616,7 +668,7 @@ async def generate_invoice_from_template(
                 issue_date, due_date,
                 int(subtotal * 100), int(tax_amount * 100),
                 int(total * 100), int(total * 100),
-                json.dumps(items), notes, 'draft')
+                json.dumps(items), notes, 'draft', uuid.UUID(tenant_id))
             
             # Log activity
             await conn.execute("""
@@ -648,8 +700,14 @@ async def generate_invoice_from_template(
 # ==================== Template Categories & Statistics ====================
 
 @router.get("/templates/categories", tags=["Invoice Templates"])
-async def get_template_categories():
+async def get_template_categories(
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get available template categories with counts"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -657,9 +715,10 @@ async def get_template_categories():
                 SELECT category, COUNT(*) as count,
                        COUNT(CASE WHEN is_active THEN 1 END) as active_count
                 FROM invoice_templates
+                WHERE tenant_id = $1
                 GROUP BY category
                 ORDER BY count DESC
-            """)
+            """, uuid.UUID(tenant_id))
             
             return {
                 "categories": [
@@ -679,21 +738,28 @@ async def get_template_categories():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/templates/statistics", tags=["Invoice Templates"])
-async def get_template_statistics():
+async def get_template_statistics(
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get template usage statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get overall statistics
             stats = await conn.fetchrow("""
-                SELECT 
+                SELECT
                     COUNT(DISTINCT t.id) as total_templates,
                     COUNT(DISTINCT CASE WHEN t.is_active THEN t.id END) as active_templates,
                     COUNT(DISTINCT i.id) as invoices_from_templates,
                     SUM(i.total_cents) / 100.0 as total_revenue
                 FROM invoice_templates t
-                LEFT JOIN invoices i ON i.id::text LIKE '%template%'
-            """)
+                LEFT JOIN invoices i ON i.id::text LIKE '%template%' AND i.tenant_id = t.tenant_id
+                WHERE t.tenant_id = $1
+            """, uuid.UUID(tenant_id))
             
             # Get most used templates
             most_used = await conn.fetch("""
@@ -701,22 +767,22 @@ async def get_template_statistics():
                        COUNT(i.id) as usage_count,
                        SUM(i.total_cents) / 100.0 as revenue_generated
                 FROM invoice_templates t
-                LEFT JOIN invoices i ON i.id::text LIKE '%' || t.id::text || '%'
-                WHERE t.is_active = true
+                LEFT JOIN invoices i ON i.id::text LIKE '%' || t.id::text || '%' AND i.tenant_id = t.tenant_id
+                WHERE t.is_active = true AND t.tenant_id = $1
                 GROUP BY t.id, t.template_name, t.category
                 HAVING COUNT(i.id) > 0
                 ORDER BY usage_count DESC
                 LIMIT 5
-            """)
-            
+            """, uuid.UUID(tenant_id))
+
             # Get category distribution
             categories = await conn.fetch("""
                 SELECT category, COUNT(*) as count
                 FROM invoice_templates
-                WHERE is_active = true
+                WHERE is_active = true AND tenant_id = $1
                 GROUP BY category
                 ORDER BY count DESC
-            """)
+            """, uuid.UUID(tenant_id))
             
             return {
                 "summary": {
@@ -750,15 +816,23 @@ async def get_template_statistics():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/templates/duplicate/{template_id}", tags=["Invoice Templates"])
-async def duplicate_template(template_id: str, new_name: str):
+async def duplicate_template(
+    template_id: str,
+    new_name: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Duplicate an existing template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get original template
             original = await conn.fetchrow("""
-                SELECT * FROM invoice_templates WHERE id = $1
-            """, uuid.UUID(template_id))
+                SELECT * FROM invoice_templates WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(template_id), uuid.UUID(tenant_id))
             
             if not original:
                 raise HTTPException(status_code=404, detail="Template not found")
@@ -778,12 +852,12 @@ async def duplicate_template(template_id: str, new_name: str):
                 await conn.execute("""
                     INSERT INTO invoice_templates (
                         id, template_name, description, category,
-                        payment_terms, default_notes, tax_rate, is_active
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        payment_terms, default_notes, tax_rate, is_active, tenant_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """, uuid.UUID(new_id), new_name,
                     f"Copy of {original['description']}" if original['description'] else None,
                     original['category'], original['payment_terms'],
-                    original['default_notes'], original['tax_rate'], True)
+                    original['default_notes'], original['tax_rate'], True, uuid.UUID(tenant_id))
                 
                 # Copy items
                 for item in original_items:

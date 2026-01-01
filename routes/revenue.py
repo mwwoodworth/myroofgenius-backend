@@ -8,6 +8,7 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from database import get_db
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +20,23 @@ class LeadCapture(BaseModel):
     source: Optional[str] = "direct"
 
 @router.post("/capture-lead")
-def capture_lead(lead: LeadCapture, db: Session = Depends(get_db)):
+def capture_lead(
+    lead: LeadCapture,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Capture a new lead"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         result = db.execute(
             text(
                 """
-                INSERT INTO leads (email, name, source)
-                VALUES (:email, :name, :source)
-                ON CONFLICT (email) DO UPDATE
+                INSERT INTO leads (email, name, source, tenant_id)
+                VALUES (:email, :name, :source, :tenant_id)
+                ON CONFLICT (email, tenant_id) DO UPDATE
                 SET updated_at = NOW()
                 RETURNING id
                 """
@@ -36,6 +45,7 @@ def capture_lead(lead: LeadCapture, db: Session = Depends(get_db)):
                 "email": lead.email,
                 "name": lead.name,
                 "source": lead.source,
+                "tenant_id": tenant_id,
             },
         )
         db.commit()
@@ -45,10 +55,20 @@ def capture_lead(lead: LeadCapture, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard")
-def get_revenue_dashboard(db: Session = Depends(get_db)):
+def get_revenue_dashboard(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get revenue dashboard data"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        customers_total = db.execute(text("SELECT COUNT(*) FROM customers")).scalar() or 0
+        customers_total = db.execute(
+            text("SELECT COUNT(*) FROM customers WHERE tenant_id = :tenant_id"),
+            {"tenant_id": tenant_id}
+        ).scalar() or 0
         new_customers = (
             db.execute(
                 text(
@@ -56,8 +76,10 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     SELECT COUNT(*)
                     FROM customers
                     WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -68,9 +90,11 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     """
                     SELECT COUNT(*)
                     FROM invoices
-                    WHERE status = 'paid' OR payment_status = 'paid'
+                    WHERE (status = 'paid' OR payment_status = 'paid')
+                    AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -80,9 +104,11 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     """
                     SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
                     FROM invoices
-                    WHERE status = 'paid' OR payment_status = 'paid'
+                    WHERE (status = 'paid' OR payment_status = 'paid')
+                    AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -96,8 +122,10 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     WHERE (status = 'paid' OR payment_status = 'paid')
                       AND created_at >= CURRENT_DATE - INTERVAL '60 days'
                       AND created_at < CURRENT_DATE - INTERVAL '30 days'
+                      AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -110,8 +138,10 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     FROM invoices
                     WHERE (status = 'paid' OR payment_status = 'paid')
                       AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                      AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -128,10 +158,12 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
                     """
                     SELECT mrr, arr, churn_rate, ltv, cac
                     FROM revenue_metrics
+                    WHERE tenant_id = :tenant_id
                     ORDER BY metric_date DESC
                     LIMIT 1
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).first()
         except Exception:
             revenue_metrics = None
@@ -140,7 +172,8 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
         active_subscriptions = None
         try:
             active_subscriptions = db.execute(
-                text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")
+                text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active' AND tenant_id = :tenant_id"),
+                {"tenant_id": tenant_id}
             ).scalar()
         except Exception:
             active_subscriptions = None
@@ -173,18 +206,34 @@ def get_revenue_dashboard(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to load revenue dashboard")
 
 @router.get("/metrics")
-def get_metrics(db: Session = Depends(get_db)):
+def get_metrics(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get revenue metrics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        total_leads = db.execute(text("SELECT COUNT(*) FROM leads")).scalar() or 0
+        total_leads = db.execute(
+            text("SELECT COUNT(*) FROM leads WHERE tenant_id = :tenant_id"),
+            {"tenant_id": tenant_id}
+        ).scalar() or 0
         leads_today = (
-            db.execute(text("SELECT COUNT(*) FROM leads WHERE created_at >= CURRENT_DATE")).scalar() or 0
+            db.execute(
+                text("SELECT COUNT(*) FROM leads WHERE created_at >= CURRENT_DATE AND tenant_id = :tenant_id"),
+                {"tenant_id": tenant_id}
+            ).scalar() or 0
         )
 
         customers = None
         try:
             customers = (
-                db.execute(text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")).scalar()
+                db.execute(
+                    text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active' AND tenant_id = :tenant_id"),
+                    {"tenant_id": tenant_id}
+                ).scalar()
                 or 0
             )
         except Exception:
@@ -197,10 +246,12 @@ def get_metrics(db: Session = Depends(get_db)):
                     """
                     SELECT mrr
                     FROM revenue_metrics
+                    WHERE tenant_id = :tenant_id
                     ORDER BY metric_date DESC
                     LIMIT 1
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).first()
             if mrr_row and mrr_row.mrr is not None:
                 mrr = float(mrr_row.mrr)
@@ -218,8 +269,15 @@ def get_metrics(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/stats")
-def get_revenue_stats(db: Session = Depends(get_db)):
+def get_revenue_stats(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get comprehensive revenue statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         current_revenue = db.execute(
             text(
@@ -230,8 +288,10 @@ def get_revenue_stats(db: Session = Depends(get_db)):
                 FROM invoices
                 WHERE (status = 'paid' OR payment_status = 'paid')
                 AND created_at >= DATE_TRUNC('month', CURRENT_DATE)
+                AND tenant_id = :tenant_id
                 """
-            )
+            ),
+            {"tenant_id": tenant_id}
         ).first()
 
         last_month_revenue = float(
@@ -243,8 +303,10 @@ def get_revenue_stats(db: Session = Depends(get_db)):
                     WHERE (status = 'paid' OR payment_status = 'paid')
                     AND created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
                     AND created_at < DATE_TRUNC('month', CURRENT_DATE)
+                    AND tenant_id = :tenant_id
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).scalar()
             or 0
         )
@@ -257,8 +319,10 @@ def get_revenue_stats(db: Session = Depends(get_db)):
                     COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_customers,
                     COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as customers_this_week
                 FROM customers
+                WHERE tenant_id = :tenant_id
                 """
-            )
+            ),
+            {"tenant_id": tenant_id}
         ).first()
 
         job_stats = db.execute(
@@ -269,8 +333,10 @@ def get_revenue_stats(db: Session = Depends(get_db)):
                     COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_jobs,
                     COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as active_jobs
                 FROM jobs
+                WHERE tenant_id = :tenant_id
                 """
-            )
+            ),
+            {"tenant_id": tenant_id}
         ).first()
 
         growth_rate = 0.0
@@ -285,10 +351,12 @@ def get_revenue_stats(db: Session = Depends(get_db)):
                     """
                     SELECT mrr, arr
                     FROM revenue_metrics
+                    WHERE tenant_id = :tenant_id
                     ORDER BY metric_date DESC
                     LIMIT 1
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).first()
         except Exception:
             revenue_metrics = None

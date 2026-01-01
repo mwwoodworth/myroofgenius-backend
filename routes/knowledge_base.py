@@ -10,6 +10,7 @@ from datetime import datetime
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -47,18 +48,24 @@ class ArticleResponse(BaseModel):
 @router.post("/articles", response_model=ArticleResponse)
 async def create_article(
     article: ArticleCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create knowledge base article"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
     query = """
         INSERT INTO knowledge_base_articles (
-            title, content, category, tags, is_public, author
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+            tenant_id, title, content, category, tags, is_public, author
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
     """
 
     result = await conn.fetchrow(
         query,
+        tenant_id,
         article.title,
         article.content,
         article.category,
@@ -73,10 +80,15 @@ async def create_article(
 async def search_articles(
     q: str = Query(..., description="Search query"),
     category: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Search knowledge base articles"""
-    params = [f"%{q}%"]
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
+    params = [tenant_id, f"%{q}%"]
     category_clause = ""
 
     if category:
@@ -85,8 +97,8 @@ async def search_articles(
 
     query = f"""
         SELECT * FROM knowledge_base_articles
-        WHERE is_public = true
-        AND (title ILIKE $1 OR content ILIKE $1){category_clause}
+        WHERE tenant_id = $1 AND is_public = true
+        AND (title ILIKE $2 OR content ILIKE $2){category_clause}
         ORDER BY views DESC, helpful_count DESC
         LIMIT 20
     """
@@ -98,25 +110,30 @@ async def search_articles(
 async def mark_helpful(
     article_id: str,
     helpful: bool,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Mark article as helpful/not helpful"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
     if helpful:
         query = """
             UPDATE knowledge_base_articles
             SET helpful_count = helpful_count + 1
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             RETURNING helpful_count
         """
     else:
         query = """
             UPDATE knowledge_base_articles
             SET not_helpful_count = not_helpful_count + 1
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             RETURNING not_helpful_count
         """
 
-    result = await conn.fetchrow(query, uuid.UUID(article_id))
+    result = await conn.fetchrow(query, uuid.UUID(article_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Article not found")
 

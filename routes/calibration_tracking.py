@@ -1,6 +1,7 @@
 """
 Calibration Tracking Module
 Handles equipment calibration records.
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -10,6 +11,7 @@ from datetime import datetime, date
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
+from core.supabase_auth import get_authenticated_user
 import uuid
 import json
 
@@ -41,16 +43,22 @@ class CalibrationResponse(CalibrationBase):
 def list_calibrations(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all calibrations"""
+    """List all calibrations - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM calibration_tracking
+            WHERE tenant_id = :tenant_id
             ORDER BY created_at DESC
             LIMIT :limit OFFSET :skip
-        """), {"limit": limit, "skip": skip}).fetchall()
+        """), {"tenant_id": tenant_id, "limit": limit, "skip": skip}).fetchall()
 
         items = []
         for row in result:
@@ -70,16 +78,21 @@ def list_calibrations(
 @router.post("/", response_model=CalibrationResponse)
 def record_calibration(
     item: CalibrationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Record a new calibration"""
+    """Record a new calibration - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         new_id = uuid.uuid4()
         timestamp = datetime.now()
-        
+
         db.execute(text("""
-            INSERT INTO calibration_tracking (id, name, description, status, data, created_at, updated_at)
-            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+            INSERT INTO calibration_tracking (id, name, description, status, data, created_at, updated_at, tenant_id)
+            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at, :tenant_id)
         """), {
             "id": new_id,
             "name": item.name,
@@ -87,7 +100,8 @@ def record_calibration(
             "status": item.status,
             "data": json.dumps(item.data) if item.data else None,
             "created_at": timestamp,
-            "updated_at": timestamp
+            "updated_at": timestamp,
+            "tenant_id": tenant_id
         })
         db.commit()
 
@@ -103,22 +117,22 @@ def record_calibration(
 
 @router.get("/due", response_model=List[CalibrationResponse])
 def get_due_calibrations(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get due calibrations (next_due_date <= today)"""
+    """Get due calibrations (next_due_date <= today) - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        # Assuming next_due_date is stored in data JSONB as 'next_due_date' (ISO string YYYY-MM-DD)
-        # We fetch all active and filter in python for safety if JSON structure is uncertain,
-        # or try a JSON query. Let's try JSON query first, fall back to Python filter if needed.
-        # Postgres JSONB operator ->> returns text.
-        
         today_str = date.today().isoformat()
-        
+
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM calibration_tracking
-            WHERE status = 'active'
-        """)).fetchall()
+            WHERE status = 'active' AND tenant_id = :tenant_id
+        """), {"tenant_id": tenant_id}).fetchall()
 
         due_items = []
         for row in result:
@@ -134,7 +148,7 @@ def get_due_calibrations(
                     "created_at": row[5],
                     "updated_at": row[6]
                 })
-        
+
         return due_items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

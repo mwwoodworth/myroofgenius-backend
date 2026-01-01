@@ -1,6 +1,7 @@
 """
 HR Management Module - Task 43
 Comprehensive human resources management system
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
@@ -12,6 +13,8 @@ import asyncpg
 import uuid
 import json
 from decimal import Decimal
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -248,19 +251,24 @@ class TrainingRecord(BaseModel):
 async def create_employee(
     employee: EmployeeCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a new employee record"""
+    """Create a new employee record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO employees (
             employee_code, first_name, last_name, email, phone,
             department, position, employment_type, employment_status,
             hire_date, birth_date, ssn_last4, manager_id,
             salary, hourly_rate, emergency_contact_name,
-            emergency_contact_phone, address, city, state, postal_code
+            emergency_contact_phone, address, city, state, postal_code, tenant_id
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         ) RETURNING id, created_at, updated_at
     """
 
@@ -273,7 +281,7 @@ async def create_employee(
             employee.hire_date, employee.birth_date, employee.ssn_last4,
             employee.manager_id, employee.salary, employee.hourly_rate,
             employee.emergency_contact_name, employee.emergency_contact_phone,
-            employee.address, employee.city, employee.state, employee.postal_code
+            employee.address, employee.city, employee.state, employee.postal_code, tenant_id
         )
 
         # Background task to set up employee accounts
@@ -295,19 +303,24 @@ async def list_employees(
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all employees with optional filters"""
+    """List all employees with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             e.*,
             m.first_name || ' ' || m.last_name as manager_name
         FROM employees e
         LEFT JOIN employees m ON e.manager_id = m.id
-        WHERE 1=1
+        WHERE e.tenant_id = $1
     """
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     if department:
         param_count += 1
@@ -346,19 +359,24 @@ async def list_employees(
 @router.get("/employees/{employee_id}", response_model=EmployeeResponse)
 async def get_employee(
     employee_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee details by ID"""
+    """Get employee details by ID - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             e.*,
             m.first_name || ' ' || m.last_name as manager_name
         FROM employees e
         LEFT JOIN employees m ON e.manager_id = m.id
-        WHERE e.id = $1
+        WHERE e.id = $1 AND e.tenant_id = $2
     """
 
-    row = await conn.fetchrow(query, uuid.UUID(employee_id))
+    row = await conn.fetchrow(query, uuid.UUID(employee_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Employee not found")
 
@@ -372,12 +390,17 @@ async def get_employee(
 async def update_employee(
     employee_id: str,
     employee: EmployeeUpdate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update employee information"""
+    """Update employee information - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     update_fields = []
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     for field, value in employee.dict(exclude_unset=True).items():
         if value is not None:
@@ -392,7 +415,7 @@ async def update_employee(
     query = f"""
         UPDATE employees
         SET {', '.join(update_fields)}, updated_at = NOW()
-        WHERE id = ${param_count}
+        WHERE id = ${param_count} AND tenant_id = $1
         RETURNING *
     """
     params.append(uuid.UUID(employee_id))
@@ -411,18 +434,23 @@ async def update_employee(
 async def create_payroll(
     payroll: PayrollCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a new payroll record"""
+    """Create a new payroll record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     payroll_number = f"PAY-{datetime.now().strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
 
     query = """
         INSERT INTO payroll (
             payroll_number, employee_id, pay_period_start, pay_period_end,
             regular_hours, overtime_hours, holiday_hours, sick_hours, vacation_hours,
-            gross_pay, deductions, net_pay, payment_method, payment_date, status
+            gross_pay, deductions, net_pay, payment_method, payment_date, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pending'
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pending', $15
         ) RETURNING id, created_at
     """
 
@@ -433,7 +461,7 @@ async def create_payroll(
         payroll.regular_hours, payroll.overtime_hours,
         payroll.holiday_hours, payroll.sick_hours, payroll.vacation_hours,
         payroll.gross_pay, json.dumps({k: str(v) for k, v in payroll.deductions.items()}),
-        payroll.net_pay, payroll.payment_method, payroll.payment_date
+        payroll.net_pay, payroll.payment_method, payroll.payment_date, tenant_id
     )
 
     # Background task to process payroll
@@ -455,12 +483,17 @@ async def list_payroll(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List payroll records with optional filters"""
-    query = "SELECT * FROM payroll WHERE 1=1"
-    params = []
-    param_count = 0
+    """List payroll records with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    query = "SELECT * FROM payroll WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if employee_id:
         param_count += 1
@@ -506,17 +539,22 @@ async def list_payroll(
 async def approve_payroll(
     payroll_id: str,
     approved_by: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Approve a payroll record"""
+    """Approve a payroll record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE payroll
         SET status = 'approved', approved_by = $1, approved_at = NOW()
-        WHERE id = $2 AND status = 'pending'
+        WHERE id = $2 AND status = 'pending' AND tenant_id = $3
         RETURNING id
     """
 
-    result = await conn.fetchrow(query, approved_by, uuid.UUID(payroll_id))
+    result = await conn.fetchrow(query, approved_by, uuid.UUID(payroll_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Payroll record not found or already processed")
 
@@ -526,17 +564,22 @@ async def approve_payroll(
 async def process_payroll_batch(
     pay_period_end: date,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Process payroll for all employees for a pay period"""
-    # Get all active employees
+    """Process payroll for all employees for a pay period - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    # Get all active employees for this tenant
     query = """
         SELECT id, salary, hourly_rate
         FROM employees
-        WHERE employment_status = 'active'
+        WHERE employment_status = 'active' AND tenant_id = $1
     """
 
-    employees = await conn.fetch(query)
+    employees = await conn.fetch(query, tenant_id)
 
     payroll_records = []
     for emp in employees:
@@ -548,6 +591,7 @@ async def process_payroll_batch(
             WHERE employee_id = $1
                 AND work_date >= $2
                 AND work_date <= $3
+                AND tenant_id = $4
         """
 
         pay_period_start = pay_period_end - timedelta(days=13)  # 2 week pay period
@@ -556,7 +600,8 @@ async def process_payroll_batch(
             time_query,
             emp['id'],
             pay_period_start,
-            pay_period_end
+            pay_period_end,
+            tenant_id
         ) or 0
 
         # Calculate gross pay
@@ -586,7 +631,8 @@ async def process_payroll_batch(
             "gross_pay": gross_pay,
             "deductions": deductions,
             "net_pay": net_pay,
-            "payment_date": pay_period_end + timedelta(days=5)
+            "payment_date": pay_period_end + timedelta(days=5),
+            "tenant_id": tenant_id
         })
 
     # Create payroll records
@@ -607,18 +653,23 @@ async def process_payroll_batch(
 async def create_leave_request(
     leave_request: LeaveRequestCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a new leave request"""
+    """Create a new leave request - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     request_number = f"LV-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
     total_days = (leave_request.end_date - leave_request.start_date).days + 1
 
     query = """
         INSERT INTO leave_requests (
             request_number, employee_id, leave_type, start_date, end_date,
-            total_days, reason, supporting_docs, status
+            total_days, reason, supporting_docs, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, 'pending'
+            $1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9
         ) RETURNING id, created_at
     """
 
@@ -627,7 +678,8 @@ async def create_leave_request(
         request_number, uuid.UUID(leave_request.employee_id),
         leave_request.leave_type, leave_request.start_date,
         leave_request.end_date, total_days, leave_request.reason,
-        json.dumps(leave_request.supporting_docs) if leave_request.supporting_docs else None
+        json.dumps(leave_request.supporting_docs) if leave_request.supporting_docs else None,
+        tenant_id
     )
 
     # Notify manager
@@ -649,12 +701,17 @@ async def list_leave_requests(
     leave_type: Optional[LeaveType] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List leave requests with optional filters"""
-    query = "SELECT * FROM leave_requests WHERE 1=1"
-    params = []
-    param_count = 0
+    """List leave requests with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    query = "SELECT * FROM leave_requests WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if employee_id:
         param_count += 1
@@ -696,13 +753,18 @@ async def update_leave_request(
     request_id: str,
     update: LeaveRequestUpdate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update leave request status"""
+    """Update leave request status - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE leave_requests
         SET status = $1, approved_by = $2, approval_notes = $3, approval_date = NOW()
-        WHERE id = $4
+        WHERE id = $4 AND tenant_id = $5
         RETURNING *
     """
 
@@ -711,7 +773,8 @@ async def update_leave_request(
         update.status,
         update.approved_by,
         update.approval_notes,
-        uuid.UUID(request_id)
+        uuid.UUID(request_id),
+        tenant_id
     )
 
     if not result:
@@ -730,16 +793,21 @@ async def update_leave_request(
 @router.post("/benefits/enroll")
 async def enroll_benefit(
     enrollment: BenefitEnrollment,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Enroll employee in benefits"""
+    """Enroll employee in benefits - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO benefit_enrollments (
             employee_id, benefit_type, plan_name, coverage_level,
             effective_date, termination_date, employee_cost, employer_cost,
-            dependents
+            dependents, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
         ) RETURNING id
     """
 
@@ -753,7 +821,8 @@ async def enroll_benefit(
         enrollment.termination_date,
         enrollment.employee_cost,
         enrollment.employer_cost,
-        json.dumps(enrollment.dependents) if enrollment.dependents else None
+        json.dumps(enrollment.dependents) if enrollment.dependents else None,
+        tenant_id
     )
 
     return {
@@ -765,14 +834,19 @@ async def enroll_benefit(
 async def get_employee_benefits(
     employee_id: str,
     active_only: bool = True,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee's benefit enrollments"""
+    """Get employee's benefit enrollments - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT * FROM benefit_enrollments
-        WHERE employee_id = $1
+        WHERE employee_id = $1 AND tenant_id = $2
     """
-    params = [uuid.UUID(employee_id)]
+    params = [uuid.UUID(employee_id), tenant_id]
 
     if active_only:
         query += " AND (termination_date IS NULL OR termination_date > CURRENT_DATE)"
@@ -795,15 +869,20 @@ async def get_employee_benefits(
 @router.post("/time-entries")
 async def create_time_entry(
     entry: TimeEntry,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Record time entry for employee"""
+    """Record time entry for employee - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO time_entries (
             employee_id, work_date, clock_in, clock_out,
-            break_minutes, project_id, notes
+            break_minutes, project_id, notes, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7
+            $1, $2, $3, $4, $5, $6, $7, $8
         ) RETURNING id
     """
 
@@ -815,7 +894,8 @@ async def create_time_entry(
         entry.clock_out,
         entry.break_minutes,
         uuid.UUID(entry.project_id) if entry.project_id else None,
-        entry.notes
+        entry.notes,
+        tenant_id
     )
 
     return {
@@ -828,15 +908,20 @@ async def get_employee_time_entries(
     employee_id: str,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee's time entries"""
+    """Get employee's time entries - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT * FROM time_entries
-        WHERE employee_id = $1
+        WHERE employee_id = $1 AND tenant_id = $2
     """
-    params = [uuid.UUID(employee_id)]
-    param_count = 1
+    params = [uuid.UUID(employee_id), tenant_id]
+    param_count = 2
 
     if start_date:
         param_count += 1
@@ -868,16 +953,21 @@ async def get_employee_time_entries(
 async def create_performance_review(
     review: PerformanceReview,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a performance review"""
+    """Create a performance review - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO performance_reviews (
             employee_id, reviewer_id, review_type, review_period_start,
             review_period_end, overall_rating, ratings, strengths,
-            improvements, goals, comments
+            improvements, goals, comments, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         ) RETURNING id
     """
 
@@ -893,7 +983,8 @@ async def create_performance_review(
         review.strengths,
         review.improvements,
         json.dumps(review.goals) if review.goals else None,
-        review.comments
+        review.comments,
+        tenant_id
     )
 
     # Schedule follow-up
@@ -907,20 +998,25 @@ async def create_performance_review(
 @router.get("/performance-reviews/employee/{employee_id}")
 async def get_employee_reviews(
     employee_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee's performance reviews"""
+    """Get employee's performance reviews - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             pr.*,
             e.first_name || ' ' || e.last_name as reviewer_name
         FROM performance_reviews pr
         JOIN employees e ON pr.reviewer_id = e.id
-        WHERE pr.employee_id = $1
+        WHERE pr.employee_id = $1 AND pr.tenant_id = $2
         ORDER BY pr.created_at DESC
     """
 
-    rows = await conn.fetch(query, uuid.UUID(employee_id))
+    rows = await conn.fetch(query, uuid.UUID(employee_id), tenant_id)
 
     return [
         {
@@ -938,16 +1034,21 @@ async def get_employee_reviews(
 @router.post("/training")
 async def create_training_record(
     training: TrainingRecord,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a training record"""
+    """Create a training record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO training_records (
             employee_id, training_name, training_type, provider,
             start_date, completion_date, expiry_date, status,
-            score, certificate_number, cost
+            score, certificate_number, cost, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         ) RETURNING id
     """
 
@@ -963,7 +1064,8 @@ async def create_training_record(
         training.status,
         training.score,
         training.certificate_number,
-        training.cost
+        training.cost,
+        tenant_id
     )
 
     return {
@@ -975,14 +1077,19 @@ async def create_training_record(
 async def get_employee_training(
     employee_id: str,
     include_expired: bool = False,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee's training records"""
+    """Get employee's training records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT * FROM training_records
-        WHERE employee_id = $1
+        WHERE employee_id = $1 AND tenant_id = $2
     """
-    params = [uuid.UUID(employee_id)]
+    params = [uuid.UUID(employee_id), tenant_id]
 
     if not include_expired:
         query += " AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)"
@@ -1004,9 +1111,14 @@ async def get_employee_training(
 @router.get("/reports/headcount")
 async def get_headcount_report(
     as_of_date: Optional[date] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get headcount report by department"""
+    """Get headcount report by department - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not as_of_date:
         as_of_date = date.today()
 
@@ -1019,11 +1131,12 @@ async def get_headcount_report(
         FROM employees
         WHERE hire_date <= $1
             AND (termination_date IS NULL OR termination_date > $1)
+            AND tenant_id = $2
         GROUP BY department, employment_type
         ORDER BY department, employment_type
     """
 
-    rows = await conn.fetch(query, as_of_date)
+    rows = await conn.fetch(query, as_of_date, tenant_id)
 
     return {
         "as_of_date": as_of_date,
@@ -1035,19 +1148,24 @@ async def get_headcount_report(
 async def get_leave_balance(
     employee_id: str,
     year: Optional[int] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get employee's leave balance"""
+    """Get employee's leave balance - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not year:
         year = datetime.now().year
 
     # Get leave entitlements
     entitlement_query = """
         SELECT * FROM leave_entitlements
-        WHERE employee_id = $1 AND year = $2
+        WHERE employee_id = $1 AND year = $2 AND tenant_id = $3
     """
 
-    entitlements = await conn.fetch(entitlement_query, uuid.UUID(employee_id), year)
+    entitlements = await conn.fetch(entitlement_query, uuid.UUID(employee_id), year, tenant_id)
 
     # Get used leave
     used_query = """
@@ -1058,10 +1176,11 @@ async def get_leave_balance(
         WHERE employee_id = $1
             AND status = 'approved'
             AND EXTRACT(YEAR FROM start_date) = $2
+            AND tenant_id = $3
         GROUP BY leave_type
     """
 
-    used = await conn.fetch(used_query, uuid.UUID(employee_id), year)
+    used = await conn.fetch(used_query, uuid.UUID(employee_id), year, tenant_id)
     used_dict = {row['leave_type']: row['days_used'] for row in used}
 
     balances = []

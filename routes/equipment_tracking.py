@@ -15,6 +15,7 @@ from decimal import Decimal
 import json
 
 from database import get_db_connection
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -288,14 +289,20 @@ async def check_equipment_availability(conn, equipment_id: str, start_date: date
 @router.post("/equipment", response_model=EquipmentResponse)
 async def create_equipment(
     equipment: EquipmentCreate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new equipment"""
     try:
-        # Check for duplicate code
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Check for duplicate code within tenant
         existing = await conn.fetchval(
-            "SELECT id FROM equipment WHERE equipment_code = $1",
-            equipment.equipment_code
+            "SELECT id FROM equipment WHERE equipment_code = $1 AND tenant_id = $2",
+            equipment.equipment_code,
+            uuid.UUID(tenant_id)
         )
         if existing:
             raise HTTPException(status_code=400, detail="Equipment code already exists")
@@ -305,15 +312,16 @@ async def create_equipment(
         # Create equipment
         result = await conn.fetchrow("""
             INSERT INTO equipment (
-                id, equipment_code, name, description, equipment_type,
+                id, tenant_id, equipment_code, name, description, equipment_type,
                 manufacturer, model, serial_number, year,
                 purchase_date, purchase_price, current_value,
                 location_id, assigned_to, fuel_type, capacity,
                 specifications, status, condition
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING *
         """,
             uuid.UUID(equipment_id),
+            uuid.UUID(tenant_id),
             equipment.equipment_code,
             equipment.name,
             equipment.description,
@@ -371,10 +379,15 @@ async def get_equipment(
     search: Optional[str] = None,
     limit: int = Query(100, le=1000),
     offset: int = 0,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get equipment with filters"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Build query
         query = """
             SELECT e.*, l.location_name,
@@ -393,10 +406,10 @@ async def get_equipment(
                 WHERE status = 'scheduled' AND scheduled_date >= CURRENT_DATE
                 GROUP BY equipment_id
             ) ms ON e.id = ms.equipment_id
-            WHERE 1=1
+            WHERE e.tenant_id = $1
         """
-        params = []
-        param_count = 0
+        params = [uuid.UUID(tenant_id)]
+        param_count = 1
 
         if equipment_type:
             param_count += 1
@@ -451,16 +464,21 @@ async def get_equipment(
 @router.get("/equipment/{equipment_id}", response_model=EquipmentResponse)
 async def get_equipment_details(
     equipment_id: str,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get equipment details"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         result = await conn.fetchrow("""
             SELECT e.*, l.location_name
             FROM equipment e
             LEFT JOIN inventory_locations l ON e.location_id = l.id
-            WHERE e.id = $1
-        """, uuid.UUID(equipment_id))
+            WHERE e.id = $1 AND e.tenant_id = $2
+        """, uuid.UUID(equipment_id), uuid.UUID(tenant_id))
 
         if not result:
             raise HTTPException(status_code=404, detail="Equipment not found")
@@ -494,10 +512,15 @@ async def get_equipment_details(
 async def update_equipment(
     equipment_id: str,
     update: EquipmentUpdate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update equipment"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Build update query
         update_fields = []
         params = []
@@ -518,10 +541,13 @@ async def update_equipment(
         param_count += 1
         params.append(uuid.UUID(equipment_id))
 
+        param_count += 1
+        params.append(uuid.UUID(tenant_id))
+
         query = f"""
             UPDATE equipment
             SET {', '.join(update_fields)}
-            WHERE id = ${param_count}
+            WHERE id = ${param_count - 1} AND tenant_id = ${param_count}
             RETURNING *
         """
 
@@ -569,14 +595,20 @@ async def update_equipment(
 async def checkout_equipment(
     equipment_id: str,
     checkout: EquipmentCheckout,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Check out equipment"""
     try:
-        # Verify equipment exists and is available
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment exists, belongs to tenant, and is available
         equipment = await conn.fetchrow(
-            "SELECT * FROM equipment WHERE id = $1",
-            uuid.UUID(equipment_id)
+            "SELECT * FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id),
+            uuid.UUID(tenant_id)
         )
 
         if not equipment:
@@ -645,15 +677,21 @@ async def checkout_equipment(
 @router.post("/equipment/return")
 async def return_equipment(
     return_info: EquipmentReturn,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Return checked out equipment"""
     try:
-        # Get checkout record
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Get checkout record (verify via equipment tenant)
         checkout = await conn.fetchrow("""
-            SELECT * FROM equipment_checkouts
-            WHERE id = $1 AND status = 'checked_out'
-        """, uuid.UUID(return_info.checkout_id))
+            SELECT ec.* FROM equipment_checkouts ec
+            JOIN equipment e ON ec.equipment_id = e.id
+            WHERE ec.id = $1 AND ec.status = 'checked_out' AND e.tenant_id = $2
+        """, uuid.UUID(return_info.checkout_id), uuid.UUID(tenant_id))
 
         if not checkout:
             raise HTTPException(status_code=404, detail="Active checkout not found")
@@ -730,10 +768,23 @@ async def schedule_maintenance(
     equipment_id: str,
     schedule: MaintenanceSchedule,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Schedule equipment maintenance"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment belongs to tenant
+        equipment_exists = await conn.fetchval(
+            "SELECT id FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id), uuid.UUID(tenant_id)
+        )
+        if not equipment_exists:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+
         schedule_id = str(uuid.uuid4())
 
         # Create maintenance schedule
@@ -793,10 +844,23 @@ async def schedule_maintenance(
 async def record_maintenance(
     equipment_id: str,
     record: MaintenanceRecord,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Record completed maintenance"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment belongs to tenant
+        equipment_exists = await conn.fetchval(
+            "SELECT id FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id), uuid.UUID(tenant_id)
+        )
+        if not equipment_exists:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+
         record_id = str(uuid.uuid4())
 
         # Create maintenance record
@@ -871,10 +935,23 @@ async def record_maintenance(
 async def record_inspection(
     equipment_id: str,
     inspection: InspectionReport,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Record equipment inspection"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment belongs to tenant
+        equipment_exists = await conn.fetchval(
+            "SELECT id FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id), uuid.UUID(tenant_id)
+        )
+        if not equipment_exists:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+
         inspection_id = str(uuid.uuid4())
 
         # Create inspection record
@@ -940,10 +1017,23 @@ async def get_equipment_history(
     equipment_id: str,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get equipment usage and maintenance history"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment belongs to tenant
+        equipment_exists = await conn.fetchval(
+            "SELECT id FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id), uuid.UUID(tenant_id)
+        )
+        if not equipment_exists:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+
         # Build date filter
         date_filter = ""
         if start_date:
@@ -1005,10 +1095,23 @@ async def check_availability(
     equipment_id: str,
     start_date: date,
     end_date: date,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Check equipment availability for a period"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify equipment belongs to tenant
+        equipment_exists = await conn.fetchval(
+            "SELECT id FROM equipment WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(equipment_id), uuid.UUID(tenant_id)
+        )
+        if not equipment_exists:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+
         is_available = await check_equipment_availability(conn, equipment_id, start_date, end_date)
 
         # Get conflicting bookings if not available
@@ -1053,19 +1156,24 @@ async def get_utilization_report(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     equipment_type: Optional[EquipmentType] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get equipment utilization report"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         if not start_date:
             start_date = date.today() - timedelta(days=30)
         if not end_date:
             end_date = date.today()
 
-        # Build query
-        type_filter = ""
+        # Build query with tenant filter
+        type_filter = f"AND e.tenant_id = '{tenant_id}'"
         if equipment_type:
-            type_filter = f"AND e.equipment_type = '{equipment_type}'"
+            type_filter += f" AND e.equipment_type = '{equipment_type}'"
 
         report = await conn.fetch(f"""
             SELECT
@@ -1119,17 +1227,22 @@ async def get_utilization_report(
 async def get_maintenance_cost_report(
     year: Optional[int] = None,
     equipment_type: Optional[EquipmentType] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get maintenance cost report"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         if not year:
             year = datetime.now().year
 
-        # Build filters
-        type_filter = ""
+        # Build filters with tenant
+        type_filter = f"AND e.tenant_id = '{tenant_id}'"
         if equipment_type:
-            type_filter = f"AND e.equipment_type = '{equipment_type}'"
+            type_filter += f" AND e.equipment_type = '{equipment_type}'"
 
         report = await conn.fetch(f"""
             SELECT

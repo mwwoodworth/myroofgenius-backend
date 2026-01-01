@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from uuid import uuid4
 from database import get_db
+from core.supabase_auth import get_authenticated_user
 
 # These services might not be available yet
 try:
@@ -37,28 +38,34 @@ router = APIRouter()
 @router.post("/workflows")
 async def create_workflow(
     workflow: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new workflow definition"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         workflow_id = str(uuid4())
-        
+
         query = """
         INSERT INTO workflows (
-            id, name, description, category,
+            id, tenant_id, name, description, category,
             trigger_type, trigger_config,
             conditions, actions,
             is_active, created_by
         ) VALUES (
-            :id, :name, :description, :category,
+            :id, :tenant_id, :name, :description, :category,
             :trigger_type, :trigger_config,
             :conditions, :actions,
             :is_active, :created_by
         )
         """
-        
+
         db.execute(text(query), {
             'id': workflow_id,
+            'tenant_id': tenant_id,
             'name': workflow['name'],
             'description': workflow.get('description'),
             'category': workflow.get('category'),
@@ -69,9 +76,9 @@ async def create_workflow(
             'is_active': workflow.get('is_active', True),
             'created_by': workflow.get('created_by')
         })
-        
+
         db.commit()
-        
+
         return {
             'workflow': {
                 'id': workflow_id,
@@ -79,7 +86,7 @@ async def create_workflow(
                 'status': 'created'
             }
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating workflow: {e}")
@@ -91,9 +98,14 @@ async def get_workflows(
     is_active: Optional[bool] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get workflows with filtering"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         query = """
         SELECT
@@ -101,27 +113,27 @@ async def get_workflows(
             0 as execution_count,
             NULL as last_execution
         FROM workflows w
-        WHERE 1=1
+        WHERE w.tenant_id = :tenant_id
         """
-        
-        params = {}
-        
+
+        params = {'tenant_id': tenant_id}
+
         if category:
             query += " AND w.category = :category"
             params['category'] = category
-            
+
         if is_active is not None:
             query += " AND w.is_active = :is_active"
             params['is_active'] = is_active
-            
+
         query += """
         ORDER BY w.created_at DESC
         LIMIT :limit OFFSET :skip
         """
-        
+
         params['limit'] = limit
         params['skip'] = skip
-        
+
         result = db.execute(text(query), params)
         workflows = []
 
@@ -146,9 +158,9 @@ async def get_workflows(
                     workflow[field] = {} if field != 'actions' else []
 
             workflows.append(workflow)
-        
+
         return {'workflows': workflows}
-        
+
     except Exception as e:
         logger.error(f"Error fetching workflows: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -158,15 +170,26 @@ async def execute_workflow(
     workflow_id: str,
     trigger_data: Dict[str, Any],
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Manually trigger workflow execution"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    # Verify workflow belongs to tenant
+    verify_query = "SELECT id FROM workflows WHERE id = :workflow_id AND tenant_id = :tenant_id"
+    workflow = db.execute(text(verify_query), {'workflow_id': workflow_id, 'tenant_id': tenant_id}).fetchone()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     try:
         engine = AutomationEngine(db)
-        
+
         # Trigger workflow asynchronously
         execution_id = await engine.trigger_workflow(workflow_id, trigger_data)
-        
+
         if execution_id:
             return {
                 'execution': {
@@ -180,7 +203,7 @@ async def execute_workflow(
                 'message': 'Workflow conditions not met',
                 'workflow_id': workflow_id
             }
-            
+
     except Exception as e:
         logger.error(f"Error executing workflow: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -191,47 +214,58 @@ async def get_workflow_executions(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get execution history for a workflow"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    # Verify workflow belongs to tenant
+    verify_query = "SELECT id FROM workflows WHERE id = :workflow_id AND tenant_id = :tenant_id"
+    workflow = db.execute(text(verify_query), {'workflow_id': workflow_id, 'tenant_id': tenant_id}).fetchone()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     try:
         query = """
-        SELECT 
+        SELECT
             we.*,
             COUNT(ws.id) as total_steps,
             SUM(CASE WHEN ws.status = 'completed' THEN 1 ELSE 0 END) as completed_steps,
             SUM(CASE WHEN ws.status = 'failed' THEN 1 ELSE 0 END) as failed_steps
         FROM workflow_executions we
         LEFT JOIN workflow_steps ws ON we.id = ws.execution_id
-        WHERE we.workflow_id = :workflow_id
+        WHERE we.workflow_id = :workflow_id AND we.tenant_id = :tenant_id
         """
-        
-        params = {'workflow_id': workflow_id}
-        
+
+        params = {'workflow_id': workflow_id, 'tenant_id': tenant_id}
+
         if status:
             query += " AND we.status = :status"
             params['status'] = status
-            
+
         query += """
         GROUP BY we.id
         ORDER BY we.started_at DESC
         LIMIT :limit OFFSET :skip
         """
-        
+
         params['limit'] = limit
         params['skip'] = skip
-        
+
         result = db.execute(text(query), params)
         executions = []
-        
+
         for row in result:
             execution = dict(row)
             execution['trigger_data'] = json.loads(execution['trigger_data']) if execution['trigger_data'] else {}
             execution['context_data'] = json.loads(execution['context_data']) if execution['context_data'] else {}
             executions.append(execution)
-        
+
         return {'executions': executions}
-        
+
     except Exception as e:
         logger.error(f"Error fetching executions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -239,27 +273,38 @@ async def get_workflow_executions(
 @router.get("/executions/{execution_id}/steps")
 async def get_execution_steps(
     execution_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get detailed steps for a workflow execution"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    # Verify execution belongs to tenant
+    verify_query = "SELECT id FROM workflow_executions WHERE id = :execution_id AND tenant_id = :tenant_id"
+    execution = db.execute(text(verify_query), {'execution_id': execution_id, 'tenant_id': tenant_id}).fetchone()
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
     try:
         query = """
         SELECT * FROM workflow_steps
         WHERE execution_id = :execution_id
         ORDER BY step_number
         """
-        
+
         result = db.execute(text(query), {'execution_id': execution_id})
         steps = []
-        
+
         for row in result:
             step = dict(row)
             step['input_data'] = json.loads(step['input_data']) if step['input_data'] else {}
             step['output_data'] = json.loads(step['output_data']) if step['output_data'] else {}
             steps.append(step)
-        
+
         return {'steps': steps}
-        
+
     except Exception as e:
         logger.error(f"Error fetching execution steps: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -271,26 +316,32 @@ async def get_execution_steps(
 @router.post("/automation-rules")
 async def create_automation_rule(
     rule: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new automation rule"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         rule_id = str(uuid4())
-        
+
         query = """
         INSERT INTO automation_rules (
-            id, name, description, rule_type,
+            id, tenant_id, name, description, rule_type,
             entity_type, conditions, actions,
             is_active, priority
         ) VALUES (
-            :id, :name, :description, :rule_type,
+            :id, :tenant_id, :name, :description, :rule_type,
             :entity_type, :conditions, :actions,
             :is_active, :priority
         )
         """
-        
+
         db.execute(text(query), {
             'id': rule_id,
+            'tenant_id': tenant_id,
             'name': rule['name'],
             'description': rule.get('description'),
             'rule_type': rule.get('rule_type', 'notification'),
@@ -300,9 +351,9 @@ async def create_automation_rule(
             'is_active': rule.get('is_active', True),
             'priority': rule.get('priority', 100)
         })
-        
+
         db.commit()
-        
+
         return {
             'rule': {
                 'id': rule_id,
@@ -310,7 +361,7 @@ async def create_automation_rule(
                 'status': 'created'
             }
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating automation rule: {e}")
@@ -320,38 +371,43 @@ async def create_automation_rule(
 async def get_automation_rules(
     entity_type: Optional[str] = None,
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get automation rules"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         query = """
         SELECT * FROM automation_rules
-        WHERE 1=1
+        WHERE tenant_id = :tenant_id
         """
-        
-        params = {}
-        
+
+        params = {'tenant_id': tenant_id}
+
         if entity_type:
             query += " AND entity_type = :entity_type"
             params['entity_type'] = entity_type
-            
+
         if is_active is not None:
             query += " AND is_active = :is_active"
             params['is_active'] = is_active
-            
+
         query += " ORDER BY priority, created_at DESC"
-        
+
         result = db.execute(text(query), params)
         rules = []
-        
+
         for row in result:
             rule = dict(row)
             rule['conditions'] = json.loads(rule['conditions']) if rule['conditions'] else {}
             rule['actions'] = json.loads(rule['actions']) if rule['actions'] else []
             rules.append(rule)
-        
+
         return {'rules': rules}
-        
+
     except Exception as e:
         logger.error(f"Error fetching automation rules: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -360,12 +416,17 @@ async def get_automation_rules(
 async def process_entity_rules(
     entity_data: Dict[str, Any],
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Process automation rules for an entity"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         engine = RuleEngine(db)
-        
+
         # Process rules asynchronously
         background_tasks.add_task(
             engine.process_entity,
@@ -373,13 +434,13 @@ async def process_entity_rules(
             entity_data['entity_id'],
             entity_data.get('event', 'updated')
         )
-        
+
         return {
             'message': 'Rules processing initiated',
             'entity_type': entity_data['entity_type'],
             'entity_id': entity_data['entity_id']
         }
-        
+
     except Exception as e:
         logger.error(f"Error processing rules: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -392,26 +453,32 @@ async def process_entity_rules(
 async def send_notification(
     notification: Dict[str, Any],
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Send a notification"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         service = NotificationService(db)
-        
+
         # Queue notification
         query = """
         INSERT INTO notification_queue (
-            recipient_email, recipient_phone,
+            tenant_id, recipient_email, recipient_phone,
             notification_type, subject, message,
             data, status, scheduled_for
         ) VALUES (
-            :recipient_email, :recipient_phone,
+            :tenant_id, :recipient_email, :recipient_phone,
             :notification_type, :subject, :message,
             :data, 'pending', NOW()
         ) RETURNING id
         """
-        
+
         result = db.execute(text(query), {
+            'tenant_id': tenant_id,
             'recipient_email': notification.get('email'),
             'recipient_phone': notification.get('phone'),
             'notification_type': notification['type'],
@@ -419,20 +486,20 @@ async def send_notification(
             'message': notification['message'],
             'data': json.dumps(notification.get('data', {}))
         })
-        
+
         notification_id = result.scalar()
         db.commit()
-        
+
         # Process immediately in background
         background_tasks.add_task(service.process_queue)
-        
+
         return {
             'notification': {
                 'id': str(notification_id),
                 'status': 'queued'
             }
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error sending notification: {e}")
@@ -442,45 +509,50 @@ async def send_notification(
 async def get_notification_queue(
     status: Optional[str] = None,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get notification queue status"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         query = """
         SELECT * FROM notification_queue
-        WHERE 1=1
+        WHERE tenant_id = :tenant_id
         """
-        
-        params = {}
-        
+
+        params = {'tenant_id': tenant_id}
+
         if status:
             query += " AND status = :status"
             params['status'] = status
-            
+
         query += " ORDER BY scheduled_for DESC LIMIT :limit"
         params['limit'] = limit
-        
+
         result = db.execute(text(query), params)
         notifications = [dict(row) for row in result]
-        
+
         # Get summary
         summary_query = """
-        SELECT 
+        SELECT
             status,
             COUNT(*) as count
         FROM notification_queue
-        WHERE created_at >= CURRENT_DATE
+        WHERE tenant_id = :tenant_id AND created_at >= CURRENT_DATE
         GROUP BY status
         """
-        
-        summary_result = db.execute(text(summary_query))
+
+        summary_result = db.execute(text(summary_query), {'tenant_id': tenant_id})
         summary = {row['status']: row['count'] for row in summary_result}
-        
+
         return {
             'notifications': notifications,
             'summary': summary
         }
-        
+
     except Exception as e:
         logger.error(f"Error fetching notification queue: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -492,35 +564,41 @@ async def get_notification_queue(
 @router.post("/campaigns")
 async def create_campaign(
     campaign: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a nurture campaign"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         campaign_id = str(uuid4())
-        
+
         query = """
         INSERT INTO nurture_campaigns (
-            id, name, description,
+            id, tenant_id, name, description,
             target_criteria, email_sequence,
             is_active
         ) VALUES (
-            :id, :name, :description,
+            :id, :tenant_id, :name, :description,
             :target_criteria, :email_sequence,
             :is_active
         )
         """
-        
+
         db.execute(text(query), {
             'id': campaign_id,
+            'tenant_id': tenant_id,
             'name': campaign['name'],
             'description': campaign.get('description'),
             'target_criteria': json.dumps(campaign.get('target_criteria', {})),
             'email_sequence': json.dumps(campaign['email_sequence']),
             'is_active': campaign.get('is_active', True)
         })
-        
+
         db.commit()
-        
+
         return {
             'campaign': {
                 'id': campaign_id,
@@ -528,7 +606,7 @@ async def create_campaign(
                 'status': 'created'
             }
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating campaign: {e}")
@@ -538,63 +616,77 @@ async def create_campaign(
 async def enroll_in_campaign(
     campaign_id: str,
     enrollment: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Enroll leads in a campaign"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    # Verify campaign belongs to tenant
+    verify_query = "SELECT id FROM nurture_campaigns WHERE id = :campaign_id AND tenant_id = :tenant_id"
+    campaign = db.execute(text(verify_query), {'campaign_id': campaign_id, 'tenant_id': tenant_id}).fetchone()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
     try:
         lead_ids = enrollment.get('lead_ids', [])
         enrolled_count = 0
-        
+
         for lead_id in lead_ids:
             # Check if already enrolled
             check_query = """
             SELECT id FROM campaign_enrollments
-            WHERE campaign_id = :campaign_id AND lead_id = :lead_id
+            WHERE campaign_id = :campaign_id AND lead_id = :lead_id AND tenant_id = :tenant_id
             """
-            
+
             existing = db.execute(text(check_query), {
                 'campaign_id': campaign_id,
-                'lead_id': lead_id
+                'lead_id': lead_id,
+                'tenant_id': tenant_id
             }).fetchone()
-            
+
             if not existing:
                 # Enroll lead
                 enroll_query = """
                 INSERT INTO campaign_enrollments (
-                    campaign_id, lead_id, status
+                    tenant_id, campaign_id, lead_id, status
                 ) VALUES (
-                    :campaign_id, :lead_id, 'active'
+                    :tenant_id, :campaign_id, :lead_id, 'active'
                 )
                 """
-                
+
                 db.execute(text(enroll_query), {
+                    'tenant_id': tenant_id,
                     'campaign_id': campaign_id,
                     'lead_id': lead_id
                 })
-                
+
                 enrolled_count += 1
-        
+
         # Update campaign stats
         update_query = """
         UPDATE nurture_campaigns
         SET leads_enrolled = leads_enrolled + :count,
             updated_at = NOW()
-        WHERE id = :campaign_id
+        WHERE id = :campaign_id AND tenant_id = :tenant_id
         """
-        
+
         db.execute(text(update_query), {
             'campaign_id': campaign_id,
+            'tenant_id': tenant_id,
             'count': enrolled_count
         })
-        
+
         db.commit()
-        
+
         return {
             'campaign_id': campaign_id,
             'enrolled': enrolled_count,
             'total_requested': len(lead_ids)
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error enrolling in campaign: {e}")
@@ -607,26 +699,32 @@ async def enroll_in_campaign(
 @router.post("/templates/email")
 async def create_email_template(
     template: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create an email template"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         template_id = str(uuid4())
-        
+
         query = """
         INSERT INTO email_templates (
-            id, name, template_key, description,
+            id, tenant_id, name, template_key, description,
             subject, html_body, text_body,
             available_variables, is_active
         ) VALUES (
-            :id, :name, :template_key, :description,
+            :id, :tenant_id, :name, :template_key, :description,
             :subject, :html_body, :text_body,
             :available_variables, :is_active
         )
         """
-        
+
         db.execute(text(query), {
             'id': template_id,
+            'tenant_id': tenant_id,
             'name': template['name'],
             'template_key': template['template_key'],
             'description': template.get('description'),
@@ -636,9 +734,9 @@ async def create_email_template(
             'available_variables': json.dumps(template.get('available_variables', [])),
             'is_active': template.get('is_active', True)
         })
-        
+
         db.commit()
-        
+
         return {
             'template': {
                 'id': template_id,
@@ -646,7 +744,7 @@ async def create_email_template(
                 'template_key': template['template_key']
             }
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating email template: {e}")
@@ -655,29 +753,34 @@ async def create_email_template(
 @router.get("/templates/email")
 async def get_email_templates(
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get email templates"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
-        query = "SELECT * FROM email_templates WHERE 1=1"
-        params = {}
-        
+        query = "SELECT * FROM email_templates WHERE tenant_id = :tenant_id"
+        params = {'tenant_id': tenant_id}
+
         if is_active is not None:
             query += " AND is_active = :is_active"
             params['is_active'] = is_active
-            
+
         query += " ORDER BY name"
-        
+
         result = db.execute(text(query), params)
         templates = []
-        
+
         for row in result:
             template = dict(row)
             template['available_variables'] = json.loads(template['available_variables']) if template['available_variables'] else []
             templates.append(template)
-        
+
         return {'templates': templates}
-        
+
     except Exception as e:
-        logger.error(f"Error fetching email templates: {e} RETURNING * RETURNING * RETURNING * RETURNING * RETURNING *")
+        logger.error(f"Error fetching email templates: {e}")
         raise HTTPException(status_code=500, detail=str(e))

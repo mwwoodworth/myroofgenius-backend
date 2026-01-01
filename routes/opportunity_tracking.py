@@ -14,6 +14,8 @@ import uuid
 import json
 import logging
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -165,9 +167,14 @@ def determine_forecast_category(stage: str, close_date: date, amount: float) -> 
 async def create_opportunity(
     opportunity: OpportunityCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new opportunity"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         opportunity_number = await generate_opportunity_number(conn)
         probability = calculate_probability(opportunity.stage)
@@ -180,19 +187,20 @@ async def create_opportunity(
 
         query = """
             INSERT INTO opportunities (
-                opportunity_number, opportunity_name, account_id, lead_id,
+                tenant_id, opportunity_number, opportunity_name, account_id, lead_id,
                 customer_id, stage, probability, amount, expected_revenue,
                 close_date, opportunity_type, lead_source, next_step,
                 description, competitor_names, assigned_to, territory_id,
                 campaign_id, forecast_category, created_by
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                $14, $15, $16, $17, $18, $19, $20
+                $14, $15, $16, $17, $18, $19, $20, $21
             ) RETURNING *
         """
 
         result = await conn.fetchrow(
             query,
+            tenant_id,
             opportunity_number,
             opportunity.opportunity_name,
             uuid.UUID(opportunity.account_id) if opportunity.account_id else None,
@@ -242,13 +250,18 @@ async def list_opportunities(
     close_date_to: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List opportunities with filters"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        conditions = []
-        params = []
-        param_count = 0
+        conditions = ["tenant_id = $1"]
+        params = [tenant_id]
+        param_count = 1
 
         if stage:
             param_count += 1
@@ -285,7 +298,7 @@ async def list_opportunities(
             conditions.append(f"close_date <= ${param_count}")
             params.append(close_date_to)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_clause = f"WHERE {' AND '.join(conditions)}"
 
         param_count += 1
         limit_param = f"${param_count}"
@@ -316,12 +329,17 @@ async def get_pipeline_summary(
     territory_id: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get pipeline summary by stage"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        conditions = ["is_closed = false"]
-        params = []
+        conditions = ["tenant_id = $1", "is_closed = false"]
+        params = [tenant_id]
 
         if assigned_to:
             params.append(assigned_to)
@@ -403,12 +421,17 @@ async def get_pipeline_summary(
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
 async def get_opportunity(
     opportunity_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get opportunity by ID"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        query = "SELECT * FROM opportunities WHERE id = $1"
-        row = await conn.fetchrow(query, uuid.UUID(opportunity_id))
+        query = "SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2"
+        row = await conn.fetchrow(query, uuid.UUID(opportunity_id), tenant_id)
 
         if not row:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -428,14 +451,19 @@ async def update_opportunity(
     opportunity_id: str,
     updates: OpportunityUpdate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update opportunity"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         # Check if opportunity exists
         existing = await conn.fetchrow(
-            "SELECT * FROM opportunities WHERE id = $1",
-            uuid.UUID(opportunity_id)
+            "SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(opportunity_id), tenant_id
         )
         if not existing:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -487,13 +515,15 @@ async def update_opportunity(
         params.append("system")
 
         param_count += 1
+        params.append(uuid.UUID(opportunity_id))
+        param_count += 1
+        params.append(tenant_id)
         query = f"""
             UPDATE opportunities
             SET {', '.join(set_clauses)}
-            WHERE id = ${param_count}
+            WHERE id = ${param_count - 1} AND tenant_id = ${param_count}
             RETURNING *
         """
-        params.append(uuid.UUID(opportunity_id))
 
         result = await conn.fetchrow(query, *params)
 
@@ -521,14 +551,19 @@ async def update_opportunity_stage(
     opportunity_id: str,
     stage_update: StageUpdate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update opportunity stage with tracking"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         # Get current opportunity
         existing = await conn.fetchrow(
-            "SELECT * FROM opportunities WHERE id = $1",
-            uuid.UUID(opportunity_id)
+            "SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(opportunity_id), tenant_id
         )
         if not existing:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -570,7 +605,7 @@ async def update_opportunity_stage(
             SET stage = $1, probability = $2, expected_revenue = $3,
                 forecast_category = $4, is_closed = $5, is_won = $6,
                 closed_date = $7, updated_at = $8, updated_by = $9
-            WHERE id = $10
+            WHERE id = $10 AND tenant_id = $11
             RETURNING *
         """
 
@@ -585,7 +620,8 @@ async def update_opportunity_stage(
             update_values.get('closed_date', existing['closed_date']),
             datetime.utcnow(),
             "system",
-            uuid.UUID(opportunity_id)
+            uuid.UUID(opportunity_id),
+            tenant_id
         )
 
         # Track stage change
@@ -610,14 +646,19 @@ async def update_opportunity_stage(
 async def add_opportunity_product(
     opportunity_id: str,
     product: OpportunityProduct,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Add product to opportunity"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         # Check opportunity exists
         opp_exists = await conn.fetchval(
-            "SELECT EXISTS(SELECT 1 FROM opportunities WHERE id = $1)",
-            uuid.UUID(opportunity_id)
+            "SELECT EXISTS(SELECT 1 FROM opportunities WHERE id = $1 AND tenant_id = $2)",
+            uuid.UUID(opportunity_id), tenant_id
         )
         if not opp_exists:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -668,10 +709,23 @@ async def add_opportunity_product(
 @router.get("/{opportunity_id}/products", response_model=List[OpportunityProductResponse])
 async def get_opportunity_products(
     opportunity_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get products for an opportunity"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
+        # Verify opportunity belongs to tenant
+        opp_exists = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM opportunities WHERE id = $1 AND tenant_id = $2)",
+            uuid.UUID(opportunity_id), tenant_id
+        )
+        if not opp_exists:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
         query = """
             SELECT * FROM opportunity_products
             WHERE opportunity_id = $1
@@ -699,12 +753,17 @@ async def get_opportunity_stats(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     assigned_to: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get opportunity statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        conditions = []
-        params = []
+        conditions = ["tenant_id = $1"]
+        params = [tenant_id]
 
         if date_from:
             params.append(date_from)
@@ -718,7 +777,7 @@ async def get_opportunity_stats(
             params.append(assigned_to)
             conditions.append(f"assigned_to = ${len(params)}")
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_clause = f"WHERE {' AND '.join(conditions)}"
 
         query = f"""
             SELECT

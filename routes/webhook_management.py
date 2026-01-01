@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
+from core.supabase_auth import get_authenticated_user
 import uuid
 import json
 
@@ -36,16 +37,22 @@ class WebhookResponse(WebhookBase):
 def list_webhooks(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all webhooks"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM webhook_management
+            WHERE tenant_id = :tenant_id
             ORDER BY created_at DESC
             LIMIT :limit OFFSET :skip
-        """), {"limit": limit, "skip": skip}).fetchall()
+        """), {"tenant_id": tenant_id, "limit": limit, "skip": skip}).fetchall()
 
         webhooks = []
         for row in result:
@@ -65,18 +72,24 @@ def list_webhooks(
 @router.post("/", response_model=WebhookResponse)
 def create_webhook(
     item: WebhookCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new webhook"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
         new_id = uuid.uuid4()
         timestamp = datetime.now()
-        
+
         db.execute(text("""
-            INSERT INTO webhook_management (id, name, description, status, data, created_at, updated_at)
-            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+            INSERT INTO webhook_management (id, tenant_id, name, description, status, data, created_at, updated_at)
+            VALUES (:id, :tenant_id, :name, :description, :status, :data, :created_at, :updated_at)
         """), {
             "id": new_id,
+            "tenant_id": tenant_id,
             "name": item.name,
             "description": item.description,
             "status": item.status,
@@ -99,11 +112,16 @@ def create_webhook(
 @router.delete("/{id}")
 def delete_webhook(
     id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Remove a webhook"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     try:
-        result = db.execute(text("DELETE FROM webhook_management WHERE id = :id RETURNING id"), {"id": id}).fetchone()
+        result = db.execute(text("DELETE FROM webhook_management WHERE id = :id AND tenant_id = :tenant_id RETURNING id"), {"id": id, "tenant_id": tenant_id}).fetchone()
         if not result:
             raise HTTPException(status_code=404, detail="Webhook not found")
         db.commit()

@@ -18,6 +18,7 @@ import io
 from dateutil.relativedelta import relativedelta
 
 from database import get_db_connection
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -195,34 +196,66 @@ async def calculate_period_dates(period: ReportPeriod, base_date: date) -> tuple
     else:
         return base_date, base_date
 
-async def get_revenue_data(conn, start_date: date, end_date: date) -> Dict[str, Any]:
+async def get_revenue_data(conn, start_date: date, end_date: date, tenant_id: str = None) -> Dict[str, Any]:
     """Get revenue data for period"""
-    result = await conn.fetchrow("""
-        SELECT
-            COUNT(*) as transaction_count,
-            SUM(total_amount) as total_revenue,
-            SUM(CASE WHEN status = 'paid' THEN total_amount ELSE 0 END) as collected_revenue,
-            SUM(CASE WHEN status != 'paid' THEN total_amount ELSE 0 END) as pending_revenue,
-            AVG(total_amount) as avg_transaction_value
-        FROM invoices
-        WHERE created_at >= $1 AND created_at <= $2
-            AND status != 'cancelled'
-    """, datetime.combine(start_date, datetime.min.time()),
-        datetime.combine(end_date, datetime.max.time()))
+    if tenant_id:
+        result = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as transaction_count,
+                SUM(total_amount) as total_revenue,
+                SUM(CASE WHEN status = 'paid' THEN total_amount ELSE 0 END) as collected_revenue,
+                SUM(CASE WHEN status != 'paid' THEN total_amount ELSE 0 END) as pending_revenue,
+                AVG(total_amount) as avg_transaction_value
+            FROM invoices
+            WHERE created_at >= $1 AND created_at <= $2
+                AND status != 'cancelled'
+                AND tenant_id = $3
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()),
+            uuid.UUID(tenant_id))
 
-    # Get revenue by category
-    categories = await conn.fetch("""
-        SELECT
-            COALESCE(j.job_type, 'Other') as category,
-            COUNT(i.id) as count,
-            SUM(i.total_amount) as amount
-        FROM invoices i
-        LEFT JOIN jobs j ON i.job_id = j.id
-        WHERE i.created_at >= $1 AND i.created_at <= $2
-            AND i.status != 'cancelled'
-        GROUP BY j.job_type
-    """, datetime.combine(start_date, datetime.min.time()),
-        datetime.combine(end_date, datetime.max.time()))
+        # Get revenue by category
+        categories = await conn.fetch("""
+            SELECT
+                COALESCE(j.job_type, 'Other') as category,
+                COUNT(i.id) as count,
+                SUM(i.total_amount) as amount
+            FROM invoices i
+            LEFT JOIN jobs j ON i.job_id = j.id
+            WHERE i.created_at >= $1 AND i.created_at <= $2
+                AND i.status != 'cancelled'
+                AND i.tenant_id = $3
+            GROUP BY j.job_type
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()),
+            uuid.UUID(tenant_id))
+    else:
+        result = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as transaction_count,
+                SUM(total_amount) as total_revenue,
+                SUM(CASE WHEN status = 'paid' THEN total_amount ELSE 0 END) as collected_revenue,
+                SUM(CASE WHEN status != 'paid' THEN total_amount ELSE 0 END) as pending_revenue,
+                AVG(total_amount) as avg_transaction_value
+            FROM invoices
+            WHERE created_at >= $1 AND created_at <= $2
+                AND status != 'cancelled'
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()))
+
+        # Get revenue by category
+        categories = await conn.fetch("""
+            SELECT
+                COALESCE(j.job_type, 'Other') as category,
+                COUNT(i.id) as count,
+                SUM(i.total_amount) as amount
+            FROM invoices i
+            LEFT JOIN jobs j ON i.job_id = j.id
+            WHERE i.created_at >= $1 AND i.created_at <= $2
+                AND i.status != 'cancelled'
+            GROUP BY j.job_type
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()))
 
     return {
         "total": float(result["total_revenue"]) if result["total_revenue"] else 0,
@@ -240,20 +273,34 @@ async def get_revenue_data(conn, start_date: date, end_date: date) -> Dict[str, 
         ]
     }
 
-async def get_expense_data(conn, start_date: date, end_date: date) -> Dict[str, Any]:
+async def get_expense_data(conn, start_date: date, end_date: date, tenant_id: str = None) -> Dict[str, Any]:
     """Get expense data for period"""
     # Get job costs as expenses
-    result = await conn.fetchrow("""
-        SELECT
-            COUNT(*) as expense_count,
-            SUM(material_cost + labor_cost + other_costs) as total_expenses,
-            SUM(material_cost) as material_expenses,
-            SUM(labor_cost) as labor_expenses,
-            SUM(other_costs) as other_expenses
-        FROM job_costs
-        WHERE created_at >= $1 AND created_at <= $2
-    """, datetime.combine(start_date, datetime.min.time()),
-        datetime.combine(end_date, datetime.max.time()))
+    if tenant_id:
+        result = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as expense_count,
+                SUM(material_cost + labor_cost + other_costs) as total_expenses,
+                SUM(material_cost) as material_expenses,
+                SUM(labor_cost) as labor_expenses,
+                SUM(other_costs) as other_expenses
+            FROM job_costs
+            WHERE created_at >= $1 AND created_at <= $2 AND tenant_id = $3
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()),
+            uuid.UUID(tenant_id))
+    else:
+        result = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as expense_count,
+                SUM(material_cost + labor_cost + other_costs) as total_expenses,
+                SUM(material_cost) as material_expenses,
+                SUM(labor_cost) as labor_expenses,
+                SUM(other_costs) as other_expenses
+            FROM job_costs
+            WHERE created_at >= $1 AND created_at <= $2
+        """, datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()))
 
     return {
         "total": float(result["total_expenses"]) if result["total_expenses"] else 0,
@@ -314,9 +361,14 @@ async def calculate_kpis(conn, start_date: date, end_date: date) -> KPIMetrics:
 async def generate_report(
     request: ReportRequest,
     response: Response,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Generate financial report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         # Set end date if not provided
         if not request.end_date:
@@ -324,15 +376,15 @@ async def generate_report(
 
         # Generate report based on type
         if request.report_type == ReportType.PROFIT_LOSS:
-            report_data = await generate_profit_loss(conn, request.start_date, request.end_date)
+            report_data = await generate_profit_loss(conn, request.start_date, request.end_date, tenant_id=tenant_id)
         elif request.report_type == ReportType.REVENUE:
-            report_data = await generate_revenue_report(conn, request.start_date, request.end_date)
+            report_data = await generate_revenue_report(conn, request.start_date, request.end_date, tenant_id=tenant_id)
         elif request.report_type == ReportType.EXPENSES:
-            report_data = await generate_expense_report(conn, request.start_date, request.end_date)
+            report_data = await generate_expense_report(conn, request.start_date, request.end_date, tenant_id=tenant_id)
         elif request.report_type == ReportType.ACCOUNTS_RECEIVABLE:
-            report_data = await generate_ar_report(conn, request.end_date)
+            report_data = await generate_ar_report(conn, request.end_date, tenant_id=tenant_id)
         elif request.report_type == ReportType.CASH_FLOW:
-            report_data = await generate_cash_flow(conn, request.start_date, request.end_date)
+            report_data = await generate_cash_flow(conn, request.start_date, request.end_date, tenant_id=tenant_id)
         else:
             raise HTTPException(status_code=400, detail=f"Report type {request.report_type} not yet implemented")
 
@@ -352,19 +404,24 @@ async def generate_report(
 @router.get("/reports/summary", response_model=FinancialSummary)
 async def get_financial_summary(
     period: ReportPeriod = ReportPeriod.MONTHLY,
-    date: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    report_date: Optional[date] = None,
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get financial summary for period"""
-    try:
-        if not date:
-            date = datetime.now().date()
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-        start_date, end_date = await calculate_period_dates(period, date)
+    try:
+        if not report_date:
+            report_date = datetime.now().date()
+
+        start_date, end_date = await calculate_period_dates(period, report_date)
 
         # Get revenue and expense data
-        revenue_data = await get_revenue_data(conn, start_date, end_date)
-        expense_data = await get_expense_data(conn, start_date, end_date)
+        revenue_data = await get_revenue_data(conn, start_date, end_date, tenant_id)
+        expense_data = await get_expense_data(conn, start_date, end_date, tenant_id)
 
         # Calculate metrics
         revenue = revenue_data["total"]
@@ -379,8 +436,8 @@ async def get_financial_summary(
         ar_result = await conn.fetchrow("""
             SELECT SUM(balance_cents) / 100.0 as total_ar
             FROM invoices
-            WHERE status NOT IN ('paid', 'cancelled')
-        """)
+            WHERE status NOT IN ('paid', 'cancelled') AND tenant_id = $1
+        """, uuid.UUID(tenant_id))
 
         return FinancialSummary(
             period=f"{start_date} to {end_date}",
@@ -405,11 +462,16 @@ async def get_profit_loss(
     start_date: date,
     end_date: date,
     comparison: Optional[ComparisonType] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get profit & loss statement"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        return await generate_profit_loss(conn, start_date, end_date, comparison)
+        return await generate_profit_loss(conn, start_date, end_date, comparison, tenant_id=tenant_id)
     except Exception as e:
         logger.error(f"Error generating P&L: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -419,11 +481,16 @@ async def get_revenue_report(
     start_date: date,
     end_date: date,
     group_by: Optional[str] = "category",
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get revenue report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        return await generate_revenue_report(conn, start_date, end_date, group_by)
+        return await generate_revenue_report(conn, start_date, end_date, group_by, tenant_id=tenant_id)
     except Exception as e:
         logger.error(f"Error generating revenue report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -433,11 +500,16 @@ async def get_expense_report(
     start_date: date,
     end_date: date,
     group_by: Optional[str] = "category",
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get expense report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        return await generate_expense_report(conn, start_date, end_date, group_by)
+        return await generate_expense_report(conn, start_date, end_date, group_by, tenant_id=tenant_id)
     except Exception as e:
         logger.error(f"Error generating expense report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -445,14 +517,19 @@ async def get_expense_report(
 @router.get("/reports/accounts-receivable")
 async def get_ar_aging(
     as_of_date: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get accounts receivable aging report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if not as_of_date:
             as_of_date = datetime.now().date()
 
-        return await generate_ar_report(conn, as_of_date)
+        return await generate_ar_report(conn, as_of_date, tenant_id=tenant_id)
 
     except Exception as e:
         logger.error(f"Error generating AR report: {e}")
@@ -462,11 +539,16 @@ async def get_ar_aging(
 async def get_cash_flow(
     start_date: date,
     end_date: date,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get cash flow statement"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        return await generate_cash_flow(conn, start_date, end_date)
+        return await generate_cash_flow(conn, start_date, end_date, tenant_id=tenant_id)
     except Exception as e:
         logger.error(f"Error generating cash flow: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -475,16 +557,21 @@ async def get_cash_flow(
 async def get_kpi_metrics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get key performance indicators"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if not end_date:
             end_date = datetime.now().date()
         if not start_date:
             start_date = end_date.replace(day=1)
 
-        return await calculate_kpis(conn, start_date, end_date)
+        return await calculate_kpis(conn, start_date, end_date, tenant_id=tenant_id)
 
     except Exception as e:
         logger.error(f"Error calculating KPIs: {e}")
@@ -494,9 +581,14 @@ async def get_kpi_metrics(
 async def get_tax_report(
     year: int,
     quarter: Optional[int] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get tax report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if quarter:
             start_date = date(year, (quarter - 1) * 3 + 1, 1)
@@ -506,8 +598,8 @@ async def get_tax_report(
             end_date = date(year, 12, 31)
 
         # Get revenue
-        revenue_data = await get_revenue_data(conn, start_date, end_date)
-        expense_data = await get_expense_data(conn, start_date, end_date)
+        revenue_data = await get_revenue_data(conn, start_date, end_date, tenant_id)
+        expense_data = await get_expense_data(conn, start_date, end_date, tenant_id)
 
         taxable_income = revenue_data["total"] - expense_data["total"]
 
@@ -543,9 +635,14 @@ async def get_tax_report(
 async def get_financial_trends(
     periods: int = 12,
     period_type: ReportPeriod = ReportPeriod.MONTHLY,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get financial trends over multiple periods"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         trends = []
         current_date = datetime.now().date()
@@ -562,8 +659,8 @@ async def get_financial_trends(
 
             start_date, end_date = await calculate_period_dates(period_type, period_date)
 
-            revenue_data = await get_revenue_data(conn, start_date, end_date)
-            expense_data = await get_expense_data(conn, start_date, end_date)
+            revenue_data = await get_revenue_data(conn, start_date, end_date, tenant_id)
+            expense_data = await get_expense_data(conn, start_date, end_date, tenant_id)
 
             trends.append({
                 "period": f"{start_date}",

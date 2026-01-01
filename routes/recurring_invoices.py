@@ -19,6 +19,7 @@ import logging
 from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrule, DAILY, WEEKLY, MONTHLY, YEARLY
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -121,16 +122,21 @@ async def get_db_connection():
 @router.post("/create", tags=["Recurring Invoices"])
 async def create_recurring_invoice(
     invoice: CreateRecurringInvoice,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new recurring invoice schedule"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify customer exists
             customer = await conn.fetchrow("""
-                SELECT * FROM customers WHERE id = $1
-            """, uuid.UUID(invoice.customer_id))
+                SELECT * FROM customers WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(invoice.customer_id), uuid.UUID(tenant_id))
             
             if not customer:
                 raise HTTPException(status_code=404, detail="Customer not found")
@@ -144,10 +150,10 @@ async def create_recurring_invoice(
                     billing_day, specific_day, weekday, start_date, end_date,
                     max_occurrences, line_items, tax_rate, payment_terms,
                     notes, auto_send, auto_charge, status, metadata,
-                    next_occurrence_date, occurrences_generated
+                    next_occurrence_date, occurrences_generated, tenant_id
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
                 )
             """, uuid.UUID(recurring_id),
                 uuid.UUID(invoice.customer_id),
@@ -169,7 +175,8 @@ async def create_recurring_invoice(
                 RecurrenceStatus.ACTIVE.value,
                 json.dumps(invoice.metadata) if invoice.metadata else None,
                 invoice.start_date,  # next_occurrence_date
-                0  # occurrences_generated
+                0,  # occurrences_generated
+                uuid.UUID(tenant_id)
             )
             
             # Generate preview of upcoming invoices
@@ -209,9 +216,14 @@ async def list_recurring_invoices(
     status: Optional[RecurrenceStatus] = None,
     frequency: Optional[RecurrenceFrequency] = None,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0)
+    offset: int = Query(default=0, ge=0),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List recurring invoices with filters"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -224,10 +236,10 @@ async def list_recurring_invoices(
                 JOIN customers c ON r.customer_id = c.id
                 LEFT JOIN recurring_invoice_instances ri ON r.id = ri.recurring_invoice_id
                 LEFT JOIN invoices i ON ri.invoice_id = i.id
-                WHERE 1=1
+                WHERE r.tenant_id = $1
             """
-            params = []
-            param_count = 0
+            params = [uuid.UUID(tenant_id)]
+            param_count = 1
             
             if customer_id:
                 param_count += 1
@@ -275,12 +287,12 @@ async def list_recurring_invoices(
                 })
             
             # Get total count
-            count_query = "SELECT COUNT(*) FROM recurring_invoices WHERE 1=1"
+            count_query = "SELECT COUNT(*) FROM recurring_invoices WHERE tenant_id = $1"
             if customer_id:
-                count_query += " AND customer_id = $1"
-                total = await conn.fetchval(count_query, uuid.UUID(customer_id))
+                count_query += " AND customer_id = $2"
+                total = await conn.fetchval(count_query, uuid.UUID(tenant_id), uuid.UUID(customer_id))
             else:
-                total = await conn.fetchval(count_query)
+                total = await conn.fetchval(count_query, uuid.UUID(tenant_id))
             
             return {
                 "recurring_invoices": invoices,
@@ -295,8 +307,15 @@ async def list_recurring_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{recurring_id}", tags=["Recurring Invoices"])
-async def get_recurring_invoice(recurring_id: str):
+async def get_recurring_invoice(
+    recurring_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get recurring invoice details"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -305,8 +324,8 @@ async def get_recurring_invoice(recurring_id: str):
                 SELECT r.*, c.customer_name, c.email
                 FROM recurring_invoices r
                 JOIN customers c ON r.customer_id = c.id
-                WHERE r.id = $1
-            """, uuid.UUID(recurring_id))
+                WHERE r.id = $1 AND r.tenant_id = $2
+            """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Recurring invoice not found")
@@ -384,16 +403,21 @@ async def get_recurring_invoice(recurring_id: str):
 @router.put("/{recurring_id}", tags=["Recurring Invoices"])
 async def update_recurring_invoice(
     recurring_id: str,
-    update: UpdateRecurringInvoice
+    update: UpdateRecurringInvoice,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update recurring invoice configuration"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Check if exists
             exists = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM recurring_invoices WHERE id = $1)",
-                uuid.UUID(recurring_id)
+                "SELECT EXISTS(SELECT 1 FROM recurring_invoices WHERE id = $1 AND tenant_id = $2)",
+                uuid.UUID(recurring_id), uuid.UUID(tenant_id)
             )
             
             if not exists:
@@ -448,10 +472,11 @@ async def update_recurring_invoice(
                 query = f"""
                     UPDATE recurring_invoices
                     SET {', '.join(updates)}
-                    WHERE id = ${param_count}
+                    WHERE id = ${param_count} AND tenant_id = ${param_count + 1}
                     RETURNING *
                 """
                 params.append(uuid.UUID(recurring_id))
+                params.append(uuid.UUID(tenant_id))
                 
                 row = await conn.fetchrow(query, *params)
                 
@@ -480,8 +505,15 @@ async def update_recurring_invoice(
 # ==================== Actions ====================
 
 @router.post("/{recurring_id}/pause", tags=["Recurring Invoices"])
-async def pause_recurring_invoice(recurring_id: str):
+async def pause_recurring_invoice(
+    recurring_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Pause a recurring invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -489,8 +521,8 @@ async def pause_recurring_invoice(recurring_id: str):
                 UPDATE recurring_invoices
                 SET status = 'paused',
                     updated_at = NOW()
-                WHERE id = $1 AND status = 'active'
-            """, uuid.UUID(recurring_id))
+                WHERE id = $1 AND status = 'active' AND tenant_id = $2
+            """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
             
             if result == "UPDATE 0":
                 raise HTTPException(status_code=404, detail="Recurring invoice not found or not active")
@@ -508,8 +540,15 @@ async def pause_recurring_invoice(recurring_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{recurring_id}/resume", tags=["Recurring Invoices"])
-async def resume_recurring_invoice(recurring_id: str):
+async def resume_recurring_invoice(
+    recurring_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Resume a paused recurring invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -522,9 +561,9 @@ async def resume_recurring_invoice(recurring_id: str):
                         ELSE next_occurrence_date
                     END,
                     updated_at = NOW()
-                WHERE id = $1 AND status = 'paused'
+                WHERE id = $1 AND status = 'paused' AND tenant_id = $2
                 RETURNING *
-            """, uuid.UUID(recurring_id))
+            """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Recurring invoice not found or not paused")
@@ -545,9 +584,14 @@ async def resume_recurring_invoice(recurring_id: str):
 @router.post("/{recurring_id}/cancel", tags=["Recurring Invoices"])
 async def cancel_recurring_invoice(
     recurring_id: str,
-    cancel_pending: bool = Query(default=False, description="Cancel pending instances")
+    cancel_pending: bool = Query(default=False, description="Cancel pending instances"),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Cancel a recurring invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -557,8 +601,8 @@ async def cancel_recurring_invoice(
                     UPDATE recurring_invoices
                     SET status = 'cancelled',
                         updated_at = NOW()
-                    WHERE id = $1 AND status IN ('active', 'paused')
-                """, uuid.UUID(recurring_id))
+                    WHERE id = $1 AND status IN ('active', 'paused') AND tenant_id = $2
+                """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
                 
                 if result == "UPDATE 0":
                     raise HTTPException(status_code=404, detail="Recurring invoice not found or already cancelled")
@@ -588,16 +632,21 @@ async def cancel_recurring_invoice(
 @router.post("/{recurring_id}/preview", tags=["Recurring Invoices"])
 async def preview_recurring_invoices(
     recurring_id: str,
-    preview: RecurrencePreview
+    preview: RecurrencePreview,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Preview upcoming recurring invoice occurrences"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get recurring invoice
             invoice = await conn.fetchrow("""
-                SELECT * FROM recurring_invoices WHERE id = $1
-            """, uuid.UUID(recurring_id))
+                SELECT * FROM recurring_invoices WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Recurring invoice not found")
@@ -645,17 +694,22 @@ async def preview_recurring_invoices(
 @router.post("/{recurring_id}/generate-next", tags=["Recurring Invoices"])
 async def generate_next_invoice(
     recurring_id: str,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Manually generate the next invoice in the series"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get recurring invoice
             invoice = await conn.fetchrow("""
                 SELECT * FROM recurring_invoices
-                WHERE id = $1 AND status = 'active'
-            """, uuid.UUID(recurring_id))
+                WHERE id = $1 AND status = 'active' AND tenant_id = $2
+            """, uuid.UUID(recurring_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Recurring invoice not found or not active")
@@ -702,9 +756,14 @@ async def generate_next_invoice(
 async def get_recurring_invoice_instances(
     recurring_id: str,
     status: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=100)
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get instances of a recurring invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -713,12 +772,13 @@ async def get_recurring_invoice_instances(
                        i.paid_date, i.due_date
                 FROM recurring_invoice_instances ri
                 LEFT JOIN invoices i ON ri.invoice_id = i.id
-                WHERE ri.recurring_invoice_id = $1
+                JOIN recurring_invoices r ON ri.recurring_invoice_id = r.id
+                WHERE ri.recurring_invoice_id = $1 AND r.tenant_id = $2
             """
-            params = [uuid.UUID(recurring_id)]
+            params = [uuid.UUID(recurring_id), uuid.UUID(tenant_id)]
             
             if status:
-                query += " AND ri.status = $2"
+                query += " AND ri.status = $3"
                 params.append(status)
             
             query += " ORDER BY ri.occurrence_number DESC LIMIT $" + str(len(params) + 1)

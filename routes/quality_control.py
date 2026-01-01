@@ -11,6 +11,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -43,17 +45,22 @@ class QualityControlResponse(QualityControlBase):
 @router.post("/", response_model=QualityControlResponse)
 async def create_quality_control(
     item: QualityControlCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new quality control record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
-        INSERT INTO quality_control (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO quality_control (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +76,17 @@ async def list_quality_control(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List quality control records"""
-    query = "SELECT * FROM quality_control WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
+    query = "SELECT * FROM quality_control WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +110,17 @@ async def list_quality_control(
 @router.get("/{item_id}", response_model=QualityControlResponse)
 async def get_quality_control(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get specific quality control record"""
-    query = "SELECT * FROM quality_control WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM quality_control WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Quality control not found")
 
@@ -117,9 +134,14 @@ async def get_quality_control(
 async def update_quality_control(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update quality control record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
@@ -130,10 +152,11 @@ async def update_quality_control(
         params.append(value)
 
     params.append(uuid.UUID(item_id))
+    params.append(tenant_id)
     query = f"""
         UPDATE quality_control
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE id = ${len(params) - 1} AND tenant_id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +169,40 @@ async def update_quality_control(
 @router.delete("/{item_id}")
 async def delete_quality_control(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Delete quality control record"""
-    query = "DELETE FROM quality_control WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM quality_control WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Quality control not found")
 
     return {"message": "Quality control deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_quality_control_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_quality_control_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get quality control statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM quality_control
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

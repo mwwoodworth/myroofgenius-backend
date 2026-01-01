@@ -10,6 +10,8 @@ from datetime import datetime, date, timedelta
 import asyncpg
 import uuid
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -30,17 +32,22 @@ async def get_sales_dashboard(
     end_date: Optional[date] = None,
     sales_rep: Optional[str] = None,
     territory_id: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get comprehensive sales dashboard data"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not start_date:
         start_date = date.today() - timedelta(days=30)
     if not end_date:
         end_date = date.today()
 
-    # Build conditions
-    conditions = ["created_at >= $1 AND created_at <= $2"]
-    params = [start_date, end_date + timedelta(days=1)]
+    # Build conditions - tenant_id is always first
+    conditions = ["l.tenant_id = $1", "created_at >= $2 AND created_at <= $3"]
+    params = [tenant_id, start_date, end_date + timedelta(days=1)]
 
     if sales_rep:
         params.append(sales_rep)
@@ -66,8 +73,8 @@ async def get_sales_dashboard(
                 EXTRACT(DAY FROM o.closed_date - o.created_at)
             END), 0) as avg_sales_cycle
         FROM leads l
-        LEFT JOIN opportunities o ON l.id = o.lead_id
-        WHERE l.{where_clause}
+        LEFT JOIN opportunities o ON l.id = o.lead_id AND o.tenant_id = l.tenant_id
+        WHERE {where_clause}
     """
 
     metrics = await conn.fetchrow(metrics_query, *params)
@@ -82,13 +89,19 @@ async def get_sales_dashboard(
     win_rate = (won_deals / (won_deals + lost_deals) * 100) if (won_deals + lost_deals) > 0 else 0
 
     # Get pipeline stages
+    pipeline_conditions = ["tenant_id = $1", "NOT is_closed", "created_at >= $2 AND created_at <= $3"]
+    if sales_rep:
+        pipeline_conditions.append(f"assigned_to = ${len(params) - (1 if territory_id else 0)}")
+    if territory_id:
+        pipeline_conditions.append(f"territory_id = ${len(params)}")
+
     pipeline_query = f"""
         SELECT
             stage,
             COUNT(*) as count,
             SUM(amount) as value
         FROM opportunities
-        WHERE NOT is_closed AND {where_clause}
+        WHERE {' AND '.join(pipeline_conditions)}
         GROUP BY stage
     """
 
@@ -127,9 +140,14 @@ async def get_sales_dashboard(
 async def get_sales_rep_performance(
     sales_rep: str,
     year: int = Query(datetime.now().year),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get performance metrics for a sales rep"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     # Monthly performance
     monthly_query = """
         SELECT
@@ -138,13 +156,14 @@ async def get_sales_rep_performance(
             SUM(CASE WHEN is_won THEN amount ELSE 0 END) as revenue,
             COUNT(CASE WHEN is_won THEN 1 END) as won_deals
         FROM opportunities
-        WHERE assigned_to = $1
-        AND EXTRACT(YEAR FROM created_at) = $2
+        WHERE tenant_id = $1
+        AND assigned_to = $2
+        AND EXTRACT(YEAR FROM created_at) = $3
         GROUP BY EXTRACT(MONTH FROM created_at)
         ORDER BY month
     """
 
-    monthly_data = await conn.fetch(monthly_query, sales_rep, year)
+    monthly_data = await conn.fetch(monthly_query, tenant_id, sales_rep, year)
 
     # Year-to-date stats
     ytd_query = """
@@ -156,11 +175,12 @@ async def get_sales_rep_performance(
             SUM(CASE WHEN NOT is_closed THEN amount ELSE 0 END) as pipeline_value,
             AVG(amount) as avg_deal_size
         FROM opportunities
-        WHERE assigned_to = $1
-        AND EXTRACT(YEAR FROM created_at) = $2
+        WHERE tenant_id = $1
+        AND assigned_to = $2
+        AND EXTRACT(YEAR FROM created_at) = $3
     """
 
-    ytd_stats = await conn.fetchrow(ytd_query, sales_rep, year)
+    ytd_stats = await conn.fetchrow(ytd_query, tenant_id, sales_rep, year)
 
     # Calculate win rate
     total_closed = (ytd_stats['won_deals'] or 0) + (ytd_stats['lost_deals'] or 0)
@@ -193,9 +213,14 @@ async def get_sales_rep_performance(
 async def get_sales_trends(
     period: str = Query("monthly", regex="^(daily|weekly|monthly|quarterly)$"),
     months: int = Query(6, ge=1, le=24),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get sales trends over time"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     end_date = date.today()
     start_date = end_date - timedelta(days=months * 30)
 
@@ -218,12 +243,13 @@ async def get_sales_trends(
             SUM(CASE WHEN is_won THEN amount ELSE 0 END) as revenue,
             AVG(amount) as avg_deal_size
         FROM opportunities
-        WHERE created_at >= $1 AND created_at <= $2
+        WHERE tenant_id = $1
+        AND created_at >= $2 AND created_at <= $3
         GROUP BY DATE_TRUNC('{date_trunc}', created_at)
         ORDER BY period
     """
 
-    rows = await conn.fetch(query, start_date, end_date)
+    rows = await conn.fetch(query, tenant_id, start_date, end_date)
 
     return {
         "period_type": period,
