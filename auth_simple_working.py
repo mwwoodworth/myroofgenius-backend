@@ -14,13 +14,35 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Configuration - Use same secret as auth_middleware for compatibility
 import os
-JWT_SECRET = os.getenv("JWT_SECRET", "commercial-grade-secret-key-2025")  # MUST match auth_middleware.py
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("CRITICAL: JWT_SECRET environment variable must be set")
 JWT_ALGORITHM = "HS256"
 security = HTTPBearer(auto_error=False)
 
+# Use bcrypt for secure password hashing (fallback to sha256 for legacy compatibility)
+try:
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    USE_BCRYPT = True
+except ImportError:
+    USE_BCRYPT = False
+
 def hash_password(password: str) -> str:
-    """Simple hash"""
+    """Secure password hashing with bcrypt (falls back to sha256 for legacy)"""
+    if USE_BCRYPT:
+        return pwd_context.hash(password)
+    # Legacy fallback - NOT RECOMMENDED
+    import warnings
+    warnings.warn("Using weak SHA256 hashing - install passlib for bcrypt support")
     return hashlib.sha256(f"{password}salt2025".encode()).hexdigest()
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against hash"""
+    if USE_BCRYPT and hashed_password.startswith("$2"):
+        return pwd_context.verify(plain_password, hashed_password)
+    # Legacy SHA256 verification
+    return hashlib.sha256(f"{plain_password}salt2025".encode()).hexdigest() == hashed_password
 
 def create_token(data: dict) -> str:
     """Create JWT token"""

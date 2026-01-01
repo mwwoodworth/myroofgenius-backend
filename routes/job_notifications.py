@@ -96,10 +96,14 @@ async def send_job_notification(
 ) -> dict:
     """Send a notification for a job"""
     try:
-        # Verify job exists
+        # SECURITY: Verify job exists AND belongs to user's tenant
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         job = db.execute(
-            text("SELECT id, job_number FROM jobs WHERE id = :id"),
-            {"id": job_id}
+            text("SELECT id, job_number FROM jobs WHERE id = :id AND tenant_id = :tenant_id"),
+            {"id": job_id, "tenant_id": tenant_id}
         ).fetchone()
 
         if not job:
@@ -181,16 +185,22 @@ async def get_job_notifications(
 ) -> dict:
     """Get notifications for a job"""
     try:
-        # Build query
+        # SECURITY: Verify tenant access
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Build query with tenant isolation via jobs table join
         query = """
             SELECT
                 n.*,
                 u.email as created_by_email
             FROM job_notifications n
+            JOIN jobs j ON n.job_id = j.id AND j.tenant_id = :tenant_id
             LEFT JOIN users u ON n.created_by = u.id
             WHERE n.job_id = :job_id
         """
-        params = {"job_id": job_id}
+        params = {"job_id": job_id, "tenant_id": tenant_id}
 
         if type:
             query += " AND n.type = :type"
