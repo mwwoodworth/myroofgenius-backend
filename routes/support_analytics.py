@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import asyncpg
 import uuid
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 async def get_db(request: Request):
@@ -26,9 +28,14 @@ async def get_db(request: Request):
 async def get_support_dashboard(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get support analytics dashboard"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not date_from:
         date_from = datetime.now() - timedelta(days=30)
     if not date_to:
@@ -42,10 +49,11 @@ async def get_support_dashboard(
             COUNT(CASE WHEN status = 'resolved' THEN 1 END) as resolved_tickets,
             AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) as avg_resolution_hours
         FROM support_tickets
-        WHERE created_at BETWEEN $1 AND $2
+        WHERE tenant_id = $1
+        AND created_at BETWEEN $2 AND $3
     """
 
-    ticket_stats = await conn.fetchrow(ticket_query, date_from, date_to)
+    ticket_stats = await conn.fetchrow(ticket_query, tenant_id, date_from, date_to)
 
     # Agent performance
     agent_query = """
@@ -54,14 +62,15 @@ async def get_support_dashboard(
             COUNT(*) as tickets_handled,
             AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) as avg_resolution_time
         FROM support_tickets
-        WHERE assigned_to IS NOT NULL
-        AND created_at BETWEEN $1 AND $2
+        WHERE tenant_id = $1
+        AND assigned_to IS NOT NULL
+        AND created_at BETWEEN $2 AND $3
         GROUP BY assigned_to
         ORDER BY tickets_handled DESC
         LIMIT 10
     """
 
-    top_agents = await conn.fetch(agent_query, date_from, date_to)
+    top_agents = await conn.fetch(agent_query, tenant_id, date_from, date_to)
 
     return {
         "ticket_metrics": dict(ticket_stats),
@@ -75,15 +84,20 @@ async def get_support_dashboard(
                 "avg_resolution_time": f"{agent['avg_resolution_time']:.1f} hours"
             } for agent in top_agents
         ],
-        "ticket_categories": await get_ticket_categories(conn, date_from, date_to)
+        "ticket_categories": await get_ticket_categories(conn, tenant_id, date_from, date_to)
     }
 
 @router.get("/agent/{agent_id}/performance", response_model=dict)
 async def get_agent_performance(
     agent_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get individual agent performance"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             COUNT(*) as total_tickets,
@@ -92,20 +106,22 @@ async def get_agent_performance(
             MIN(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) as fastest_resolution,
             MAX(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) as slowest_resolution
         FROM support_tickets
-        WHERE assigned_to = $1
+        WHERE tenant_id = $1
+        AND assigned_to = $2
         AND created_at >= NOW() - INTERVAL '30 days'
     """
 
-    stats = await conn.fetchrow(query, uuid.UUID(agent_id))
+    stats = await conn.fetchrow(query, tenant_id, uuid.UUID(agent_id))
 
     # Get customer feedback for this agent
     feedback_query = """
         SELECT AVG(rating) as avg_rating
         FROM customer_feedback
-        WHERE metadata->>'agent_id' = $1
+        WHERE tenant_id = $1
+        AND metadata->>'agent_id' = $2
     """
 
-    feedback = await conn.fetchrow(feedback_query, agent_id)
+    feedback = await conn.fetchrow(feedback_query, tenant_id, agent_id)
 
     return {
         **dict(stats),
@@ -115,21 +131,27 @@ async def get_agent_performance(
 
 @router.get("/trends", response_model=dict)
 async def get_support_trends(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get support trends over time"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             DATE_TRUNC('week', created_at) as week,
             COUNT(*) as tickets,
             AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) as avg_resolution
         FROM support_tickets
-        WHERE created_at >= NOW() - INTERVAL '12 weeks'
+        WHERE tenant_id = $1
+        AND created_at >= NOW() - INTERVAL '12 weeks'
         GROUP BY week
         ORDER BY week
     """
 
-    weekly_data = await conn.fetch(query)
+    weekly_data = await conn.fetch(query, tenant_id)
 
     return {
         "weekly_tickets": [
@@ -148,17 +170,18 @@ def calculate_resolution_rate(stats) -> float:
     resolved = stats['resolved_tickets'] or 0
     return (resolved / total * 100) if total > 0 else 0
 
-async def get_ticket_categories(conn, date_from, date_to) -> List[dict]:
+async def get_ticket_categories(conn, tenant_id, date_from, date_to) -> List[dict]:
     """Get ticket distribution by category"""
     query = """
         SELECT category, COUNT(*) as count
         FROM support_tickets
-        WHERE created_at BETWEEN $1 AND $2
+        WHERE tenant_id = $1
+        AND created_at BETWEEN $2 AND $3
         GROUP BY category
         ORDER BY count DESC
     """
 
-    rows = await conn.fetch(query, date_from, date_to)
+    rows = await conn.fetch(query, tenant_id, date_from, date_to)
     return [dict(row) for row in rows]
 
 def calculate_efficiency_score(stats) -> float:

@@ -1,6 +1,7 @@
 """
 Recruitment Management Module - Task 44
 Comprehensive recruitment and applicant tracking system
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File, Request
@@ -12,6 +13,8 @@ import asyncpg
 import uuid
 import json
 from decimal import Decimal
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -271,9 +274,14 @@ class AssessmentResponse(AssessmentBase):
 async def create_job_posting(
     job: JobPostingCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a new job posting"""
+    """Create a new job posting - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     job_code = f"JOB-{datetime.now().strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
 
     query = """
@@ -281,9 +289,9 @@ async def create_job_posting(
             job_code, title, department, location, job_type, experience_level,
             min_salary, max_salary, description, requirements, responsibilities,
             benefits, remote_allowed, visa_sponsorship, hiring_manager_id,
-            target_hire_date, positions_available, status
+            target_hire_date, positions_available, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
         ) RETURNING id, created_at, updated_at
     """
 
@@ -295,7 +303,7 @@ async def create_job_posting(
         json.dumps(job.benefits) if job.benefits else None,
         job.remote_allowed, job.visa_sponsorship,
         uuid.UUID(job.hiring_manager_id), job.target_hire_date,
-        job.positions_available, JobStatus.DRAFT
+        job.positions_available, JobStatus.DRAFT, tenant_id
     )
 
     # Background task to post to job boards
@@ -319,19 +327,24 @@ async def list_job_postings(
     location: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all job postings with optional filters"""
+    """List all job postings with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             jp.*,
             COUNT(DISTINCT a.id) as applications_count
         FROM job_postings jp
         LEFT JOIN applications a ON jp.id = a.job_posting_id
-        WHERE 1=1
+        WHERE jp.tenant_id = $1
     """
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -375,17 +388,22 @@ async def list_job_postings(
 @router.put("/job-postings/{job_id}/publish")
 async def publish_job_posting(
     job_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Publish a job posting"""
+    """Publish a job posting - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE job_postings
         SET status = 'open', posted_date = NOW(), updated_at = NOW()
-        WHERE id = $1 AND status = 'draft'
+        WHERE id = $1 AND status = 'draft' AND tenant_id = $2
         RETURNING id
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(job_id))
+    result = await conn.fetchrow(query, uuid.UUID(job_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Job posting not found or already published")
 
@@ -394,17 +412,22 @@ async def publish_job_posting(
 @router.put("/job-postings/{job_id}/close")
 async def close_job_posting(
     job_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Close a job posting"""
+    """Close a job posting - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE job_postings
         SET status = 'closed', closed_date = NOW(), updated_at = NOW()
-        WHERE id = $1 AND status = 'open'
+        WHERE id = $1 AND status = 'open' AND tenant_id = $2
         RETURNING id
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(job_id))
+    result = await conn.fetchrow(query, uuid.UUID(job_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Job posting not found or not open")
 
@@ -414,17 +437,22 @@ async def close_job_posting(
 @router.post("/candidates", response_model=CandidateResponse)
 async def create_candidate(
     candidate: CandidateCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a new candidate profile"""
+    """Create a new candidate profile - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO candidates (
             first_name, last_name, email, phone, location,
             current_title, current_company, years_experience,
             education_level, linkedin_url, github_url, portfolio_url,
-            source, source_details, resume_text, skills
+            source, source_details, resume_text, skills, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
         ) RETURNING id, created_at
     """
 
@@ -438,7 +466,7 @@ async def create_candidate(
             str(candidate.github_url) if candidate.github_url else None,
             str(candidate.portfolio_url) if candidate.portfolio_url else None,
             candidate.source, candidate.source_details, candidate.resume_text,
-            json.dumps(candidate.skills) if candidate.skills else None
+            json.dumps(candidate.skills) if candidate.skills else None, tenant_id
         )
 
         return {
@@ -459,14 +487,19 @@ async def list_candidates(
     source: Optional[CandidateSource] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all candidates with optional filters"""
+    """List all candidates with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
-        SELECT * FROM candidates WHERE 1=1
+        SELECT * FROM candidates WHERE tenant_id = $1
     """
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     if search:
         param_count += 1
@@ -520,17 +553,22 @@ async def list_candidates(
 async def submit_application(
     application: ApplicationCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Submit a new job application"""
+    """Submit a new job application - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     # First create or find candidate
     candidate_query = """
         INSERT INTO candidates (
             first_name, last_name, email, phone, location,
             current_title, current_company, years_experience,
-            education_level, source, skills
+            education_level, source, skills, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         )
         ON CONFLICT (email) DO UPDATE
         SET updated_at = NOW()
@@ -544,7 +582,8 @@ async def submit_application(
         application.candidate.location, application.candidate.current_title,
         application.candidate.current_company, application.candidate.years_experience,
         application.candidate.education_level, application.candidate.source,
-        json.dumps(application.candidate.skills) if application.candidate.skills else None
+        json.dumps(application.candidate.skills) if application.candidate.skills else None,
+        tenant_id
     )
 
     # Create application
@@ -553,9 +592,9 @@ async def submit_application(
     app_query = """
         INSERT INTO applications (
             application_number, job_posting_id, candidate_id, cover_letter,
-            expected_salary, available_start_date, referral_employee_id, status
+            expected_salary, available_start_date, referral_employee_id, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8
+            $1, $2, $3, $4, $5, $6, $7, $8, $9
         ) RETURNING id, created_at, updated_at
     """
 
@@ -565,7 +604,7 @@ async def submit_application(
         candidate_id, application.cover_letter, application.expected_salary,
         application.available_start_date,
         uuid.UUID(application.referral_employee_id) if application.referral_employee_id else None,
-        ApplicationStatus.NEW
+        ApplicationStatus.NEW, tenant_id
     )
 
     # Background tasks
@@ -592,18 +631,23 @@ async def list_applications(
     status: Optional[ApplicationStatus] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List applications with optional filters"""
+    """List applications with optional filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT a.*, c.first_name, c.last_name, j.title as job_title
         FROM applications a
         JOIN candidates c ON a.candidate_id = c.id
         JOIN job_postings j ON a.job_posting_id = j.id
-        WHERE 1=1
+        WHERE a.tenant_id = $1
     """
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     if job_posting_id:
         param_count += 1
@@ -644,13 +688,18 @@ async def update_application_status(
     status: ApplicationStatus,
     rejection_reason: Optional[str] = None,
     background_tasks: BackgroundTasks = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update application status"""
+    """Update application status - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE applications
         SET status = $1, rejection_reason = $2, updated_at = NOW()
-        WHERE id = $3
+        WHERE id = $3 AND tenant_id = $4
         RETURNING id, candidate_id
     """
 
@@ -658,7 +707,8 @@ async def update_application_status(
         query,
         status,
         rejection_reason,
-        uuid.UUID(application_id)
+        uuid.UUID(application_id),
+        tenant_id
     )
 
     if not result:
@@ -679,15 +729,20 @@ async def update_application_status(
 async def schedule_interview(
     interview: InterviewCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Schedule an interview"""
+    """Schedule an interview - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO interviews (
             application_id, interview_type, scheduled_date, duration_minutes,
-            location, meeting_link, interviewers, instructions, status
+            location, meeting_link, interviewers, instructions, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
         ) RETURNING id, created_at
     """
 
@@ -697,7 +752,7 @@ async def schedule_interview(
         interview.scheduled_date, interview.duration_minutes,
         interview.location, interview.meeting_link,
         json.dumps(interview.interviewers), interview.instructions,
-        InterviewStatus.SCHEDULED
+        InterviewStatus.SCHEDULED, tenant_id
     )
 
     # Send calendar invites
@@ -718,12 +773,17 @@ async def schedule_interview(
 async def update_interview(
     interview_id: str,
     update: InterviewUpdate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update interview details or feedback"""
+    """Update interview details or feedback - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     update_fields = []
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     for field, value in update.dict(exclude_unset=True).items():
         param_count += 1
@@ -737,7 +797,7 @@ async def update_interview(
     query = f"""
         UPDATE interviews
         SET {', '.join(update_fields)}, updated_at = NOW()
-        WHERE id = ${param_count}
+        WHERE id = ${param_count} AND tenant_id = $1
         RETURNING *
     """
     params.append(uuid.UUID(interview_id))
@@ -758,9 +818,14 @@ async def get_interview_schedule(
     start_date: date,
     end_date: Optional[date] = None,
     interviewer_id: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get interview schedule for a date range"""
+    """Get interview schedule for a date range - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not end_date:
         end_date = start_date + timedelta(days=7)
 
@@ -774,12 +839,12 @@ async def get_interview_schedule(
         JOIN applications a ON i.application_id = a.id
         JOIN candidates c ON a.candidate_id = c.id
         JOIN job_postings j ON a.job_posting_id = j.id
-        WHERE i.scheduled_date >= $1 AND i.scheduled_date <= $2
+        WHERE i.scheduled_date >= $1 AND i.scheduled_date <= $2 AND i.tenant_id = $3
     """
-    params = [start_date, end_date]
+    params = [start_date, end_date, tenant_id]
 
     if interviewer_id:
-        query += " AND $3 = ANY(i.interviewers::uuid[])"
+        query += " AND $4 = ANY(i.interviewers::uuid[])"
         params.append(uuid.UUID(interviewer_id))
 
     query += " ORDER BY i.scheduled_date"
@@ -800,18 +865,23 @@ async def get_interview_schedule(
 @router.post("/offers", response_model=OfferResponse)
 async def create_offer(
     offer: OfferCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create a job offer"""
+    """Create a job offer - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     offer_number = f"OFF-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
     query = """
         INSERT INTO offers (
             offer_number, application_id, position_title, department,
             salary, bonus, equity, start_date, benefits, conditions,
-            expiry_date, status
+            expiry_date, status, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
         ) RETURNING id, created_at, updated_at
     """
 
@@ -821,7 +891,7 @@ async def create_offer(
         offer.position_title, offer.department,
         offer.salary, offer.bonus, offer.equity, offer.start_date,
         json.dumps(offer.benefits), json.dumps(offer.conditions) if offer.conditions else None,
-        offer.expiry_date, OfferStatus.DRAFT
+        offer.expiry_date, OfferStatus.DRAFT, tenant_id
     )
 
     return {
@@ -837,17 +907,22 @@ async def create_offer(
 async def send_offer(
     offer_id: str,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Send offer to candidate"""
+    """Send offer to candidate - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE offers
         SET status = 'sent', sent_date = NOW(), updated_at = NOW()
-        WHERE id = $1 AND status IN ('draft', 'approved')
+        WHERE id = $1 AND status IN ('draft', 'approved') AND tenant_id = $2
         RETURNING id, application_id
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(offer_id))
+    result = await conn.fetchrow(query, uuid.UUID(offer_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Offer not found or not ready to send")
 
@@ -866,16 +941,21 @@ async def record_offer_response(
     accepted: bool,
     negotiation_notes: Optional[str] = None,
     decline_reason: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Record candidate's response to offer"""
+    """Record candidate's response to offer - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     status = OfferStatus.ACCEPTED if accepted else OfferStatus.DECLINED
 
     query = """
         UPDATE offers
         SET status = $1, response_date = NOW(), negotiation_notes = $2,
             decline_reason = $3, updated_at = NOW()
-        WHERE id = $4
+        WHERE id = $4 AND tenant_id = $5
         RETURNING id, application_id
     """
 
@@ -884,7 +964,8 @@ async def record_offer_response(
         status,
         negotiation_notes,
         decline_reason,
-        uuid.UUID(offer_id)
+        uuid.UUID(offer_id),
+        tenant_id
     )
 
     if not result:
@@ -893,8 +974,9 @@ async def record_offer_response(
     # Update application status if offer accepted
     if accepted:
         await conn.execute(
-            "UPDATE applications SET status = 'hired' WHERE id = $1",
-            result['application_id']
+            "UPDATE applications SET status = 'hired' WHERE id = $1 AND tenant_id = $2",
+            result['application_id'],
+            tenant_id
         )
 
     return {"message": f"Offer {status}", "id": str(result['id'])}
@@ -904,15 +986,20 @@ async def record_offer_response(
 async def create_assessment(
     assessment: AssessmentBase,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create and send assessment to candidate"""
+    """Create and send assessment to candidate - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         INSERT INTO assessments (
             application_id, assessment_type, assessment_name,
-            provider, sent_date, due_date
+            provider, sent_date, due_date, tenant_id
         ) VALUES (
-            $1, $2, $3, $4, $5, $6
+            $1, $2, $3, $4, $5, $6, $7
         ) RETURNING id, created_at
     """
 
@@ -920,7 +1007,8 @@ async def create_assessment(
         query,
         uuid.UUID(assessment.application_id),
         assessment.assessment_type, assessment.assessment_name,
-        assessment.provider, assessment.sent_date, assessment.due_date
+        assessment.provider, assessment.sent_date, assessment.due_date,
+        tenant_id
     )
 
     # Send assessment link to candidate
@@ -942,13 +1030,18 @@ async def complete_assessment(
     score: Decimal,
     result: Dict,
     passed: bool,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Record assessment completion"""
+    """Record assessment completion - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         UPDATE assessments
         SET completed_date = NOW(), score = $1, result = $2, passed = $3
-        WHERE id = $4
+        WHERE id = $4 AND tenant_id = $5
         RETURNING id
     """
 
@@ -957,7 +1050,8 @@ async def complete_assessment(
         score,
         json.dumps(result),
         passed,
-        uuid.UUID(assessment_id)
+        uuid.UUID(assessment_id),
+        tenant_id
     )
 
     if not update_result:
@@ -970,9 +1064,14 @@ async def complete_assessment(
 async def get_recruitment_pipeline(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get recruitment pipeline report"""
+    """Get recruitment pipeline report - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not start_date:
         start_date = date.today() - timedelta(days=30)
     if not end_date:
@@ -990,12 +1089,12 @@ async def get_recruitment_pipeline(
             AVG(EXTRACT(DAY FROM a.updated_at - a.created_at)) as avg_time_to_hire
         FROM job_postings j
         LEFT JOIN applications a ON j.id = a.job_posting_id
-        WHERE a.created_at >= $1 AND a.created_at <= $2
+        WHERE a.created_at >= $1 AND a.created_at <= $2 AND j.tenant_id = $3
         GROUP BY j.department, j.title
         ORDER BY total_applications DESC
     """
 
-    rows = await conn.fetch(query, start_date, end_date)
+    rows = await conn.fetch(query, start_date, end_date, tenant_id)
 
     return {
         "period": {
@@ -1009,9 +1108,14 @@ async def get_recruitment_pipeline(
 async def get_source_effectiveness(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get candidate source effectiveness report"""
+    """Get candidate source effectiveness report - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not start_date:
         start_date = date.today() - timedelta(days=90)
     if not end_date:
@@ -1028,12 +1132,12 @@ async def get_source_effectiveness(
                   NULLIF(COUNT(DISTINCT a.id), 0), 2) as conversion_rate
         FROM candidates c
         LEFT JOIN applications a ON c.id = a.candidate_id
-        WHERE c.created_at >= $1 AND c.created_at <= $2
+        WHERE c.created_at >= $1 AND c.created_at <= $2 AND c.tenant_id = $3
         GROUP BY c.source
         ORDER BY hired DESC
     """
 
-    rows = await conn.fetch(query, start_date, end_date)
+    rows = await conn.fetch(query, start_date, end_date, tenant_id)
 
     return {
         "period": {

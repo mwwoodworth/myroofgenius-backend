@@ -13,6 +13,8 @@ from database import get_db
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Models
@@ -36,15 +38,21 @@ class SettingResponse(SettingBase):
 
 @router.get("/", response_model=List[SettingResponse])
 def list_settings(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get all settings"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM system_settings
+            WHERE tenant_id = :tenant_id
             ORDER BY name ASC
-        """)).fetchall()
+        """), {"tenant_id": tenant_id}).fetchall()
 
         settings = []
         for row in result:
@@ -65,25 +73,30 @@ def list_settings(
 def update_setting(
     key: str,
     item: SettingUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update setting by key (name)"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        # Check if exists by name (key)
-        existing = db.execute(text("SELECT id FROM system_settings WHERE name = :name"), {"name": key}).fetchone()
-        
-        # If not found, maybe create it? Or 404? 
+        # Check if exists by name (key) for this tenant
+        existing = db.execute(text("SELECT id FROM system_settings WHERE name = :name AND tenant_id = :tenant_id"), {"name": key, "tenant_id": tenant_id}).fetchone()
+
+        # If not found, maybe create it? Or 404?
         # Usually settings are pre-defined, but let's allow creation if it doesn't exist?
         # The prompt says 'update setting'. I'll return 404 if not found to be safe, or upsert.
         # Let's do strict update for now as per 'PUT'.
-        
+
         if not existing:
              raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
         id = existing[0]
 
         updates = []
-        params = {"id": id, "updated_at": datetime.now()}
+        params = {"id": id, "tenant_id": tenant_id, "updated_at": datetime.now()}
 
         if item.description is not None:
             updates.append("description = :description")
@@ -100,7 +113,7 @@ def update_setting(
              pass
         else:
             updates.append("updated_at = :updated_at")
-            query = f"UPDATE system_settings SET {', '.join(updates)} WHERE id = :id"
+            query = f"UPDATE system_settings SET {', '.join(updates)} WHERE id = :id AND tenant_id = :tenant_id"
             db.execute(text(query), params)
             db.commit()
 
@@ -108,8 +121,8 @@ def update_setting(
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM system_settings
-            WHERE id = :id
-        """), {"id": id}).fetchone()
+            WHERE id = :id AND tenant_id = :tenant_id
+        """), {"id": id, "tenant_id": tenant_id}).fetchone()
 
         return {
             "id": str(result[0]),

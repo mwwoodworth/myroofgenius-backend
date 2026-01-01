@@ -12,6 +12,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -44,17 +46,23 @@ class MilestoneTrackingResponse(MilestoneTrackingBase):
 @router.post("/", response_model=MilestoneTrackingResponse)
 async def create_milestone_tracking(
     item: MilestoneTrackingCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new milestone tracking record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
-        INSERT INTO milestone_tracking (name, description, status, metadata)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO milestone_tracking (tenant_id, name, description, status, metadata)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
         query,
+        tenant_id,
         item.name,
         item.description,
         item.status,
@@ -72,16 +80,22 @@ async def create_milestone_tracking(
 async def list_milestone_tracking(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all milestone tracking records"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         SELECT * FROM milestone_tracking
+        WHERE tenant_id = $1
         ORDER BY created_at DESC
-        LIMIT $1 OFFSET $2
+        LIMIT $2 OFFSET $3
     """
 
-    rows = await conn.fetch(query, limit, skip)
+    rows = await conn.fetch(query, tenant_id, limit, skip)
 
     return [
         {
@@ -95,12 +109,17 @@ async def list_milestone_tracking(
 @router.get("/{item_id}", response_model=MilestoneTrackingResponse)
 async def get_milestone_tracking(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get specific milestone tracking record"""
-    query = "SELECT * FROM milestone_tracking WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM milestone_tracking WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Milestone tracking not found")
 
@@ -114,9 +133,14 @@ async def get_milestone_tracking(
 async def update_milestone_tracking(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update milestone tracking record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     # Build dynamic update query
     set_clauses = []
     params = []
@@ -128,13 +152,15 @@ async def update_milestone_tracking(
         params.append(value)
 
     param_count += 1
+    params.append(uuid.UUID(item_id))
+    param_count += 1
+    params.append(tenant_id)
     query = f"""
         UPDATE milestone_tracking
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${param_count}
+        WHERE id = ${param_count - 1} AND tenant_id = ${param_count}
         RETURNING id
     """
-    params.append(uuid.UUID(item_id))
 
     result = await conn.fetchrow(query, *params)
     if not result:
@@ -145,12 +171,17 @@ async def update_milestone_tracking(
 @router.delete("/{item_id}")
 async def delete_milestone_tracking(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Delete milestone tracking record"""
-    query = "DELETE FROM milestone_tracking WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM milestone_tracking WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Milestone tracking not found")
 
@@ -159,38 +190,50 @@ async def delete_milestone_tracking(
 # Additional specialized endpoints
 @router.get("/stats/summary")
 async def get_milestone_tracking_stats(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get milestone tracking statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive
         FROM milestone_tracking
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
 
     return dict(result)
 
 @router.post("/bulk")
 async def bulk_create_milestone_tracking(
     items: List[MilestoneTrackingCreate],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Bulk create milestone tracking records"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     created = []
 
     for item in items:
         query = """
-            INSERT INTO milestone_tracking (name, description, status, metadata)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO milestone_tracking (tenant_id, name, description, status, metadata)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """
 
         result = await conn.fetchrow(
             query,
+            tenant_id,
             item.name,
             item.description,
             item.status,

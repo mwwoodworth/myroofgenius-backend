@@ -13,6 +13,8 @@ from database import get_db
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Models
@@ -42,16 +44,22 @@ class ContractResponse(ContractBase):
 def list_contracts(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List all contracts"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM service_contracts
+            WHERE tenant_id = :tenant_id
             ORDER BY created_at DESC
             LIMIT :limit OFFSET :skip
-        """), {"limit": limit, "skip": skip}).fetchall()
+        """), {"tenant_id": tenant_id, "limit": limit, "skip": skip}).fetchall()
 
         contracts = []
         for row in result:
@@ -71,18 +79,24 @@ def list_contracts(
 @router.post("/", response_model=ContractResponse)
 def create_contract(
     item: ContractCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new contract"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
         new_id = uuid.uuid4()
         timestamp = datetime.now()
-        
+
         db.execute(text("""
-            INSERT INTO service_contracts (id, name, description, status, data, created_at, updated_at)
-            VALUES (:id, :name, :description, :status, :data, :created_at, :updated_at)
+            INSERT INTO service_contracts (id, tenant_id, name, description, status, data, created_at, updated_at)
+            VALUES (:id, :tenant_id, :name, :description, :status, :data, :created_at, :updated_at)
         """), {
             "id": new_id,
+            "tenant_id": tenant_id,
             "name": item.name,
             "description": item.description,
             "status": item.status,
@@ -106,17 +120,22 @@ def create_contract(
 def update_contract(
     id: str,
     item: ContractUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update a contract"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        # Check if exists
-        exists = db.execute(text("SELECT id FROM service_contracts WHERE id = :id"), {"id": id}).fetchone()
+        # Check if exists for this tenant
+        exists = db.execute(text("SELECT id FROM service_contracts WHERE id = :id AND tenant_id = :tenant_id"), {"id": id, "tenant_id": tenant_id}).fetchone()
         if not exists:
             raise HTTPException(status_code=404, detail="Contract not found")
 
         updates = []
-        params = {"id": id, "updated_at": datetime.now()}
+        params = {"id": id, "tenant_id": tenant_id, "updated_at": datetime.now()}
 
         if item.name is not None:
             updates.append("name = :name")
@@ -135,8 +154,8 @@ def update_contract(
             raise HTTPException(status_code=400, detail="No fields to update")
 
         updates.append("updated_at = :updated_at")
-        
-        query = f"UPDATE service_contracts SET {', '.join(updates)} WHERE id = :id"
+
+        query = f"UPDATE service_contracts SET {', '.join(updates)} WHERE id = :id AND tenant_id = :tenant_id"
         db.execute(text(query), params)
         db.commit()
 
@@ -144,8 +163,8 @@ def update_contract(
         result = db.execute(text("""
             SELECT id, name, description, status, data, created_at, updated_at
             FROM service_contracts
-            WHERE id = :id
-        """), {"id": id}).fetchone()
+            WHERE id = :id AND tenant_id = :tenant_id
+        """), {"id": id, "tenant_id": tenant_id}).fetchone()
 
         return {
             "id": str(result[0]),
@@ -166,11 +185,16 @@ def update_contract(
 @router.delete("/{id}")
 def delete_contract(
     id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Delete a contract"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     try:
-        result = db.execute(text("DELETE FROM service_contracts WHERE id = :id RETURNING id"), {"id": id}).fetchone()
+        result = db.execute(text("DELETE FROM service_contracts WHERE id = :id AND tenant_id = :tenant_id RETURNING id"), {"id": id, "tenant_id": tenant_id}).fetchone()
         if not result:
             raise HTTPException(status_code=404, detail="Contract not found")
         db.commit()

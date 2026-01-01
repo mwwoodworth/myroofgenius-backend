@@ -11,6 +11,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -43,17 +45,22 @@ class AiAssistantResponse(AiAssistantBase):
 @router.post("/", response_model=AiAssistantResponse)
 async def create_ai_assistant(
     item: AiAssistantCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Create new ai assistant record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
-        INSERT INTO ai_assistant (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ai_assistant (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +76,17 @@ async def list_ai_assistant(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """List ai assistant records"""
-    query = "SELECT * FROM ai_assistant WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    query = "SELECT * FROM ai_assistant WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +110,17 @@ async def list_ai_assistant(
 @router.get("/{item_id}", response_model=AiAssistantResponse)
 async def get_ai_assistant(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get specific ai assistant record"""
-    query = "SELECT * FROM ai_assistant WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM ai_assistant WHERE tenant_id = $1 AND id = $2"
+
+    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not row:
         raise HTTPException(status_code=404, detail="AI assistant not found")
 
@@ -117,23 +134,34 @@ async def get_ai_assistant(
 async def update_ai_assistant(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Update ai assistant record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
+    # Prevent tenant_id from being updated
+    updates.pop('tenant_id', None)
+
     set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
-        set_clauses.append(f"{field} = ${i}")
+    params = [tenant_id]  # $1 is tenant_id
+    param_count = 1
+    for field, value in updates.items():
+        param_count += 1
+        set_clauses.append(f"{field} = ${param_count}")
         params.append(value)
 
+    param_count += 1
     params.append(uuid.UUID(item_id))
     query = f"""
         UPDATE ai_assistant
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE tenant_id = $1 AND id = ${param_count}
         RETURNING id
     """
 
@@ -146,27 +174,40 @@ async def update_ai_assistant(
 @router.delete("/{item_id}")
 async def delete_ai_assistant(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Delete ai assistant record"""
-    query = "DELETE FROM ai_assistant WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM ai_assistant WHERE tenant_id = $1 AND id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not result:
         raise HTTPException(status_code=404, detail="AI assistant not found")
 
     return {"message": "AI assistant deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_ai_assistant_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_ai_assistant_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """Get ai assistant statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM ai_assistant
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

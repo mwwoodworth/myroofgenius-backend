@@ -1,6 +1,7 @@
 """
 Task dependencies Module
 Auto-generated implementation
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
@@ -11,6 +12,8 @@ from enum import Enum
 import asyncpg
 import uuid
 import json
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -44,12 +47,17 @@ class DependenciesResponse(DependenciesBase):
 @router.post("/", response_model=DependenciesResponse)
 async def create_dependencies(
     item: DependenciesCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create new task dependencies record"""
+    """Create new task dependencies record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
-        INSERT INTO dependencies (name, description, status, metadata)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO dependencies (name, description, status, metadata, tenant_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
@@ -58,7 +66,8 @@ async def create_dependencies(
         item.name,
         item.description,
         item.status,
-        json.dumps(item.metadata) if item.metadata else None
+        json.dumps(item.metadata) if item.metadata else None,
+        tenant_id
     )
 
     return {
@@ -72,16 +81,22 @@ async def create_dependencies(
 async def list_dependencies(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all task dependencies records"""
+    """List all task dependencies records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT * FROM dependencies
+        WHERE tenant_id = $1
         ORDER BY created_at DESC
-        LIMIT $1 OFFSET $2
+        LIMIT $2 OFFSET $3
     """
 
-    rows = await conn.fetch(query, limit, skip)
+    rows = await conn.fetch(query, tenant_id, limit, skip)
 
     return [
         {
@@ -95,12 +110,17 @@ async def list_dependencies(
 @router.get("/{item_id}", response_model=DependenciesResponse)
 async def get_dependencies(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get specific task dependencies record"""
-    query = "SELECT * FROM dependencies WHERE id = $1"
+    """Get specific task dependencies record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM dependencies WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Task dependencies not found")
 
@@ -114,9 +134,17 @@ async def get_dependencies(
 async def update_dependencies(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update task dependencies record"""
+    """Update task dependencies record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    # Remove tenant_id from updates to prevent cross-tenant moves
+    updates.pop('tenant_id', None)
+
     # Build dynamic update query
     set_clauses = []
     params = []
@@ -128,13 +156,15 @@ async def update_dependencies(
         params.append(value)
 
     param_count += 1
+    params.append(uuid.UUID(item_id))
+    param_count += 1
+    params.append(tenant_id)
     query = f"""
         UPDATE dependencies
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${param_count}
+        WHERE id = ${param_count - 1} AND tenant_id = ${param_count}
         RETURNING id
     """
-    params.append(uuid.UUID(item_id))
 
     result = await conn.fetchrow(query, *params)
     if not result:
@@ -145,12 +175,17 @@ async def update_dependencies(
 @router.delete("/{item_id}")
 async def delete_dependencies(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Delete task dependencies record"""
-    query = "DELETE FROM dependencies WHERE id = $1 RETURNING id"
+    """Delete task dependencies record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM dependencies WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Task dependencies not found")
 
@@ -159,33 +194,44 @@ async def delete_dependencies(
 # Additional specialized endpoints
 @router.get("/stats/summary")
 async def get_dependencies_stats(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get task dependencies statistics"""
+    """Get task dependencies statistics - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive
         FROM dependencies
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
 
     return dict(result)
 
 @router.post("/bulk")
 async def bulk_create_dependencies(
     items: List[DependenciesCreate],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Bulk create task dependencies records"""
+    """Bulk create task dependencies records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     created = []
 
     for item in items:
         query = """
-            INSERT INTO dependencies (name, description, status, metadata)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO dependencies (name, description, status, metadata, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """
 
@@ -194,7 +240,8 @@ async def bulk_create_dependencies(
             item.name,
             item.description,
             item.status,
-            json.dumps(item.metadata) if item.metadata else None
+            json.dumps(item.metadata) if item.metadata else None,
+            tenant_id
         )
 
         created.append(str(result['id']))

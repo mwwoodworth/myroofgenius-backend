@@ -18,6 +18,8 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from core.supabase_auth import get_authenticated_user
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics API"])
@@ -112,9 +114,15 @@ def _build_where_clause(
     filters: Dict[str, Any],
     columns: Sequence[str],
     date_range: Dict[str, str],
+    tenant_id: Optional[str] = None,
 ) -> Tuple[str, List[Any]]:
     clauses: List[str] = []
     params: List[Any] = []
+
+    # SECURITY: Always apply tenant isolation first if tenant_id column exists
+    if tenant_id and "tenant_id" in columns:
+        params.append(tenant_id)
+        clauses.append(f"tenant_id = ${len(params)}")
 
     for key, value in filters.items():
         column = _validate_identifier(key, "filter")
@@ -156,13 +164,18 @@ class QueryRequest(BaseModel):
 async def execute_analytics_query(
     request: QueryRequest,
     conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     start = time.perf_counter()
 
     if request.query_type == "aggregate":
-        result = await execute_aggregate(request, conn)
+        result = await execute_aggregate(request, conn, tenant_id)
     elif request.query_type == "timeseries":
-        result = await execute_timeseries(request, conn)
+        result = await execute_timeseries(request, conn, tenant_id)
     elif request.query_type == "funnel":
         raise HTTPException(status_code=501, detail="Funnel analysis is not implemented")
     else:
@@ -181,7 +194,14 @@ async def execute_analytics_query(
 
 
 @router.get("/datasets")
-async def list_datasets(conn: asyncpg.Connection = Depends(get_db)):
+async def list_datasets(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     tables = await conn.fetch(
         """
         SELECT tablename
@@ -240,7 +260,10 @@ async def list_datasets(conn: asyncpg.Connection = Depends(get_db)):
 
 
 @router.get("/metrics/catalog")
-async def get_metrics_catalog(conn: asyncpg.Connection = Depends(get_db)):
+async def get_metrics_catalog(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     return {
         "revenue_metrics": [
             {"id": "mrr", "name": "Monthly Recurring Revenue", "type": "currency"},
@@ -266,7 +289,11 @@ async def export_data(
     query: Optional[str] = None,
     dataset: Optional[str] = None,
     conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     raise HTTPException(status_code=501, detail="Data export is not implemented on this server")
 
 
@@ -274,7 +301,12 @@ async def export_data(
 async def get_automated_insights(
     focus_area: Optional[str] = Query(None),
     conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if ai_service is None:
         raise HTTPException(status_code=503, detail="AI service not available on this server")
 
@@ -287,9 +319,11 @@ async def get_automated_insights(
                     """
                     SELECT COALESCE(SUM(COALESCE(total_amount, amount, 0)), 0)
                     FROM invoices
-                    WHERE (status = 'paid' OR LOWER(COALESCE(payment_status, '')) = 'paid')
+                    WHERE tenant_id = $1
+                      AND (status = 'paid' OR LOWER(COALESCE(payment_status, '')) = 'paid')
                       AND created_at >= CURRENT_DATE - INTERVAL '30 days'
-                    """
+                    """,
+                    tenant_id,
                 )
             )
             metrics["revenue_prior_30_days"] = _normalize_value(
@@ -297,10 +331,12 @@ async def get_automated_insights(
                     """
                     SELECT COALESCE(SUM(COALESCE(total_amount, amount, 0)), 0)
                     FROM invoices
-                    WHERE (status = 'paid' OR LOWER(COALESCE(payment_status, '')) = 'paid')
+                    WHERE tenant_id = $1
+                      AND (status = 'paid' OR LOWER(COALESCE(payment_status, '')) = 'paid')
                       AND created_at >= CURRENT_DATE - INTERVAL '60 days'
                       AND created_at < CURRENT_DATE - INTERVAL '30 days'
-                    """
+                    """,
+                    tenant_id,
                 )
             )
         except Exception:
@@ -314,8 +350,10 @@ async def get_automated_insights(
                     """
                     SELECT COUNT(*)
                     FROM tickets
-                    WHERE created_at >= NOW() - INTERVAL '24 hours'
-                    """
+                    WHERE tenant_id = $1
+                      AND created_at >= NOW() - INTERVAL '24 hours'
+                    """,
+                    tenant_id,
                 )
             )
             metrics["tickets_prior_24_hours"] = int(
@@ -323,9 +361,11 @@ async def get_automated_insights(
                     """
                     SELECT COUNT(*)
                     FROM tickets
-                    WHERE created_at >= NOW() - INTERVAL '48 hours'
+                    WHERE tenant_id = $1
+                      AND created_at >= NOW() - INTERVAL '48 hours'
                       AND created_at < NOW() - INTERVAL '24 hours'
-                    """
+                    """,
+                    tenant_id,
                 )
             )
         except Exception:
@@ -366,7 +406,7 @@ async def get_automated_insights(
     }
 
 
-async def execute_aggregate(request: QueryRequest, conn: asyncpg.Connection) -> List[Dict[str, Any]]:
+async def execute_aggregate(request: QueryRequest, conn: asyncpg.Connection, tenant_id: str) -> List[Dict[str, Any]]:
     table = _validate_identifier(request.dataset, "dataset")
     columns = await _get_table_columns(conn, table)
 
@@ -386,7 +426,8 @@ async def execute_aggregate(request: QueryRequest, conn: asyncpg.Connection) -> 
     if not metric_exprs:
         metric_exprs = ["COUNT(*) AS count"]
 
-    where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {})
+    # SECURITY: Pass tenant_id to _build_where_clause for tenant isolation
+    where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
     select_cols = group_by + metric_exprs
     sql = f"SELECT {', '.join(select_cols)} FROM {table}{where_sql}"
     if group_by:
@@ -398,7 +439,7 @@ async def execute_aggregate(request: QueryRequest, conn: asyncpg.Connection) -> 
     return [_normalize_row(row) for row in rows]
 
 
-async def execute_timeseries(request: QueryRequest, conn: asyncpg.Connection) -> List[Dict[str, Any]]:
+async def execute_timeseries(request: QueryRequest, conn: asyncpg.Connection, tenant_id: str) -> List[Dict[str, Any]]:
     table = _validate_identifier(request.dataset, "dataset")
     columns = await _get_table_columns(conn, table)
     if "created_at" not in columns:
@@ -407,7 +448,8 @@ async def execute_timeseries(request: QueryRequest, conn: asyncpg.Connection) ->
     metric = (request.metrics or ["count"])[0]
     expr, alias = _metric_expression(metric, columns)
 
-    where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {})
+    # SECURITY: Pass tenant_id to _build_where_clause for tenant isolation
+    where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
     sql = (
         f"""
         SELECT DATE_TRUNC('day', created_at) AS bucket, {expr} AS {alias}

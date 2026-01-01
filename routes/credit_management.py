@@ -18,6 +18,7 @@ import os
 import logging
 from decimal import Decimal
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -135,16 +136,21 @@ async def get_db_connection():
 @router.post("/set-limit", tags=["Credit Management"])
 async def set_credit_limit(
     request: SetCreditLimit,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Set or update customer credit limit"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Check if customer exists
             customer = await conn.fetchrow("""
-                SELECT * FROM customers WHERE id = $1
-            """, uuid.UUID(request.customer_id))
+                SELECT * FROM customers WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(request.customer_id), uuid.UUID(tenant_id))
             
             if not customer:
                 raise HTTPException(status_code=404, detail="Customer not found")
@@ -156,31 +162,31 @@ async def set_credit_limit(
             # Check for existing credit profile
             existing = await conn.fetchrow("""
                 SELECT * FROM customer_credit_profiles
-                WHERE customer_id = $1
-            """, uuid.UUID(request.customer_id))
-            
+                WHERE customer_id = $1 AND tenant_id = $2
+            """, uuid.UUID(request.customer_id), uuid.UUID(tenant_id))
+
             if existing:
                 # Update existing profile
                 old_limit = existing['credit_limit']
-                
+
                 await conn.execute("""
                     UPDATE customer_credit_profiles
                     SET credit_limit = $2,
                         available_credit = available_credit + ($2 - credit_limit),
                         last_review_date = $3,
                         updated_at = NOW()
-                    WHERE customer_id = $1
-                """, uuid.UUID(request.customer_id), request.credit_limit, effective_date)
-                
+                    WHERE customer_id = $1 AND tenant_id = $4
+                """, uuid.UUID(request.customer_id), request.credit_limit, effective_date, uuid.UUID(tenant_id))
+
                 # Log the change
                 await conn.execute("""
                     INSERT INTO credit_limit_history (
                         customer_id, old_limit, new_limit,
-                        effective_date, reason, approved_by, notes
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        effective_date, reason, approved_by, notes, tenant_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """, uuid.UUID(request.customer_id), old_limit, request.credit_limit,
-                    effective_date, request.reason, request.approved_by, request.notes)
-                
+                    effective_date, request.reason, request.approved_by, request.notes, uuid.UUID(tenant_id))
+
                 action = "updated"
             else:
                 # Create new profile
@@ -188,13 +194,13 @@ async def set_credit_limit(
                     INSERT INTO customer_credit_profiles (
                         id, customer_id, credit_limit, current_balance,
                         available_credit, credit_status, payment_behavior,
-                        risk_level, last_review_date
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        risk_level, last_review_date, tenant_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """, uuid.UUID(credit_id), uuid.UUID(request.customer_id),
                     request.credit_limit, 0, request.credit_limit,
                     CreditStatus.NO_CREDIT.value, PaymentBehavior.ON_TIME.value,
-                    RiskLevel.MEDIUM.value, effective_date)
-                
+                    RiskLevel.MEDIUM.value, effective_date, uuid.UUID(tenant_id))
+
                 action = "created"
             
             # Send notification
@@ -221,8 +227,15 @@ async def set_credit_limit(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/profile/{customer_id}", tags=["Credit Management"])
-async def get_credit_profile(customer_id: str):
+async def get_credit_profile(
+    customer_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get customer credit profile"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -231,14 +244,14 @@ async def get_credit_profile(customer_id: str):
                 SELECT cp.*, c.customer_name, c.email
                 FROM customer_credit_profiles cp
                 JOIN customers c ON cp.customer_id = c.id
-                WHERE cp.customer_id = $1
-            """, uuid.UUID(customer_id))
-            
+                WHERE cp.customer_id = $1 AND cp.tenant_id = $2
+            """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
             if not profile:
                 # Return default profile for customer without credit
                 customer = await conn.fetchrow("""
-                    SELECT customer_name, email FROM customers WHERE id = $1
-                """, uuid.UUID(customer_id))
+                    SELECT customer_name, email FROM customers WHERE id = $1 AND tenant_id = $2
+                """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
                 
                 if not customer:
                     raise HTTPException(status_code=404, detail="Customer not found")
@@ -258,31 +271,31 @@ async def get_credit_profile(customer_id: str):
             balance = await conn.fetchval("""
                 SELECT COALESCE(SUM(balance_cents), 0) / 100.0
                 FROM invoices
-                WHERE customer_id = $1 AND status NOT IN ('paid', 'cancelled')
-            """, uuid.UUID(customer_id))
-            
+                WHERE customer_id = $1 AND tenant_id = $2 AND status NOT IN ('paid', 'cancelled')
+            """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
             # Get payment statistics
             payment_stats = await conn.fetchrow("""
-                SELECT 
-                    AVG(CASE 
-                        WHEN paid_date IS NOT NULL 
-                        THEN paid_date - due_date 
-                        ELSE CURRENT_DATE - due_date 
+                SELECT
+                    AVG(CASE
+                        WHEN paid_date IS NOT NULL
+                        THEN paid_date - due_date
+                        ELSE CURRENT_DATE - due_date
                     END) as avg_days_to_pay,
                     COUNT(CASE WHEN paid_date > due_date THEN 1 END) as late_payments,
                     COUNT(CASE WHEN status = 'paid' THEN 1 END) as total_paid,
                     MAX(paid_date) as last_payment_date
                 FROM invoices
-                WHERE customer_id = $1
-            """, uuid.UUID(customer_id))
-            
+                WHERE customer_id = $1 AND tenant_id = $2
+            """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
             # Get credit history
             history = await conn.fetch("""
                 SELECT * FROM credit_limit_history
-                WHERE customer_id = $1
+                WHERE customer_id = $1 AND tenant_id = $2
                 ORDER BY effective_date DESC
                 LIMIT 5
-            """, uuid.UUID(customer_id))
+            """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
             
             return {
                 "customer_id": customer_id,
@@ -322,18 +335,23 @@ async def get_credit_profile(customer_id: str):
 @router.post("/check", tags=["Credit Management"])
 async def perform_credit_check(
     request: CreditCheck,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Perform credit check on customer"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             check_id = str(uuid.uuid4())
-            
+
             # Get customer information
             customer = await conn.fetchrow("""
-                SELECT * FROM customers WHERE id = $1
-            """, uuid.UUID(request.customer_id))
+                SELECT * FROM customers WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(request.customer_id), uuid.UUID(tenant_id))
             
             if not customer:
                 raise HTTPException(status_code=404, detail="Customer not found")
@@ -361,8 +379,8 @@ async def perform_credit_check(
             if request.include_trade_references:
                 trade_refs = await conn.fetch("""
                     SELECT * FROM customer_trade_references
-                    WHERE customer_id = $1
-                """, uuid.UUID(request.customer_id))
+                    WHERE customer_id = $1 AND tenant_id = $2
+                """, uuid.UUID(request.customer_id), uuid.UUID(tenant_id))
                 
                 results['trade_references'] = [
                     {
@@ -398,13 +416,13 @@ async def perform_credit_check(
                 INSERT INTO credit_checks (
                     id, customer_id, check_type, check_date,
                     internal_score, bureau_score, risk_level,
-                    recommended_limit, decision, report_data
-                ) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9)
+                    recommended_limit, decision, report_data, tenant_id
+                ) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10)
             """, uuid.UUID(check_id), uuid.UUID(request.customer_id),
                 request.check_type, internal_score,
                 results.get('bureau_score'), risk_level,
                 recommended_limit, results['recommendation']['decision'],
-                json.dumps(results))
+                json.dumps(results), uuid.UUID(tenant_id))
             
             return results
         finally:
@@ -418,14 +436,21 @@ async def perform_credit_check(
 # ==================== Aging Reports ====================
 
 @router.post("/aging-report", tags=["Credit Management"])
-async def generate_aging_report(request: AgingReport):
+async def generate_aging_report(
+    request: AgingReport,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Generate accounts receivable aging report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Build query
             query = """
-                SELECT 
+                SELECT
                     i.id as invoice_id,
                     i.invoice_number,
                     i.customer_id,
@@ -435,7 +460,7 @@ async def generate_aging_report(request: AgingReport):
                     i.total_cents / 100.0 as total_amount,
                     i.balance_cents / 100.0 as balance_due,
                     CURRENT_DATE - i.due_date as days_overdue,
-                    CASE 
+                    CASE
                         WHEN CURRENT_DATE - i.due_date <= 0 THEN 'current'
                         WHEN CURRENT_DATE - i.due_date <= 30 THEN '1-30'
                         WHEN CURRENT_DATE - i.due_date <= 60 THEN '31-60'
@@ -446,11 +471,12 @@ async def generate_aging_report(request: AgingReport):
                 JOIN customers c ON i.customer_id = c.id
                 WHERE i.due_date <= $1
                     AND i.status NOT IN ('paid', 'cancelled')
+                    AND i.tenant_id = $2
             """
-            params = [request.as_of_date]
-            
+            params = [request.as_of_date, uuid.UUID(tenant_id)]
+
             if request.customer_id:
-                query += " AND i.customer_id = $2"
+                query += " AND i.customer_id = $3"
                 params.append(uuid.UUID(request.customer_id))
             
             if not request.include_zero_balance:
@@ -572,16 +598,21 @@ async def perform_credit_action(
     action: CreditAction,
     amount: Optional[float] = None,
     reason: str = Query(...),
-    approved_by: Optional[str] = None
+    approved_by: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Perform credit management action"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify customer
             customer = await conn.fetchrow("""
-                SELECT * FROM customers WHERE id = $1
-            """, uuid.UUID(customer_id))
+                SELECT * FROM customers WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
             
             if not customer:
                 raise HTTPException(status_code=404, detail="Customer not found")
@@ -595,11 +626,11 @@ async def perform_credit_action(
                     SET credit_status = 'suspended',
                         available_credit = 0,
                         updated_at = NOW()
-                    WHERE customer_id = $1
-                """, uuid.UUID(customer_id))
-                
+                    WHERE customer_id = $1 AND tenant_id = $2
+                """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
                 message = "Customer credit suspended"
-            
+
             elif action == CreditAction.REINSTATE:
                 # Reinstate credit
                 await conn.execute("""
@@ -607,57 +638,57 @@ async def perform_credit_action(
                     SET credit_status = 'good',
                         available_credit = credit_limit - current_balance,
                         updated_at = NOW()
-                    WHERE customer_id = $1
-                """, uuid.UUID(customer_id))
-                
+                    WHERE customer_id = $1 AND tenant_id = $2
+                """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
                 message = "Customer credit reinstated"
-            
+
             elif action == CreditAction.WRITE_OFF:
                 # Write off bad debt
                 if not amount:
                     raise HTTPException(status_code=400, detail="Amount required for write-off")
-                
+
                 await conn.execute("""
                     INSERT INTO credit_write_offs (
                         id, customer_id, amount, reason,
-                        write_off_date, approved_by
-                    ) VALUES ($1, $2, $3, $4, NOW(), $5)
+                        write_off_date, approved_by, tenant_id
+                    ) VALUES ($1, $2, $3, $4, NOW(), $5, $6)
                 """, uuid.UUID(action_id), uuid.UUID(customer_id),
-                    amount, reason, approved_by)
-                
+                    amount, reason, approved_by, uuid.UUID(tenant_id))
+
                 message = f"Written off ${amount:.2f}"
-            
+
             elif action == CreditAction.SEND_TO_COLLECTIONS:
                 # Send to collections
                 await conn.execute("""
                     UPDATE customers
                     SET status = 'collections',
                         updated_at = NOW()
-                    WHERE id = $1
-                """, uuid.UUID(customer_id))
-                
+                    WHERE id = $1 AND tenant_id = $2
+                """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+
                 # Create collections record
                 await conn.execute("""
                     INSERT INTO collections_accounts (
                         customer_id, sent_date, total_amount,
-                        reason, status
-                    ) VALUES ($1, NOW(), $2, $3, 'active')
+                        reason, status, tenant_id
+                    ) VALUES ($1, NOW(), $2, $3, 'active', $4)
                 """, uuid.UUID(customer_id),
-                    amount or 0, reason)
-                
+                    amount or 0, reason, uuid.UUID(tenant_id))
+
                 message = "Account sent to collections"
-            
+
             else:
                 raise HTTPException(status_code=400, detail="Invalid action")
-            
+
             # Log action
             await conn.execute("""
                 INSERT INTO credit_actions_log (
                     id, customer_id, action_type, amount,
-                    reason, approved_by, action_date
-                ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    reason, approved_by, action_date, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
             """, uuid.UUID(action_id), uuid.UUID(customer_id),
-                action.value, amount, reason, approved_by)
+                action.value, amount, reason, approved_by, uuid.UUID(tenant_id))
             
             return {
                 "success": True,
@@ -679,14 +710,19 @@ async def perform_credit_action(
 @router.get("/risk-assessment", tags=["Credit Management"])
 async def get_risk_assessment(
     min_balance: Optional[float] = None,
-    risk_level: Optional[RiskLevel] = None
+    risk_level: Optional[RiskLevel] = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get credit risk assessment for all customers"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             query = """
-                SELECT 
+                SELECT
                     c.id,
                     c.customer_name,
                     cp.credit_limit,
@@ -698,16 +734,16 @@ async def get_risk_assessment(
                     SUM(i.balance_cents) / 100.0 as total_outstanding,
                     MAX(CURRENT_DATE - i.due_date) as max_days_overdue
                 FROM customers c
-                LEFT JOIN customer_credit_profiles cp ON c.id = cp.customer_id
-                LEFT JOIN invoices i ON c.id = i.customer_id AND i.status NOT IN ('paid', 'cancelled')
-                WHERE 1=1
+                LEFT JOIN customer_credit_profiles cp ON c.id = cp.customer_id AND cp.tenant_id = c.tenant_id
+                LEFT JOIN invoices i ON c.id = i.customer_id AND i.status NOT IN ('paid', 'cancelled') AND i.tenant_id = c.tenant_id
+                WHERE c.tenant_id = $1
             """
-            params = []
-            
+            params = [uuid.UUID(tenant_id)]
+
             if min_balance:
-                query += " AND (i.balance_cents / 100.0) >= $1"
+                query += " AND (i.balance_cents / 100.0) >= $2"
                 params.append(min_balance)
-            
+
             if risk_level:
                 param_num = len(params) + 1
                 query += f" AND cp.risk_level = ${param_num}"

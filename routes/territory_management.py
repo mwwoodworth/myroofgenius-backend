@@ -5,11 +5,12 @@ Complete territory assignment and management system
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -64,21 +65,27 @@ class TerritoryAssignment(BaseModel):
 @router.post("/", response_model=TerritoryResponse)
 async def create_territory(
     territory: TerritoryCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new territory"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         INSERT INTO territories (
-            territory_code, territory_name, territory_type,
+            tenant_id, territory_code, territory_name, territory_type,
             description, geographic_area, countries, states,
             cities, postal_codes, industry_segments, annual_quota
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
         ) RETURNING *
     """
 
     result = await conn.fetchrow(
         query,
+        uuid.UUID(tenant_id),
         territory.territory_code,
         territory.territory_name,
         territory.territory_type,
@@ -103,11 +110,16 @@ async def list_territories(
     territory_type: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List territories with filters"""
-    conditions = ["is_active = $1"]
-    params = [is_active]
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    conditions = ["tenant_id = $1", "is_active = $2"]
+    params = [uuid.UUID(tenant_id), is_active]
 
     if territory_type:
         params.append(territory_type)
@@ -130,19 +142,31 @@ async def list_territories(
 async def assign_territory(
     territory_id: str,
     assignment: TerritoryAssignment,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Assign sales rep to territory"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    # Verify territory belongs to tenant
+    verify_query = "SELECT id FROM territories WHERE id = $1 AND tenant_id = $2"
+    territory = await conn.fetchrow(verify_query, uuid.UUID(territory_id), uuid.UUID(tenant_id))
+    if not territory:
+        raise HTTPException(status_code=404, detail="Territory not found")
+
     query = """
         INSERT INTO territory_assignments (
-            territory_id, sales_rep, role, start_date, end_date,
+            tenant_id, territory_id, sales_rep, role, start_date, end_date,
             quota_amount, is_primary, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
     """
 
     result = await conn.fetchrow(
         query,
+        uuid.UUID(tenant_id),
         uuid.UUID(territory_id),
         assignment.sales_rep,
         assignment.role,

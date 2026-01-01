@@ -11,6 +11,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 async def get_db(request: Request):
@@ -34,19 +36,25 @@ class SLACreate(BaseModel):
 @router.post("/", response_model=dict)
 async def create_sla(
     sla: SLACreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create SLA policy"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         INSERT INTO sla_policies (
-            name, description, priority, response_time_hours,
+            tenant_id, name, description, priority, response_time_hours,
             resolution_time_hours, escalation_rules
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
     """
 
     result = await conn.fetchrow(
         query,
+        tenant_id,
         sla.name,
         sla.description,
         sla.priority,
@@ -62,9 +70,14 @@ async def create_sla(
 
 @router.get("/compliance", response_model=dict)
 async def get_sla_compliance(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get SLA compliance metrics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         SELECT
             COUNT(*) as total_tickets,
@@ -72,10 +85,10 @@ async def get_sla_compliance(
             COUNT(CASE WHEN sla_status = 'breached' THEN 1 END) as breached,
             COUNT(CASE WHEN sla_status = 'at_risk' THEN 1 END) as at_risk
         FROM support_tickets
-        WHERE created_at >= NOW() - INTERVAL '30 days'
+        WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
 
     total = result['total_tickets'] or 1
     compliance_rate = (result['met'] / total * 100) if total > 0 else 0
@@ -90,22 +103,27 @@ async def get_sla_compliance(
 @router.get("/breaches", response_model=List[dict])
 async def get_sla_breaches(
     limit: int = 50,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get SLA breaches"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         SELECT
             st.*,
             sp.name as sla_name,
             sp.resolution_time_hours
         FROM support_tickets st
-        JOIN sla_policies sp ON st.priority = sp.priority
-        WHERE st.sla_status = 'breached'
+        JOIN sla_policies sp ON st.priority = sp.priority AND st.tenant_id = sp.tenant_id
+        WHERE st.tenant_id = $1 AND st.sla_status = 'breached'
         ORDER BY st.created_at DESC
-        LIMIT $1
+        LIMIT $2
     """
 
-    rows = await conn.fetch(query, limit)
+    rows = await conn.fetch(query, tenant_id, limit)
     return [
         {
             **dict(row),

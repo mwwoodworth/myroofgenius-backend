@@ -1,6 +1,7 @@
 """
 Extended leave management Module
 Auto-generated implementation
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
@@ -11,6 +12,8 @@ from enum import Enum
 import asyncpg
 import uuid
 import json
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -44,12 +47,17 @@ class LeaveManagementExtendedResponse(LeaveManagementExtendedBase):
 @router.post("/", response_model=LeaveManagementExtendedResponse)
 async def create_leave_management_extended(
     item: LeaveManagementExtendedCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create new extended leave management record"""
+    """Create new extended leave management record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
-        INSERT INTO leave_management_extended (name, description, status, metadata)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO leave_management_extended (name, description, status, metadata, tenant_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
@@ -58,7 +66,8 @@ async def create_leave_management_extended(
         item.name,
         item.description,
         item.status,
-        json.dumps(item.metadata) if item.metadata else None
+        json.dumps(item.metadata) if item.metadata else None,
+        tenant_id
     )
 
     return {
@@ -72,16 +81,22 @@ async def create_leave_management_extended(
 async def list_leave_management_extended(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List all extended leave management records"""
+    """List all extended leave management records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT * FROM leave_management_extended
+        WHERE tenant_id = $1
         ORDER BY created_at DESC
-        LIMIT $1 OFFSET $2
+        LIMIT $2 OFFSET $3
     """
 
-    rows = await conn.fetch(query, limit, skip)
+    rows = await conn.fetch(query, tenant_id, limit, skip)
 
     return [
         {
@@ -95,12 +110,17 @@ async def list_leave_management_extended(
 @router.get("/{item_id}", response_model=LeaveManagementExtendedResponse)
 async def get_leave_management_extended(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get specific extended leave management record"""
-    query = "SELECT * FROM leave_management_extended WHERE id = $1"
+    """Get specific extended leave management record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM leave_management_extended WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Extended leave management not found")
 
@@ -114,13 +134,18 @@ async def get_leave_management_extended(
 async def update_leave_management_extended(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update extended leave management record"""
+    """Update extended leave management record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     # Build dynamic update query
     set_clauses = []
-    params = []
-    param_count = 0
+    params = [tenant_id]
+    param_count = 1
 
     for field, value in updates.items():
         param_count += 1
@@ -131,7 +156,7 @@ async def update_leave_management_extended(
     query = f"""
         UPDATE leave_management_extended
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${param_count}
+        WHERE id = ${param_count} AND tenant_id = $1
         RETURNING id
     """
     params.append(uuid.UUID(item_id))
@@ -145,12 +170,17 @@ async def update_leave_management_extended(
 @router.delete("/{item_id}")
 async def delete_leave_management_extended(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Delete extended leave management record"""
-    query = "DELETE FROM leave_management_extended WHERE id = $1 RETURNING id"
+    """Delete extended leave management record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM leave_management_extended WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Extended leave management not found")
 
@@ -159,33 +189,44 @@ async def delete_leave_management_extended(
 # Additional specialized endpoints
 @router.get("/stats/summary")
 async def get_leave_management_extended_stats(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get extended leave management statistics"""
+    """Get extended leave management statistics - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive
         FROM leave_management_extended
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
 
     return dict(result)
 
 @router.post("/bulk")
 async def bulk_create_leave_management_extended(
     items: List[LeaveManagementExtendedCreate],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Bulk create extended leave management records"""
+    """Bulk create extended leave management records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     created = []
 
     for item in items:
         query = """
-            INSERT INTO leave_management_extended (name, description, status, metadata)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO leave_management_extended (name, description, status, metadata, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """
 
@@ -194,7 +235,8 @@ async def bulk_create_leave_management_extended(
             item.name,
             item.description,
             item.status,
-            json.dumps(item.metadata) if item.metadata else None
+            json.dumps(item.metadata) if item.metadata else None,
+            tenant_id
         )
 
         created.append(str(result['id']))

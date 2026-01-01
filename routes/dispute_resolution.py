@@ -1,6 +1,7 @@
 """
 Dispute Resolution System
 Task 38: Comprehensive dispute management for invoices, payments, and services
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File
@@ -15,6 +16,7 @@ from decimal import Decimal
 import json
 
 from database import get_db_connection
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -280,9 +282,13 @@ async def check_sla_compliance(conn, dispute_id: str) -> Dict[str, Any]:
 async def create_dispute(
     dispute: DisputeCreate,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create new dispute"""
+    """Create new dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         dispute_id = str(uuid.uuid4())
         dispute_number = generate_dispute_number()
@@ -361,19 +367,24 @@ async def get_disputes(
     date_to: Optional[date] = None,
     limit: int = Query(100, le=1000),
     offset: int = 0,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get disputes with filters"""
+    """Get disputes with filters - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
-        # Build query
+        # Build query - tenant isolated via customers table
         query = """
             SELECT d.*, c.name as customer_name
             FROM disputes d
             LEFT JOIN customers c ON d.customer_id = c.id
-            WHERE 1=1
+            WHERE c.tenant_id = $1
         """
-        params = []
-        param_count = 0
+        params = [tenant_id]
+        param_count = 1
 
         if status:
             param_count += 1
@@ -423,16 +434,21 @@ async def get_disputes(
 @router.get("/disputes/{dispute_id}", response_model=DisputeResponse)
 async def get_dispute(
     dispute_id: str,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get dispute details"""
+    """Get dispute details - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         result = await conn.fetchrow("""
             SELECT d.*, c.name as customer_name
             FROM disputes d
             LEFT JOIN customers c ON d.customer_id = c.id
-            WHERE d.id = $1
-        """, uuid.UUID(dispute_id))
+            WHERE d.id = $1 AND c.tenant_id = $2
+        """, uuid.UUID(dispute_id), tenant_id)
 
         if not result:
             raise HTTPException(status_code=404, detail="Dispute not found")
@@ -450,9 +466,13 @@ async def update_dispute(
     dispute_id: str,
     update: DisputeUpdate,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update dispute"""
+    """Update dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         # Build update query
         update_fields = []
@@ -553,9 +573,13 @@ async def add_communication(
     dispute_id: str,
     communication: DisputeCommunication,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Add communication to dispute"""
+    """Add communication to dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         comm_id = str(uuid.uuid4())
 
@@ -598,9 +622,13 @@ async def add_communication(
 async def add_evidence(
     dispute_id: str,
     evidence: DisputeEvidence,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Add evidence to dispute"""
+    """Add evidence to dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         evidence_id = str(uuid.uuid4())
 
@@ -643,9 +671,13 @@ async def resolve_dispute(
     dispute_id: str,
     resolution: DisputeResolution,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Resolve dispute"""
+    """Resolve dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         # Update dispute with resolution
         result = await conn.fetchrow("""
@@ -734,9 +766,13 @@ async def escalate_dispute(
     dispute_id: str,
     escalation: DisputeEscalation,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Escalate dispute"""
+    """Escalate dispute - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         # Update dispute status
         result = await conn.fetchrow("""
@@ -808,9 +844,13 @@ async def escalate_dispute(
 @router.get("/disputes/{dispute_id}/timeline")
 async def get_dispute_timeline(
     dispute_id: str,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get dispute timeline"""
+    """Get dispute timeline - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         # Get all activities
         activities = await conn.fetch("""
@@ -861,9 +901,13 @@ async def get_dispute_timeline(
 @router.get("/disputes/{dispute_id}/sla")
 async def check_dispute_sla(
     dispute_id: str,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Check dispute SLA compliance"""
+    """Check dispute SLA compliance - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
     try:
         return await check_sla_compliance(conn, dispute_id)
     except Exception as e:
@@ -874,21 +918,27 @@ async def check_dispute_sla(
 async def get_dispute_analytics(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get dispute analytics"""
+    """Get dispute analytics - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         # Overall metrics
         metrics = await calculate_dispute_metrics(conn)
 
-        # Type breakdown
+        # Type breakdown - tenant isolated via customers table
         type_query = """
-            SELECT dispute_type, COUNT(*) as count
-            FROM disputes
-            WHERE 1=1
+            SELECT d.dispute_type, COUNT(*) as count
+            FROM disputes d
+            JOIN customers c ON d.customer_id = c.id
+            WHERE c.tenant_id = $1
         """
-        params = []
-        param_count = 0
+        params = [tenant_id]
+        param_count = 1
 
         if date_from:
             param_count += 1
@@ -900,7 +950,7 @@ async def get_dispute_analytics(
             type_query += f" AND submitted_date <= ${param_count}"
             params.append(datetime.combine(date_to, datetime.max.time()))
 
-        type_query += " GROUP BY dispute_type"
+        type_query += " GROUP BY d.dispute_type"
 
         type_breakdown = await conn.fetch(type_query, *params)
 

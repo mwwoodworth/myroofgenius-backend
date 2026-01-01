@@ -10,6 +10,7 @@ from datetime import datetime
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -49,14 +50,19 @@ class TicketResponse(BaseModel):
 async def create_ticket(
     ticket: TicketCreate,
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create support ticket"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         INSERT INTO support_tickets (
-            title, description, priority, category,
+            tenant_id, title, description, priority, category,
             customer_id, attachments, ticket_number, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
     """
 
@@ -64,6 +70,7 @@ async def create_ticket(
 
     result = await conn.fetchrow(
         query,
+        uuid.UUID(tenant_id),
         ticket.title,
         ticket.description,
         ticket.priority,
@@ -84,11 +91,16 @@ async def list_tickets(
     priority: Optional[str] = None,
     assigned_to: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List support tickets"""
-    params = []
-    conditions = []
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    params = [uuid.UUID(tenant_id)]
+    conditions = ["tenant_id = $1"]
 
     if status:
         params.append(status)
@@ -102,7 +114,7 @@ async def list_tickets(
         params.append(uuid.UUID(assigned_to))
         conditions.append(f"assigned_to = ${len(params)}")
 
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+    where_clause = " WHERE " + " AND ".join(conditions)
     params.append(limit)
 
     query = f"""
@@ -126,19 +138,24 @@ async def list_tickets(
 async def assign_ticket(
     ticket_id: str,
     agent_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Assign ticket to agent"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         UPDATE support_tickets
         SET assigned_to = $1,
             status = 'in_progress',
             updated_at = NOW()
-        WHERE id = $2
+        WHERE id = $2 AND tenant_id = $3
         RETURNING id
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(agent_id), uuid.UUID(ticket_id))
+    result = await conn.fetchrow(query, uuid.UUID(agent_id), uuid.UUID(ticket_id), uuid.UUID(tenant_id))
     if not result:
         raise HTTPException(status_code=404, detail="Ticket not found")
 

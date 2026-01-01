@@ -10,6 +10,7 @@ from datetime import datetime
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -34,19 +35,25 @@ class FAQCreate(BaseModel):
 @router.post("/", response_model=dict)
 async def create_faq(
     faq: FAQCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create FAQ entry"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
     query = """
         INSERT INTO faqs (
-            question, answer, category, tags,
+            tenant_id, question, answer, category, tags,
             order_index, is_published
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
     """
 
     result = await conn.fetchrow(
         query,
+        tenant_id,
         faq.question,
         faq.answer,
         faq.category,
@@ -65,11 +72,16 @@ async def create_faq(
 async def list_faqs(
     category: Optional[str] = None,
     search: Optional[str] = None,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List FAQs"""
-    params = []
-    conditions = ["is_published = true"]
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
+    params = [tenant_id]
+    conditions = ["tenant_id = $1", "is_published = true"]
 
     if category:
         params.append(category)
@@ -99,36 +111,46 @@ async def list_faqs(
 
 @router.get("/categories", response_model=List[dict])
 async def get_faq_categories(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get FAQ categories with counts"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
     query = """
         SELECT
             category,
             COUNT(*) as count
         FROM faqs
-        WHERE is_published = true
+        WHERE tenant_id = $1 AND is_published = true
         GROUP BY category
         ORDER BY category
     """
 
-    rows = await conn.fetch(query)
+    rows = await conn.fetch(query, tenant_id)
     return [dict(row) for row in rows]
 
 @router.post("/{faq_id}/view")
 async def track_faq_view(
     faq_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Track FAQ view"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID required")
+
     query = """
         UPDATE faqs
         SET views = COALESCE(views, 0) + 1
-        WHERE id = $1
+        WHERE id = $1 AND tenant_id = $2
         RETURNING views
     """
 
-    result = await conn.fetchrow(query, uuid.UUID(faq_id))
+    result = await conn.fetchrow(query, uuid.UUID(faq_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="FAQ not found")
 

@@ -15,6 +15,7 @@ from decimal import Decimal
 import json
 
 from database import get_db_connection
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -376,14 +377,20 @@ async def calculate_picking_efficiency(conn, warehouse_id: str, days: int = 30) 
 @router.post("/warehouses", response_model=WarehouseResponse)
 async def create_warehouse(
     warehouse: WarehouseCreate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new warehouse"""
     try:
-        # Check for duplicate code
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Check for duplicate code within tenant
         existing = await conn.fetchval(
-            "SELECT id FROM warehouses WHERE warehouse_code = $1",
-            warehouse.warehouse_code
+            "SELECT id FROM warehouses WHERE warehouse_code = $1 AND tenant_id = $2",
+            warehouse.warehouse_code,
+            uuid.UUID(tenant_id)
         )
         if existing:
             raise HTTPException(status_code=400, detail="Warehouse code already exists")
@@ -393,14 +400,15 @@ async def create_warehouse(
         # Create warehouse
         result = await conn.fetchrow("""
             INSERT INTO warehouses (
-                id, warehouse_code, name, warehouse_type,
+                id, tenant_id, warehouse_code, name, warehouse_type,
                 address, city, state, zip_code, country,
                 phone, email, manager, capacity_sqft,
                 operating_hours, features, is_active
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true)
             RETURNING *
         """,
             uuid.UUID(warehouse_id),
+            uuid.UUID(tenant_id),
             warehouse.warehouse_code,
             warehouse.name,
             warehouse.warehouse_type,
@@ -442,10 +450,15 @@ async def get_warehouses(
     is_active: Optional[bool] = True,
     limit: int = Query(100, le=1000),
     offset: int = 0,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get warehouses with filters"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         # Build query
         query = """
             SELECT w.*,
@@ -453,10 +466,10 @@ async def get_warehouses(
                    COUNT(DISTINCT CASE WHEN wl.is_occupied THEN wl.id END) as occupied_locations
             FROM warehouses w
             LEFT JOIN warehouse_locations wl ON w.id = wl.warehouse_id
-            WHERE 1=1
+            WHERE w.tenant_id = $1
         """
-        params = []
-        param_count = 0
+        params = [uuid.UUID(tenant_id)]
+        param_count = 1
 
         if warehouse_type:
             param_count += 1
@@ -500,13 +513,18 @@ async def get_warehouses(
 @router.get("/warehouses/{warehouse_id}", response_model=WarehouseResponse)
 async def get_warehouse_details(
     warehouse_id: str,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get warehouse details"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         result = await conn.fetchrow("""
-            SELECT * FROM warehouses WHERE id = $1
-        """, uuid.UUID(warehouse_id))
+            SELECT * FROM warehouses WHERE id = $1 AND tenant_id = $2
+        """, uuid.UUID(warehouse_id), uuid.UUID(tenant_id))
 
         if not result:
             raise HTTPException(status_code=404, detail="Warehouse not found")
@@ -532,19 +550,33 @@ async def get_warehouse_details(
 async def create_warehouse_zone(
     warehouse_id: str,
     zone: ZoneCreate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create warehouse zone"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         zone_id = str(uuid.uuid4())
 
         await conn.execute("""
             INSERT INTO warehouse_zones (
-                id, warehouse_id, zone_code, zone_name, zone_type,
+                id, tenant_id, warehouse_id, zone_code, zone_name, zone_type,
                 area_sqft, temperature_range, humidity_range, security_level
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         """,
             uuid.UUID(zone_id),
+            uuid.UUID(tenant_id),
             uuid.UUID(warehouse_id),
             zone.zone_code,
             zone.zone_name,
@@ -565,10 +597,23 @@ async def create_warehouse_zone(
 async def create_location(
     warehouse_id: str,
     location: LocationCreate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create warehouse location"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         location_id = str(uuid.uuid4())
 
         # Generate full path
@@ -581,12 +626,13 @@ async def create_location(
 
         await conn.execute("""
             INSERT INTO warehouse_locations (
-                id, warehouse_id, zone_id, location_code, full_path,
+                id, tenant_id, warehouse_id, zone_id, location_code, full_path,
                 aisle, rack, shelf, bin, storage_type,
                 max_weight, max_volume, is_available, is_occupied
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false)
         """,
             uuid.UUID(location_id),
+            uuid.UUID(tenant_id),
             uuid.UUID(warehouse_id),
             uuid.UUID(location.zone_id) if location.zone_id else None,
             location.location_code,
@@ -615,16 +661,21 @@ async def get_warehouse_locations(
     storage_type: Optional[StorageType] = None,
     limit: int = Query(100, le=1000),
     offset: int = 0,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get warehouse locations"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         query = """
             SELECT * FROM warehouse_locations
-            WHERE warehouse_id = $1
+            WHERE warehouse_id = $1 AND tenant_id = $2
         """
-        params = [uuid.UUID(warehouse_id)]
-        param_count = 1
+        params = [uuid.UUID(warehouse_id), uuid.UUID(tenant_id)]
+        param_count = 2
 
         if zone_id:
             param_count += 1
@@ -660,22 +711,36 @@ async def get_warehouse_locations(
 @router.post("/receiving/orders")
 async def create_receiving_order(
     order: ReceivingOrder,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create receiving order"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(order.warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         receiving_id = str(uuid.uuid4())
         receiving_number = f"RCV-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         # Create receiving order
         await conn.execute("""
             INSERT INTO receiving_orders (
-                id, receiving_number, warehouse_id, supplier_id,
+                id, tenant_id, receiving_number, warehouse_id, supplier_id,
                 purchase_order_id, expected_date, carrier,
                 tracking_number, status, notes
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         """,
             uuid.UUID(receiving_id),
+            uuid.UUID(tenant_id),
             receiving_number,
             uuid.UUID(order.warehouse_id),
             uuid.UUID(order.supplier_id) if order.supplier_id else None,
@@ -717,10 +782,23 @@ async def update_receiving_order(
     receiving_id: str,
     update: ReceivingUpdate,
     background_tasks: BackgroundTasks,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update receiving order (process receipt)"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify receiving order belongs to tenant
+        order_exists = await conn.fetchval(
+            "SELECT id FROM receiving_orders WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(receiving_id), uuid.UUID(tenant_id)
+        )
+        if not order_exists:
+            raise HTTPException(status_code=404, detail="Receiving order not found")
+
         # Update order
         if update.status:
             await conn.execute("""
@@ -789,18 +867,23 @@ async def update_receiving_order(
 @router.post("/putaway/tasks")
 async def create_putaway_task_endpoint(
     task: PutawayTask,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create putaway task"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
         task_id = str(uuid.uuid4())
 
         # Find optimal location if not specified
         if not task.to_location:
-            # Get warehouse from receiving order
+            # Get warehouse from receiving order (verify tenant)
             warehouse = await conn.fetchval("""
-                SELECT warehouse_id FROM receiving_orders WHERE id = $1
-            """, uuid.UUID(task.receiving_id))
+                SELECT warehouse_id FROM receiving_orders WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(task.receiving_id), uuid.UUID(tenant_id))
 
             if warehouse:
                 task.to_location = await find_optimal_location(
@@ -840,22 +923,36 @@ async def create_putaway_task_endpoint(
 @router.post("/picking/orders")
 async def create_picking_order(
     order: PickingOrder,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create picking order"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(order.warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         picking_id = str(uuid.uuid4())
         picking_number = f"PCK-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         # Create picking order
         await conn.execute("""
             INSERT INTO picking_orders (
-                id, picking_number, warehouse_id, order_id,
+                id, tenant_id, picking_number, warehouse_id, order_id,
                 customer_id, method, priority, required_date,
                 assigned_to, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         """,
             uuid.UUID(picking_id),
+            uuid.UUID(tenant_id),
             picking_number,
             uuid.UUID(order.warehouse_id),
             order.order_id,
@@ -896,10 +993,23 @@ async def create_picking_order(
 async def update_picking_order(
     picking_id: str,
     update: PickingUpdate,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update picking order status"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify picking order belongs to tenant
+        order_exists = await conn.fetchval(
+            "SELECT id FROM picking_orders WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(picking_id), uuid.UUID(tenant_id)
+        )
+        if not order_exists:
+            raise HTTPException(status_code=404, detail="Picking order not found")
+
         # Update order status
         await conn.execute("""
             UPDATE picking_orders
@@ -967,22 +1077,36 @@ async def update_picking_order(
 @router.post("/shipping/orders")
 async def create_shipping_order(
     order: ShippingOrder,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create shipping order"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(order.warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         shipping_id = str(uuid.uuid4())
         shipping_number = f"SHP-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         # Create shipping order
         await conn.execute("""
             INSERT INTO shipping_orders (
-                id, shipping_number, warehouse_id, order_id,
+                id, tenant_id, shipping_number, warehouse_id, order_id,
                 customer_id, ship_to_address, carrier,
                 service_type, ship_date, tracking_number, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         """,
             uuid.UUID(shipping_id),
+            uuid.UUID(tenant_id),
             shipping_number,
             uuid.UUID(order.warehouse_id),
             order.order_id,
@@ -1022,22 +1146,40 @@ async def create_shipping_order(
 @router.post("/transfers")
 async def create_transfer_order(
     transfer: TransferOrder,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create warehouse transfer order"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify both warehouses belong to tenant
+        from_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(transfer.from_warehouse_id), uuid.UUID(tenant_id)
+        )
+        to_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(transfer.to_warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not from_exists or not to_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         transfer_id = str(uuid.uuid4())
         transfer_number = f"TRF-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         # Create transfer order
         await conn.execute("""
             INSERT INTO warehouse_transfers (
-                id, transfer_number, from_warehouse_id,
+                id, tenant_id, transfer_number, from_warehouse_id,
                 to_warehouse_id, transfer_date, reason,
                 priority, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
         """,
             uuid.UUID(transfer_id),
+            uuid.UUID(tenant_id),
             transfer_number,
             uuid.UUID(transfer.from_warehouse_id),
             uuid.UUID(transfer.to_warehouse_id),
@@ -1074,10 +1216,23 @@ async def get_warehouse_metrics(
     warehouse_id: str,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get warehouse performance metrics"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         if not start_date:
             start_date = date.today() - timedelta(days=30)
         if not end_date:
@@ -1143,22 +1298,36 @@ async def get_warehouse_metrics(
 @router.post("/inventory/adjustments")
 async def create_inventory_adjustment(
     adjustment: InventoryAdjustment,
-    conn = Depends(get_db_connection)
+    conn = Depends(get_db_connection),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create inventory adjustment"""
     try:
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+        # Verify warehouse belongs to tenant
+        warehouse_exists = await conn.fetchval(
+            "SELECT id FROM warehouses WHERE id = $1 AND tenant_id = $2",
+            uuid.UUID(adjustment.warehouse_id), uuid.UUID(tenant_id)
+        )
+        if not warehouse_exists:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
         adjustment_id = str(uuid.uuid4())
         variance = adjustment.new_quantity - adjustment.current_quantity
 
         # Create adjustment record
         await conn.execute("""
             INSERT INTO inventory_adjustments (
-                id, warehouse_id, location_id, item_id,
+                id, tenant_id, warehouse_id, location_id, item_id,
                 previous_quantity, new_quantity, variance,
                 reason, approved_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         """,
             uuid.UUID(adjustment_id),
+            uuid.UUID(tenant_id),
             uuid.UUID(adjustment.warehouse_id),
             uuid.UUID(adjustment.location_id),
             uuid.UUID(adjustment.item_id),

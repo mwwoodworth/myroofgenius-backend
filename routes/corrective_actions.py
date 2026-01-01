@@ -1,6 +1,7 @@
 """
 Corrective actions Module - Auto-generated
 Part of complete ERP implementation
+SECURITY FIX: Added tenant isolation to prevent cross-tenant data access
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
@@ -10,6 +11,8 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -43,18 +46,24 @@ class CorrectiveActionsResponse(CorrectiveActionsBase):
 @router.post("/", response_model=CorrectiveActionsResponse)
 async def create_corrective_actions(
     item: CorrectiveActionsCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Create new corrective actions record"""
+    """Create new corrective actions record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
-        INSERT INTO corrective_actions (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO corrective_actions (name, description, status, data, tenant_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
         query, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
+        json.dumps(item.data) if item.data else None,
+        tenant_id
     )
 
     return {
@@ -69,12 +78,17 @@ async def list_corrective_actions(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """List corrective actions records"""
-    query = "SELECT * FROM corrective_actions WHERE 1=1"
-    params = []
-    param_count = 0
+    """List corrective actions records - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    query = "SELECT * FROM corrective_actions WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +112,17 @@ async def list_corrective_actions(
 @router.get("/{item_id}", response_model=CorrectiveActionsResponse)
 async def get_corrective_actions(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Get specific corrective actions record"""
-    query = "SELECT * FROM corrective_actions WHERE id = $1"
+    """Get specific corrective actions record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM corrective_actions WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Corrective actions not found")
 
@@ -117,11 +136,19 @@ async def get_corrective_actions(
 async def update_corrective_actions(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Update corrective actions record"""
+    """Update corrective actions record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
+
+    # Remove tenant_id from updates to prevent cross-tenant moves
+    updates.pop('tenant_id', None)
 
     set_clauses = []
     params = []
@@ -130,10 +157,11 @@ async def update_corrective_actions(
         params.append(value)
 
     params.append(uuid.UUID(item_id))
+    params.append(tenant_id)
     query = f"""
         UPDATE corrective_actions
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE id = ${len(params) - 1} AND tenant_id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +174,40 @@ async def update_corrective_actions(
 @router.delete("/{item_id}")
 async def delete_corrective_actions(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
-    """Delete corrective actions record"""
-    query = "DELETE FROM corrective_actions WHERE id = $1 RETURNING id"
+    """Delete corrective actions record - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM corrective_actions WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Corrective actions not found")
 
     return {"message": "Corrective actions deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_corrective_actions_stats(conn: asyncpg.Connection = Depends(get_db)):
-    """Get corrective actions statistics"""
+async def get_corrective_actions_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
+    """Get corrective actions statistics - tenant isolated"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM corrective_actions
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

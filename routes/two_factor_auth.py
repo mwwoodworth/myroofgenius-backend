@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
 
@@ -43,17 +44,22 @@ class TwoFactorAuthResponse(TwoFactorAuthBase):
 @router.post("/", response_model=TwoFactorAuthResponse)
 async def create_two_factor_auth(
     item: TwoFactorAuthCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create new two-factor authentication record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
-        INSERT INTO two_factor_auth (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO two_factor_auth (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, uuid.UUID(tenant_id), item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +75,17 @@ async def list_two_factor_auth(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List two-factor authentication records"""
-    query = "SELECT * FROM two_factor_auth WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    query = "SELECT * FROM two_factor_auth WHERE tenant_id = $1"
+    params = [uuid.UUID(tenant_id)]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +109,17 @@ async def list_two_factor_auth(
 @router.get("/{item_id}", response_model=TwoFactorAuthResponse)
 async def get_two_factor_auth(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get specific two-factor authentication record"""
-    query = "SELECT * FROM two_factor_auth WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM two_factor_auth WHERE id = $1 AND tenant_id = $2"
+
+    row = await conn.fetchrow(query, uuid.UUID(item_id), uuid.UUID(tenant_id))
     if not row:
         raise HTTPException(status_code=404, detail="Two-factor authentication not found")
 
@@ -117,9 +133,14 @@ async def get_two_factor_auth(
 async def update_two_factor_auth(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Update two-factor authentication record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
@@ -130,10 +151,11 @@ async def update_two_factor_auth(
         params.append(value)
 
     params.append(uuid.UUID(item_id))
+    params.append(uuid.UUID(tenant_id))
     query = f"""
         UPDATE two_factor_auth
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE id = ${len(params) - 1} AND tenant_id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +168,40 @@ async def update_two_factor_auth(
 @router.delete("/{item_id}")
 async def delete_two_factor_auth(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Delete two-factor authentication record"""
-    query = "DELETE FROM two_factor_auth WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM two_factor_auth WHERE id = $1 AND tenant_id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, uuid.UUID(item_id), uuid.UUID(tenant_id))
     if not result:
         raise HTTPException(status_code=404, detail="Two-factor authentication not found")
 
     return {"message": "Two-factor authentication deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_two_factor_auth_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_two_factor_auth_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get two-factor authentication statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM two_factor_auth
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, uuid.UUID(tenant_id))
     return dict(result)

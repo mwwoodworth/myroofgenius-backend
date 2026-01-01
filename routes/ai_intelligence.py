@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import get_db
+from core.supabase_auth import get_authenticated_user
 
 # Import REAL AI service with fallback
 try:
@@ -199,10 +200,18 @@ async def optimize_revenue(data: RevenueOptimizationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/churn-prediction/{customer_id}")
-async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
+async def predict_churn(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """
     REAL AI-powered churn prediction using actual customer data
     """
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if ai_service is None:
             raise HTTPException(status_code=503, detail="AI service not available on this server")
@@ -212,7 +221,7 @@ async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
 
         query = text(
             """
-            SELECT 
+            SELECT
                 c.id,
                 c.email,
                 COUNT(DISTINCT DATE(s.created_at)) as days_active,
@@ -223,13 +232,13 @@ async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
                 COUNT(DISTINCT CASE WHEN i.status = 'overdue' THEN i.id END) as overdue_invoices
             FROM customers c
             LEFT JOIN user_sessions s ON c.id = s.user_id
-            LEFT JOIN invoices i ON c.id = i.customer_id
-            WHERE c.id = :customer_id
+            LEFT JOIN invoices i ON c.id = i.customer_id AND i.tenant_id = c.tenant_id
+            WHERE c.tenant_id = :tenant_id AND c.id = :customer_id
             GROUP BY c.id, c.email
             """
         )
 
-        result = db.execute(query, {"customer_id": customer_id}).first()
+        result = db.execute(query, {"tenant_id": tenant_id, "customer_id": customer_id}).first()
         if not result:
             raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -241,10 +250,10 @@ async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
             "failed_payments": int(result.overdue_invoices or 0),
             "unresolved_tickets": 0,
         }
-        
+
         # Use REAL AI service for churn prediction
         prediction = await ai_service.predict_churn(customer_data)
-        
+
         return {
             "success": True,
             "customer_id": customer_id,
@@ -256,7 +265,7 @@ async def predict_churn(customer_id: str, db: Session = Depends(get_db)):
             "ai_powered": True,
             "analysis_date": datetime.now().isoformat()
         }
-        
+
     except Exception as e:
         logger.error(f"Real AI churn prediction error: {str(e)}")
         if isinstance(e, HTTPException):
@@ -291,11 +300,18 @@ async def generate_marketing_content(topic: str = "roofing", style: str = "profe
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/system-health")
-async def get_system_health(db: Session = Depends(get_db)):
+async def get_system_health(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """
     AI system health monitoring and self-management status
     NOW WITH REAL METRICS - Not random!
     """
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         now = datetime.utcnow()
         uptime_seconds = (now - APP_START_TIME).total_seconds()
@@ -309,7 +325,8 @@ async def get_system_health(db: Session = Depends(get_db)):
         daily_analyses = None
         try:
             roof_analyses = db.execute(
-                text("SELECT COUNT(*) FROM roof_analyses WHERE created_at >= CURRENT_DATE")
+                text("SELECT COUNT(*) FROM roof_analyses WHERE tenant_id = :tenant_id AND created_at >= CURRENT_DATE"),
+                {"tenant_id": tenant_id}
             ).scalar()
             daily_analyses = int(roof_analyses or 0)
         except Exception:
@@ -322,10 +339,12 @@ async def get_system_health(db: Session = Depends(get_db)):
                     """
                     SELECT mrr, churn_rate, ltv
                     FROM revenue_metrics
+                    WHERE tenant_id = :tenant_id
                     ORDER BY metric_date DESC
                     LIMIT 1
                     """
-                )
+                ),
+                {"tenant_id": tenant_id}
             ).first()
             if latest:
                 revenue_metrics["mrr"] = float(latest.mrr) if latest.mrr is not None else None
@@ -342,10 +361,12 @@ async def get_system_health(db: Session = Depends(get_db)):
                         """
                         SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
                         FROM invoices
-                        WHERE status = 'paid'
+                        WHERE tenant_id = :tenant_id
+                          AND status = 'paid'
                           AND created_at >= CURRENT_DATE - INTERVAL '30 days'
                         """
-                    )
+                    ),
+                    {"tenant_id": tenant_id}
                 ).scalar()
                 or 0
             )
@@ -355,11 +376,13 @@ async def get_system_health(db: Session = Depends(get_db)):
                         """
                         SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
                         FROM invoices
-                        WHERE status = 'paid'
+                        WHERE tenant_id = :tenant_id
+                          AND status = 'paid'
                           AND created_at >= CURRENT_DATE - INTERVAL '60 days'
                           AND created_at < CURRENT_DATE - INTERVAL '30 days'
                         """
-                    )
+                    ),
+                    {"tenant_id": tenant_id}
                 ).scalar()
                 or 0
             )
@@ -371,7 +394,10 @@ async def get_system_health(db: Session = Depends(get_db)):
         # ARPU when MRR is available.
         if revenue_metrics["mrr"] is not None:
             try:
-                active_subs = db.execute(text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")).scalar()
+                active_subs = db.execute(
+                    text("SELECT COUNT(*) FROM subscriptions WHERE tenant_id = :tenant_id AND status = 'active'"),
+                    {"tenant_id": tenant_id}
+                ).scalar()
                 if active_subs:
                     revenue_metrics["arpu"] = round(revenue_metrics["mrr"] / float(active_subs), 2)
             except Exception as e:

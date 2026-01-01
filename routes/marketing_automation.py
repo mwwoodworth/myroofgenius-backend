@@ -11,6 +11,8 @@ import asyncpg
 import uuid
 import json
 
+from core.supabase_auth import get_authenticated_user
+
 router = APIRouter()
 
 # Database connection
@@ -37,19 +39,25 @@ class AutomationCreate(BaseModel):
 @router.post("/automations", response_model=dict)
 async def create_automation(
     automation: AutomationCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create marketing automation workflow"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
     query = """
         INSERT INTO marketing_automations (
-            name, trigger_type, trigger_config, actions,
+            tenant_id, name, trigger_type, trigger_config, actions,
             conditions, is_active
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
     """
 
     result = await conn.fetchrow(
         query,
+        tenant_id,
         automation.name,
         automation.trigger_type,
         json.dumps(automation.trigger_config),
@@ -65,11 +73,16 @@ async def trigger_automation(
     automation_id: str,
     trigger_data: Dict[str, Any],
     background_tasks: BackgroundTasks,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Manually trigger an automation"""
-    query = "SELECT * FROM marketing_automations WHERE id = $1 AND is_active = true"
-    automation = await conn.fetchrow(query, uuid.UUID(automation_id))
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
+    query = "SELECT * FROM marketing_automations WHERE id = $1 AND tenant_id = $2 AND is_active = true"
+    automation = await conn.fetchrow(query, uuid.UUID(automation_id), tenant_id)
 
     if not automation:
         raise HTTPException(status_code=404, detail="Automation not found or inactive")
@@ -89,9 +102,15 @@ async def execute_automation(automation_id: str, trigger_data: dict):
     
 @router.get("/automations/performance", response_model=dict)
 async def get_automation_performance(
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get automation performance metrics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant ID not found in user context")
+
+    # Note: This returns mock data but would query with tenant_id in production
     return {
         "total_automations": 24,
         "active_automations": 18,

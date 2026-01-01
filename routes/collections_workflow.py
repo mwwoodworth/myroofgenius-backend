@@ -18,6 +18,7 @@ import os
 import logging
 from decimal import Decimal
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
@@ -155,16 +156,21 @@ async def get_db_connection():
 @router.post("/cases/create", tags=["Collections Workflow"])
 async def create_collection_case(
     case: CreateCollectionCase,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create a new collection case"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify customer
             customer = await conn.fetchrow("""
-                SELECT * FROM customers WHERE id = $1
-            """, uuid.UUID(case.customer_id))
+                SELECT * FROM customers WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(case.customer_id), uuid.UUID(tenant_id))
             
             if not customer:
                 raise HTTPException(status_code=404, detail="Customer not found")
@@ -176,8 +182,9 @@ async def create_collection_case(
                 FROM invoices
                 WHERE id = ANY($1::uuid[])
                     AND customer_id = $2
+                    AND tenant_id = $3
                     AND status IN ('overdue', 'partial')
-            """, invoice_uuids, uuid.UUID(case.customer_id))
+            """, invoice_uuids, uuid.UUID(case.customer_id), uuid.UUID(tenant_id))
             
             if len(invoices) != len(case.invoice_ids):
                 raise HTTPException(status_code=400, detail="Some invoices not found or not overdue")
@@ -190,13 +197,13 @@ async def create_collection_case(
                 INSERT INTO collection_cases (
                     id, case_number, customer_id, total_amount,
                     outstanding_amount, stage, status, priority,
-                    assigned_to, created_at, notes
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
+                    assigned_to, created_at, notes, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11)
             """, uuid.UUID(case_id), case_number,
                 uuid.UUID(case.customer_id), case.total_amount,
                 case.total_amount, case.initial_stage.value,
                 CollectionStatus.PENDING.value, case.priority,
-                case.assigned_to, case.notes)
+                case.assigned_to, case.notes, uuid.UUID(tenant_id))
             
             # Link invoices to case
             for invoice in invoices:
@@ -248,14 +255,19 @@ async def list_collection_cases(
     min_amount: Optional[float] = None,
     days_overdue_min: Optional[int] = None,
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0)
+    offset: int = Query(default=0, ge=0),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """List collection cases with filters"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             query = """
-                SELECT 
+                SELECT
                     cc.*,
                     c.customer_name,
                     c.email,
@@ -267,10 +279,10 @@ async def list_collection_cases(
                 JOIN customers c ON cc.customer_id = c.id
                 LEFT JOIN collection_case_invoices cci ON cc.id = cci.case_id
                 LEFT JOIN invoices i ON cci.invoice_id = i.id
-                WHERE 1=1
+                WHERE cc.tenant_id = $1
             """
-            params = []
-            param_count = 0
+            params = [uuid.UUID(tenant_id)]
+            param_count = 1
             
             if status:
                 param_count += 1
@@ -338,8 +350,15 @@ async def list_collection_cases(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/cases/{case_id}", tags=["Collections Workflow"])
-async def get_collection_case(case_id: str):
+async def get_collection_case(
+    case_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get collection case details"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -348,8 +367,8 @@ async def get_collection_case(case_id: str):
                 SELECT cc.*, c.customer_name, c.email, c.phone
                 FROM collection_cases cc
                 JOIN customers c ON cc.customer_id = c.id
-                WHERE cc.id = $1
-            """, uuid.UUID(case_id))
+                WHERE cc.id = $1 AND cc.tenant_id = $2
+            """, uuid.UUID(case_id), uuid.UUID(tenant_id))
             
             if not case:
                 raise HTTPException(status_code=404, detail="Collection case not found")
@@ -457,16 +476,21 @@ async def get_collection_case(case_id: str):
 @router.post("/contact", tags=["Collections Workflow"])
 async def record_collection_contact(
     contact: CollectionContact,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Record a collection contact attempt"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify case exists
             case = await conn.fetchrow("""
-                SELECT * FROM collection_cases WHERE id = $1
-            """, uuid.UUID(contact.case_id))
+                SELECT * FROM collection_cases WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(contact.case_id), uuid.UUID(tenant_id))
             
             if not case:
                 raise HTTPException(status_code=404, detail="Collection case not found")
@@ -529,16 +553,21 @@ async def record_collection_contact(
 @router.post("/arrangement", tags=["Collections Workflow"])
 async def create_payment_arrangement(
     arrangement: PaymentArrangement,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Create payment arrangement for collection case"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify case
             case = await conn.fetchrow("""
-                SELECT * FROM collection_cases WHERE id = $1
-            """, uuid.UUID(arrangement.case_id))
+                SELECT * FROM collection_cases WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(arrangement.case_id), uuid.UUID(tenant_id))
             
             if not case:
                 raise HTTPException(status_code=404, detail="Collection case not found")
@@ -618,16 +647,21 @@ async def create_payment_arrangement(
 @router.post("/escalate", tags=["Collections Workflow"])
 async def escalate_collection_case(
     escalation: EscalateCase,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Escalate collection case to next stage"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get current case
             case = await conn.fetchrow("""
-                SELECT * FROM collection_cases WHERE id = $1
-            """, uuid.UUID(escalation.case_id))
+                SELECT * FROM collection_cases WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(escalation.case_id), uuid.UUID(tenant_id))
             
             if not case:
                 raise HTTPException(status_code=404, detail="Collection case not found")
@@ -688,24 +722,31 @@ async def escalate_collection_case(
 # ==================== Agency Management ====================
 
 @router.post("/agencies", tags=["Collections Workflow"])
-async def create_collection_agency(agency: CollectionAgency):
+async def create_collection_agency(
+    agency: CollectionAgency,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Register a collection agency"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             agency_id = str(uuid.uuid4())
-            
+
             await conn.execute("""
                 INSERT INTO collection_agencies (
                     id, agency_name, contact_person, phone, email,
                     address, commission_rate, specialties,
-                    success_rate, is_active
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    success_rate, is_active, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """, uuid.UUID(agency_id), agency.agency_name,
                 agency.contact_person, agency.phone, agency.email,
                 agency.address, agency.commission_rate,
                 json.dumps(agency.specialties), agency.success_rate,
-                agency.is_active)
+                agency.is_active, uuid.UUID(tenant_id))
             
             return {
                 "success": True,
@@ -721,23 +762,28 @@ async def create_collection_agency(agency: CollectionAgency):
 @router.post("/assign-agency", tags=["Collections Workflow"])
 async def assign_to_collection_agency(
     assignment: AssignToAgency,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Assign case to external collection agency"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Verify case and agency
             case = await conn.fetchrow("""
-                SELECT * FROM collection_cases WHERE id = $1
-            """, uuid.UUID(assignment.case_id))
-            
+                SELECT * FROM collection_cases WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(assignment.case_id), uuid.UUID(tenant_id))
+
             if not case:
                 raise HTTPException(status_code=404, detail="Collection case not found")
-            
+
             agency = await conn.fetchrow("""
-                SELECT * FROM collection_agencies WHERE id = $1 AND is_active = true
-            """, uuid.UUID(assignment.agency_id))
+                SELECT * FROM collection_agencies WHERE id = $1 AND is_active = true AND tenant_id = $2
+            """, uuid.UUID(assignment.agency_id), uuid.UUID(tenant_id))
             
             if not agency:
                 raise HTTPException(status_code=404, detail="Collection agency not found or inactive")
@@ -799,9 +845,14 @@ async def assign_to_collection_agency(
 @router.get("/reports/summary", tags=["Collections Workflow"])
 async def get_collections_summary(
     start_date: Optional[date] = None,
-    end_date: Optional[date] = None
+    end_date: Optional[date] = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get collections performance summary"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -810,32 +861,32 @@ async def get_collections_summary(
                 start_date = date.today() - timedelta(days=30)
             if not end_date:
                 end_date = date.today()
-            
+
             # Overall statistics
             stats = await conn.fetchrow("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_cases,
                     COUNT(CASE WHEN status = 'recovered' THEN 1 END) as recovered_cases,
                     COUNT(CASE WHEN status = 'written_off' THEN 1 END) as written_off_cases,
                     SUM(total_amount) as total_amount,
                     SUM(total_amount - outstanding_amount) as collected_amount,
                     SUM(CASE WHEN status = 'recovered' THEN total_amount ELSE 0 END) as recovered_amount,
-                    AVG(CASE WHEN status = 'recovered' THEN 
+                    AVG(CASE WHEN status = 'recovered' THEN
                         EXTRACT(DAY FROM recovery_date - created_at) END) as avg_days_to_collect
                 FROM collection_cases
-                WHERE created_at BETWEEN $1 AND $2
-            """, start_date, end_date)
+                WHERE created_at BETWEEN $1 AND $2 AND tenant_id = $3
+            """, start_date, end_date, uuid.UUID(tenant_id))
             
             # By stage breakdown
             by_stage = await conn.fetch("""
-                SELECT 
+                SELECT
                     stage,
                     COUNT(*) as count,
                     SUM(outstanding_amount) as amount
                 FROM collection_cases
-                WHERE status NOT IN ('recovered', 'written_off', 'closed')
+                WHERE status NOT IN ('recovered', 'written_off', 'closed') AND tenant_id = $1
                 GROUP BY stage
-                ORDER BY 
+                ORDER BY
                     CASE stage
                         WHEN 'soft_reminder' THEN 1
                         WHEN 'firm_reminder' THEN 2
@@ -845,11 +896,11 @@ async def get_collections_summary(
                         WHEN 'external_agency' THEN 6
                         ELSE 7
                     END
-            """)
+            """, uuid.UUID(tenant_id))
             
             # Collector performance
             collector_stats = await conn.fetch("""
-                SELECT 
+                SELECT
                     assigned_to,
                     COUNT(*) as total_cases,
                     COUNT(CASE WHEN status = 'recovered' THEN 1 END) as recovered,
@@ -857,10 +908,11 @@ async def get_collections_summary(
                 FROM collection_cases
                 WHERE assigned_to IS NOT NULL
                     AND created_at BETWEEN $1 AND $2
+                    AND tenant_id = $3
                 GROUP BY assigned_to
                 ORDER BY collected DESC
                 LIMIT 10
-            """, start_date, end_date)
+            """, start_date, end_date, uuid.UUID(tenant_id))
             
             recovery_rate = 0
             if stats['total_cases'] > 0:

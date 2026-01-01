@@ -6,7 +6,7 @@ Provides comprehensive payment processing capabilities including
 Stripe integration, ACH, credit cards, and payment tracking.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date, timedelta
 from pydantic import BaseModel, Field, EmailStr
@@ -21,6 +21,7 @@ import hmac
 import httpx
 from decimal import Decimal
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
+from core.supabase_auth import get_authenticated_user
 
 try:
     import stripe
@@ -162,9 +163,14 @@ async def get_db_connection():
 @router.post("/process", tags=["Payment Processing"])
 async def process_payment(
     payment: ProcessPayment,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Process a payment for an invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -173,8 +179,8 @@ async def process_payment(
                 SELECT i.*, c.customer_name, c.email
                 FROM invoices i
                 JOIN customers c ON i.customer_id = c.id
-                WHERE i.id = $1
-            """, uuid.UUID(payment.invoice_id))
+                WHERE i.id = $1 AND i.tenant_id = $2
+            """, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
@@ -247,26 +253,26 @@ async def process_payment(
                 INSERT INTO invoice_payments (
                     id, invoice_id, payment_date, amount,
                     payment_method, reference_number, notes,
-                    transaction_id, gateway_response, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                    transaction_id, gateway_response, created_at, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
             """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
                 date.today(), payment.amount,
                 payment.payment_method.value,
                 payment.payment_details.reference_number if payment.payment_details else None,
                 payment.notes, transaction_id,
-                json.dumps(gateway_response))
+                json.dumps(gateway_response), uuid.UUID(tenant_id))
             
             # Update invoice status
             new_balance = balance_cents - amount_cents
             new_status = 'paid' if new_balance <= 0 else 'partial'
-            
+
             await conn.execute("""
                 UPDATE invoices
                 SET status = $1,
                     paid_date = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_date END,
                     updated_at = NOW()
-                WHERE id = $2
-            """, new_status, uuid.UUID(payment.invoice_id))
+                WHERE id = $2 AND tenant_id = $3
+            """, new_status, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
             
             # Log activity
             await conn.execute("""
@@ -311,22 +317,27 @@ async def process_payment(
 @router.post("/credit-card", tags=["Payment Processing"])
 async def process_credit_card_payment(
     payment: CreditCardPayment,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Process credit card payment"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=503,
             detail="Credit card processing is not available. Stripe not configured."
         )
-    
+
     try:
         conn = await get_db_connection()
         try:
             # Get invoice
             invoice = await conn.fetchrow("""
-                SELECT * FROM invoices WHERE id = $1
-            """, uuid.UUID(payment.invoice_id))
+                SELECT * FROM invoices WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
@@ -368,8 +379,8 @@ async def process_credit_card_payment(
             await conn.execute("""
                 INSERT INTO invoice_payments (
                     id, invoice_id, payment_date, amount,
-                    payment_method, transaction_id, gateway_response
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    payment_method, transaction_id, gateway_response, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
                 date.today(), payment.amount, 'credit_card',
                 intent.id,
@@ -383,12 +394,13 @@ async def process_credit_card_payment(
                         "payment_method": intent.payment_method,
                     }
                 ),
+                uuid.UUID(tenant_id)
             )
-            
+
             # Update invoice
             balance = (invoice['balance_cents'] or invoice['total_cents']) / 100
             new_balance = balance - payment.amount
-            
+
             await conn.execute("""
                 UPDATE invoices
                 SET status = CASE
@@ -396,8 +408,8 @@ async def process_credit_card_payment(
                     ELSE 'partial'
                 END,
                 updated_at = NOW()
-                WHERE id = $2
-            """, new_balance, uuid.UUID(payment.invoice_id))
+                WHERE id = $2 AND tenant_id = $3
+            """, new_balance, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
             
             return {
                 "success": True,
@@ -417,9 +429,14 @@ async def process_credit_card_payment(
 @router.post("/ach", tags=["Payment Processing"])
 async def process_ach_payment(
     payment: ACHPayment,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Process ACH payment using Stripe ACH Direct Debit"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=503,
@@ -448,8 +465,8 @@ async def process_ach_payment(
                 SELECT i.*, c.customer_name, c.email
                 FROM invoices i
                 JOIN customers c ON i.customer_id = c.id
-                WHERE i.id = $1
-            """, uuid.UUID(payment.invoice_id))
+                WHERE i.id = $1 AND i.tenant_id = $2
+            """, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
 
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
@@ -536,8 +553,8 @@ async def process_ach_payment(
                 INSERT INTO invoice_payments (
                     id, invoice_id, payment_date, amount,
                     payment_method, transaction_id, gateway_response,
-                    notes, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                    notes, created_at, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
             """, uuid.UUID(payment_id), uuid.UUID(payment.invoice_id),
                 date.today(), payment.amount, 'ach_transfer',
                 transaction_id,
@@ -552,7 +569,8 @@ async def process_ach_payment(
                     "last_four": payment.account_number[-4:],
                     "routing_number": payment.routing_number,
                 }),
-                f"ACH payment - Account ending in {payment.account_number[-4:]}"
+                f"ACH payment - Account ending in {payment.account_number[-4:]}",
+                uuid.UUID(tenant_id)
             )
 
             # Update invoice status to 'processing' for ACH (takes 3-5 business days)
@@ -566,8 +584,8 @@ async def process_ach_payment(
                     ELSE 'partial'
                 END,
                 updated_at = NOW()
-                WHERE id = $2
-            """, balance_after, uuid.UUID(payment.invoice_id))
+                WHERE id = $2 AND tenant_id = $3
+            """, balance_after, uuid.UUID(payment.invoice_id), uuid.UUID(tenant_id))
 
             # Log activity
             await conn.execute("""
@@ -618,9 +636,14 @@ async def process_ach_payment(
 @router.post("/refund", tags=["Payment Processing"])
 async def refund_payment(
     refund: RefundPayment,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Refund a payment"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -629,8 +652,8 @@ async def refund_payment(
                 SELECT p.*, i.invoice_number, i.customer_id
                 FROM invoice_payments p
                 JOIN invoices i ON p.invoice_id = i.id
-                WHERE p.id = $1
-            """, uuid.UUID(refund.payment_id))
+                WHERE p.id = $1 AND p.tenant_id = $2
+            """, uuid.UUID(refund.payment_id), uuid.UUID(tenant_id))
             
             if not payment:
                 raise HTTPException(status_code=404, detail="Payment not found")
@@ -649,8 +672,8 @@ async def refund_payment(
             existing_refunds = await conn.fetchval("""
                 SELECT COALESCE(SUM(amount), 0)
                 FROM payment_refunds
-                WHERE payment_id = $1
-            """, uuid.UUID(refund.payment_id))
+                WHERE payment_id = $1 AND tenant_id = $2
+            """, uuid.UUID(refund.payment_id), uuid.UUID(tenant_id))
             
             if float(existing_refunds) + refund_amount > original_amount:
                 raise HTTPException(
@@ -666,13 +689,13 @@ async def refund_payment(
             await conn.execute("""
                 INSERT INTO payment_refunds (
                     id, payment_id, refund_date, amount,
-                    reason, notes, transaction_id, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    reason, notes, transaction_id, status, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """, uuid.UUID(refund_id), uuid.UUID(refund.payment_id),
                 date.today(), refund_amount,
                 refund.reason.value, refund.notes,
-                refund_transaction_id, 'completed')
-            
+                refund_transaction_id, 'completed', uuid.UUID(tenant_id))
+
             # Update invoice balance
             await conn.execute("""
                 UPDATE invoices
@@ -682,8 +705,8 @@ async def refund_payment(
                         ELSE status
                     END,
                     updated_at = NOW()
-                WHERE id = $2
-            """, int(refund_amount * 100), payment['invoice_id'])
+                WHERE id = $2 AND tenant_id = $3
+            """, int(refund_amount * 100), payment['invoice_id'], uuid.UUID(tenant_id))
             
             # Log activity
             await conn.execute("""
@@ -723,15 +746,22 @@ async def refund_payment(
 # ==================== Payment Plans ====================
 
 @router.post("/payment-plan", tags=["Payment Processing"])
-async def create_payment_plan(plan: PaymentPlan):
+async def create_payment_plan(
+    plan: PaymentPlan,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Create a payment plan for an invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
             # Get invoice
             invoice = await conn.fetchrow("""
-                SELECT * FROM invoices WHERE id = $1
-            """, uuid.UUID(plan.invoice_id))
+                SELECT * FROM invoices WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(plan.invoice_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
@@ -757,27 +787,27 @@ async def create_payment_plan(plan: PaymentPlan):
                 INSERT INTO payment_plans (
                     id, invoice_id, total_amount, down_payment,
                     installments, installment_amount, frequency,
-                    start_date, auto_charge, payment_method, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    start_date, auto_charge, payment_method, status, tenant_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             """, uuid.UUID(plan_id), uuid.UUID(plan.invoice_id),
                 balance, plan.down_payment, plan.installments,
                 installment_amount, plan.frequency,
                 start_date, plan.auto_charge,
                 plan.payment_method.value if plan.payment_method else None,
-                'active')
-            
+                'active', uuid.UUID(tenant_id))
+
             # Process down payment if specified
             if plan.down_payment > 0:
                 payment_id = str(uuid.uuid4())
                 await conn.execute("""
                     INSERT INTO invoice_payments (
                         id, invoice_id, payment_date, amount,
-                        payment_method, notes
-                    ) VALUES ($1, $2, $3, $4, $5, $6)
+                        payment_method, notes, tenant_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """, uuid.UUID(payment_id), uuid.UUID(plan.invoice_id),
                     date.today(), plan.down_payment,
                     plan.payment_method.value if plan.payment_method else 'other',
-                    'Payment plan down payment')
+                    'Payment plan down payment', uuid.UUID(tenant_id))
             
             # Generate installment schedule
             installments = []
@@ -821,8 +851,15 @@ async def create_payment_plan(plan: PaymentPlan):
 # ==================== Payment History & Reports ====================
 
 @router.get("/history/{invoice_id}", tags=["Payment Processing"])
-async def get_payment_history(invoice_id: str):
+async def get_payment_history(
+    invoice_id: str,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Get payment history for an invoice"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -831,15 +868,15 @@ async def get_payment_history(invoice_id: str):
                 SELECT p.*, r.amount as refund_amount, r.refund_date
                 FROM invoice_payments p
                 LEFT JOIN payment_refunds r ON r.payment_id = p.id
-                WHERE p.invoice_id = $1
+                WHERE p.invoice_id = $1 AND p.tenant_id = $2
                 ORDER BY p.created_at DESC
-            """, uuid.UUID(invoice_id))
-            
+            """, uuid.UUID(invoice_id), uuid.UUID(tenant_id))
+
             # Get invoice details
             invoice = await conn.fetchrow("""
                 SELECT invoice_number, total_cents, balance_cents, status
-                FROM invoices WHERE id = $1
-            """, uuid.UUID(invoice_id))
+                FROM invoices WHERE id = $1 AND tenant_id = $2
+            """, uuid.UUID(invoice_id), uuid.UUID(tenant_id))
             
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
@@ -877,8 +914,15 @@ async def get_payment_history(invoice_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reports", tags=["Payment Processing"])
-async def generate_payment_report(report: PaymentReport):
+async def generate_payment_report(
+    report: PaymentReport,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
     """Generate payment report"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         conn = await get_db_connection()
         try:
@@ -888,10 +932,10 @@ async def generate_payment_report(report: PaymentReport):
                 FROM invoice_payments p
                 JOIN invoices i ON p.invoice_id = i.id
                 JOIN customers c ON i.customer_id = c.id
-                WHERE p.payment_date BETWEEN $1 AND $2
+                WHERE p.payment_date BETWEEN $1 AND $2 AND p.tenant_id = $3
             """
-            params = [report.start_date, report.end_date]
-            param_count = 2
+            params = [report.start_date, report.end_date, uuid.UUID(tenant_id)]
+            param_count = 3
             
             if report.payment_method:
                 param_count += 1

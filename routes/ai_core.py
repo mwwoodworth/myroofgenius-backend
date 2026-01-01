@@ -3,7 +3,7 @@ AI Core Routes - Central AI functionality
 Provides core AI status and generation endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import logging
@@ -11,6 +11,7 @@ import json
 import os
 
 from ai_core.real_ai_system import ai_system
+from core.supabase_auth import get_authenticated_user
 
 try:
     from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError
@@ -40,8 +41,15 @@ class AIGenerateResponse(BaseModel):
     tokens_used: Optional[int] = None
 
 @router.get("/status")
-async def ai_status(request: Request):
+async def ai_status(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """Get AI system status"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         db_pool = getattr(request.app.state, "db_pool", None)
         configured_providers = {
@@ -50,21 +58,24 @@ async def ai_status(request: Request):
             "gemini": bool(os.getenv("GEMINI_API_KEY")),
         }
 
-        # Get AI agent counts
+        # Get AI agent counts for this tenant
         agent_count = None
         recent_activity = None
         if db_pool is not None:
             try:
                 async with db_pool.acquire() as conn:
                     agent_count = await conn.fetchval(
-                        "SELECT COUNT(*) FROM ai_agents WHERE status = 'active'"
+                        "SELECT COUNT(*) FROM ai_agents WHERE tenant_id = $1 AND status = 'active'",
+                        tenant_id,
                     )
                     recent_activity = await conn.fetchval(
                         """
                         SELECT COUNT(*)
                         FROM ai_agents
-                        WHERE last_activation > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                        """
+                        WHERE tenant_id = $1
+                          AND last_activation > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                        """,
+                        tenant_id,
                     )
             except Exception:
                 agent_count = None
@@ -105,9 +116,14 @@ async def ai_status(request: Request):
 @router.post("/generate", response_model=AIGenerateResponse)
 async def generate_text(
     request: AIGenerateRequest,
-    req: Request
+    req: Request,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Generate text using AI"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if not _has_any_ai_provider_configured():
             raise HTTPException(status_code=503, detail="No AI providers configured on this server")
@@ -141,9 +157,14 @@ async def generate_text(
 async def analyze_content(
     content: str = Body(...),
     analysis_type: str = Body(default="general"),
-    request: Request = None
+    request: Request = None,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Analyze content using AI"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
     try:
         if ai_service is None:
             raise HTTPException(status_code=503, detail="AI service not available on this server")
