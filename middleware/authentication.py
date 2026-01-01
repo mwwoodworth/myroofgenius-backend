@@ -44,6 +44,7 @@ DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
     "/static/",
     "/public/",
     "/api/v1/erp/public",
+    "/api/v1/products/public",
 )
 
 
