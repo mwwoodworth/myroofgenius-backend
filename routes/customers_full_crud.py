@@ -319,10 +319,19 @@ async def update_customer(
     try:
         cursor = db.cursor()
 
+        # SECURITY: Whitelist allowed update fields (defense-in-depth)
+        ALLOWED_UPDATE_FIELDS = {
+            "name", "email", "phone", "company", "address", "city", "state",
+            "zip_code", "status", "credit_limit", "payment_terms", "tax_exempt", "notes"
+        }
+
         # Build update query
         update_fields = []
         update_values = []
         for field, value in updates.dict(exclude_unset=True).items():
+            # Skip fields not in whitelist
+            if field not in ALLOWED_UPDATE_FIELDS:
+                continue
             update_fields.append(f"{field} = %s")
             if field == "status" and value:
                 update_values.append(value.value)
@@ -731,9 +740,18 @@ async def bulk_update_customers(
     try:
         cursor = db.cursor()
 
+        # SECURITY: Whitelist allowed update fields (defense-in-depth)
+        ALLOWED_UPDATE_FIELDS = {
+            "name", "email", "phone", "company", "address", "city", "state",
+            "zip_code", "status", "credit_limit", "payment_terms", "tax_exempt", "notes"
+        }
+
         update_fields = []
         update_values = []
         for field, value in bulk_update.updates.dict(exclude_unset=True).items():
+            # Skip fields not in whitelist
+            if field not in ALLOWED_UPDATE_FIELDS:
+                continue
             update_fields.append(f"{field} = %s")
             if field == "status" and value:
                 update_values.append(value.value)
