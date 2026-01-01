@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
@@ -43,17 +44,22 @@ class ComplianceReportingResponse(ComplianceReportingBase):
 @router.post("/", response_model=ComplianceReportingResponse)
 async def create_compliance_reporting(
     item: ComplianceReportingCreate,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Create new compliance reporting record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
-        INSERT INTO compliance_reporting (name, description, status, data)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO compliance_reporting (tenant_id, name, description, status, data)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
     """
 
     result = await conn.fetchrow(
-        query, item.name, item.description, item.status,
+        query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
 
@@ -69,12 +75,17 @@ async def list_compliance_reporting(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """List compliance reporting records"""
-    query = "SELECT * FROM compliance_reporting WHERE 1=1"
-    params = []
-    param_count = 0
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    query = "SELECT * FROM compliance_reporting WHERE tenant_id = $1"
+    params = [tenant_id]
+    param_count = 1
 
     if status:
         param_count += 1
@@ -98,12 +109,17 @@ async def list_compliance_reporting(
 @router.get("/{item_id}", response_model=ComplianceReportingResponse)
 async def get_compliance_reporting(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific compliance reporting record"""
-    query = "SELECT * FROM compliance_reporting WHERE id = $1"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    row = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "SELECT * FROM compliance_reporting WHERE tenant_id = $1 AND id = $2"
+
+    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not row:
         raise HTTPException(status_code=404, detail="Compliance reporting not found")
 
@@ -117,15 +133,20 @@ async def get_compliance_reporting(
 async def update_compliance_reporting(
     item_id: str,
     updates: Dict[str, Any],
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Update compliance reporting record"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     if 'data' in updates:
         updates['data'] = json.dumps(updates['data'])
 
     set_clauses = []
-    params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
+    params = [tenant_id]
+    for i, (field, value) in enumerate(updates.items(), 2):
         set_clauses.append(f"{field} = ${i}")
         params.append(value)
 
@@ -133,7 +154,7 @@ async def update_compliance_reporting(
     query = f"""
         UPDATE compliance_reporting
         SET {', '.join(set_clauses)}, updated_at = NOW()
-        WHERE id = ${len(params)}
+        WHERE tenant_id = $1 AND id = ${len(params)}
         RETURNING id
     """
 
@@ -146,27 +167,40 @@ async def update_compliance_reporting(
 @router.delete("/{item_id}")
 async def delete_compliance_reporting(
     item_id: str,
-    conn: asyncpg.Connection = Depends(get_db)
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete compliance reporting record"""
-    query = "DELETE FROM compliance_reporting WHERE id = $1 RETURNING id"
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
-    result = await conn.fetchrow(query, uuid.UUID(item_id))
+    query = "DELETE FROM compliance_reporting WHERE tenant_id = $1 AND id = $2 RETURNING id"
+
+    result = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
     if not result:
         raise HTTPException(status_code=404, detail="Compliance reporting not found")
 
     return {"message": "Compliance reporting deleted", "id": str(result['id'])}
 
 @router.get("/stats/summary")
-async def get_compliance_reporting_stats(conn: asyncpg.Connection = Depends(get_db)):
+async def get_compliance_reporting_stats(
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get compliance reporting statistics"""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
     query = """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM compliance_reporting
+        WHERE tenant_id = $1
     """
 
-    result = await conn.fetchrow(query)
+    result = await conn.fetchrow(query, tenant_id)
     return dict(result)

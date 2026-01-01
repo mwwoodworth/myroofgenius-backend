@@ -210,7 +210,12 @@ async def list_templates(
 ) -> dict:
     """List available estimate templates"""
     try:
-        # Build query
+        # TENANT ISOLATION: Get tenant_id from authenticated user
+        tenant_id = current_user.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant context required")
+
+        # Build query with tenant isolation
         query = """
             SELECT
                 t.*,
@@ -221,9 +226,9 @@ async def list_templates(
             FROM estimate_templates t
             LEFT JOIN users u ON t.created_by = u.id
             LEFT JOIN estimate_template_items ti ON t.id = ti.template_id
-            WHERE 1=1
+            WHERE t.tenant_id = :tenant_id
         """
-        params = {}
+        params = {"tenant_id": tenant_id}
 
         if category:
             query += " AND t.category = :category"

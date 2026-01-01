@@ -15,11 +15,14 @@ import uuid
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 TEST_EMAIL = f"test_{uuid.uuid4().hex[:8]}@example.com"
 TEST_PASSWORD = "TestPassword123!"
+API_KEY = "test_prod_verify_2026"
 
 class ProductionTester:
     def __init__(self):
         self.results = []
         self.token = None
+        self.session = requests.Session()
+        self.session.headers.update({"X-API-Key": API_KEY})
 
     def log_result(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test result"""
@@ -42,7 +45,7 @@ class ProductionTester:
         """Test basic health and status endpoints"""
         try:
             # Root endpoint
-            response = requests.get(f"{BASE_URL}/")
+            response = self.session.get(f"{BASE_URL}/")
             if response.status_code == 200:
                 data = response.json()
                 version = data.get("message", "").split("v")[-1].split(" ")[0] if "v" in data.get("message", "") else "unknown"
@@ -51,12 +54,12 @@ class ProductionTester:
                 self.log_result("Root endpoint", False, f"Status: {response.status_code}")
 
             # Health endpoint
-            response = requests.get(f"{BASE_URL}/health")
+            response = self.session.get(f"{BASE_URL}/health")
             success = response.status_code == 200
             self.log_result("Health endpoint", success, f"Status: {response.status_code}")
 
             # API Health endpoint
-            response = requests.get(f"{BASE_URL}/api/v1/health")
+            response = self.session.get(f"{BASE_URL}/api/v1/health")
             if response.status_code == 200:
                 data = response.json()
                 self.log_result("API Health endpoint", True,
@@ -73,7 +76,7 @@ class ProductionTester:
         """Test authentication system"""
         try:
             # Test auth status
-            response = requests.get(f"{BASE_URL}/api/v1/auth/status")
+            response = self.session.get(f"{BASE_URL}/api/v1/auth/status")
             success = response.status_code == 200
             self.log_result("Auth status", success, f"Status: {response.status_code}")
 
@@ -83,7 +86,7 @@ class ProductionTester:
                 "email": TEST_EMAIL,
                 "password": TEST_PASSWORD
             }
-            response = requests.post(f"{BASE_URL}/api/v1/auth/register", json=registration_data)
+            response = self.session.post(f"{BASE_URL}/api/v1/auth/register", json=registration_data)
             if response.status_code == 200:
                 self.log_result("User registration", True, "User registered successfully")
 
@@ -92,7 +95,7 @@ class ProductionTester:
                     "email": TEST_EMAIL,
                     "password": TEST_PASSWORD
                 }
-                response = requests.post(f"{BASE_URL}/api/v1/auth/login", json=login_data)
+                response = self.session.post(f"{BASE_URL}/api/v1/auth/login", json=login_data)
                 if response.status_code == 200:
                     data = response.json()
                     self.token = data.get("access_token")
@@ -120,7 +123,7 @@ class ProductionTester:
                 "phone": "555-0199",
                 "source": "production_test"
             }
-            response = requests.post(f"{BASE_URL}/api/v1/lead-capture", json=lead_data)
+            response = self.session.post(f"{BASE_URL}/api/v1/lead-capture", json=lead_data)
             if response.status_code == 200:
                 data = response.json()
                 self.log_result("Lead capture", True,
@@ -135,7 +138,7 @@ class ProductionTester:
         """Test public endpoints that don't require auth"""
         try:
             # Test leads GET (public read)
-            response = requests.get(f"{BASE_URL}/api/v1/leads")
+            response = self.session.get(f"{BASE_URL}/api/v1/leads")
             if response.status_code == 200:
                 data = response.json()
                 self.log_result("Leads list", True, f"Found {len(data)} leads")
@@ -143,7 +146,7 @@ class ProductionTester:
                 self.log_result("Leads list", False, f"Status: {response.status_code}")
 
             # Test products (if public)
-            response = requests.get(f"{BASE_URL}/api/v1/products")
+            response = self.session.get(f"{BASE_URL}/api/v1/products")
             if response.status_code in [200, 401]:  # 401 is acceptable for protected endpoint
                 status_msg = "Public access" if response.status_code == 200 else "Protected (requires auth)"
                 self.log_result("Products endpoint", True, status_msg)
@@ -159,11 +162,13 @@ class ProductionTester:
             self.log_result("Protected endpoints", False, "No auth token available")
             return
 
-        headers = {"Authorization": f"Bearer {self.token}"}
+        # Add Bearer token to headers for this request, but keep API key
+        headers = self.session.headers.copy()
+        headers.update({"Authorization": f"Bearer {self.token}"})
 
         try:
             # Test customers endpoint
-            response = requests.get(f"{BASE_URL}/api/v1/customers", headers=headers)
+            response = self.session.get(f"{BASE_URL}/api/v1/customers", headers=headers)
             if response.status_code == 200:
                 data = response.json()
                 self.log_result("Customers list", True, f"Found {len(data)} customers")
@@ -178,7 +183,7 @@ class ProductionTester:
                 "phone": "555-0299",
                 "address": "123 Test Production St"
             }
-            response = requests.post(f"{BASE_URL}/api/v1/customers", json=customer_data, headers=headers)
+            response = self.session.post(f"{BASE_URL}/api/v1/customers", json=customer_data, headers=headers)
             if response.status_code in [200, 201]:
                 self.log_result("Customer creation", True, "Customer created successfully")
             else:
@@ -192,7 +197,7 @@ class ProductionTester:
         """Test AI-related endpoints"""
         try:
             # Test AI status
-            response = requests.get(f"{BASE_URL}/api/v1/ai/status")
+            response = self.session.get(f"{BASE_URL}/api/v1/ai/status")
             if response.status_code == 200:
                 data = response.json()
                 self.log_result("AI status", True, f"AI system: {data.get('status', 'unknown')}")
@@ -200,7 +205,7 @@ class ProductionTester:
                 self.log_result("AI status", False, f"Status: {response.status_code}")
 
             # Test AI analyze endpoint (if available)
-            response = requests.get(f"{BASE_URL}/api/v1/ai/analyze")
+            response = self.session.get(f"{BASE_URL}/api/v1/ai/analyze")
             if response.status_code in [200, 400, 422]:  # These are acceptable responses
                 self.log_result("AI analyze", True, "Endpoint accessible")
             else:
@@ -213,7 +218,7 @@ class ProductionTester:
         """Test system monitoring and debug endpoints"""
         try:
             # Test debug routes
-            response = requests.get(f"{BASE_URL}/api/v1/debug/routes")
+            response = self.session.get(f"{BASE_URL}/api/v1/debug/routes")
             if response.status_code == 200:
                 data = response.json()
                 total_routes = data.get("total_routes", 0)
