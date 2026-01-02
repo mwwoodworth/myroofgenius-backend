@@ -129,6 +129,9 @@ async def get_iso_compliance(
         "data": json.loads(row['data']) if row['data'] else {}
     }
 
+# Allowed fields for updates - prevents SQL injection
+ALLOWED_UPDATE_FIELDS = {'name', 'description', 'status', 'data'}
+
 @router.put("/{item_id}")
 async def update_iso_compliance(
     item_id: str,
@@ -141,12 +144,17 @@ async def update_iso_compliance(
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Tenant ID required")
 
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
+    # Filter to only allowed fields - prevents SQL injection
+    safe_updates = {k: v for k, v in updates.items() if k in ALLOWED_UPDATE_FIELDS}
+    if not safe_updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    if 'data' in safe_updates:
+        safe_updates['data'] = json.dumps(safe_updates['data'])
 
     set_clauses = []
     params = []
-    for i, (field, value) in enumerate(updates.items(), 1):
+    for i, (field, value) in enumerate(safe_updates.items(), 1):
         set_clauses.append(f"{field} = ${i}")
         params.append(value)
 

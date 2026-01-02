@@ -4,6 +4,7 @@ Automated customer journey from lead to loyal customer
 """
 
 import uuid
+import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
@@ -11,6 +12,8 @@ import json
 import os
 import hashlib
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import Column, String, Integer, Boolean, JSON, DateTime, ForeignKey, Text, Date, text
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.dialects.postgresql import UUID
@@ -70,8 +73,8 @@ class EmailQueue(Base):
 # Ensure tables exist
 try:
     Base.metadata.create_all(bind=engine)
-except Exception:
-    pass
+except Exception as e:
+    logger.debug(f"Table creation skipped (may already exist): {e}")
 
 # ============================================================================
 # SCHEMAS
@@ -472,7 +475,8 @@ def identify_upsell_opportunity(
                 WHERE customer_id = :customer_id
                 ORDER BY created_at DESC
             """), {"customer_id": customer_id}).fetchall()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Could not fetch purchases for customer {customer_id}: {e}")
             purchases = []
         
         opportunities = []
