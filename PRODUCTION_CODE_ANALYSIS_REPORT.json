@@ -501,7 +501,7 @@
       "url": "https://brainops-backend-prod.onrender.com",
       "deployment_method": "Docker Hub + Manual trigger",
       "docker_repo": "mwwoodworth/brainops-backend",
-      "deploy_hook": "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+      "deploy_hook": "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}"
     },
     "health_check": {
       "path": "/health",

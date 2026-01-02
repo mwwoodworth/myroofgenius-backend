@@ -20,7 +20,7 @@ import time
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com/api/v1"
 FRONTEND_URL = "https://www.myroofgenius.com"
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # Pricing Strategy (Aggressive but Value-Packed)
 PRICING_TIERS = {

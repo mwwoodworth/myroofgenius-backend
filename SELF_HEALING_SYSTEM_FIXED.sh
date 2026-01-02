@@ -8,13 +8,25 @@ echo "================================"
 echo "Timestamp: $(date)"
 echo ""
 
+# Source credentials from environment file if available
+if [[ -f "$HOME/dev/_secure/BrainOps.env" ]]; then
+    set -a
+    source "$HOME/dev/_secure/BrainOps.env"
+    set +a
+fi
+
 # Configuration
 BACKEND_URL="https://brainops-backend-prod.onrender.com"
 FRONTEND_URL="https://www.myroofgenius.com"
-DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL="${DATABASE_URL:-}"
 LOG_FILE="/home/mwwoodworth/logs/self_healing_$(date +%Y%m%d).log"
 ALERT_THRESHOLD=3
 HEAL_INTERVAL=60
+
+if [[ -z "$DATABASE_URL" ]]; then
+    echo "ERROR: DATABASE_URL not set. Set it in environment or source _secure/BrainOps.env"
+    exit 1
+fi
 
 # Create log directory
 mkdir -p /home/mwwoodworth/logs

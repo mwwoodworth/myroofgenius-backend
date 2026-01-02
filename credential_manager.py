@@ -246,7 +246,8 @@ def get_credential(key: str, default: Optional[str] = None) -> Optional[str]:
     try:
         manager = get_credential_manager()
         return manager.get(key, default)
-    except:
+    except Exception as e:
+        logger.warning(f"Error getting credential {key}: {e}")
         # Fallback to environment variable
         return os.environ.get(key, default)
 
@@ -255,7 +256,8 @@ def get_required_credential(key: str) -> str:
     try:
         manager = get_credential_manager()
         return manager.get_required(key)
-    except:
+    except Exception as e:
+        logger.warning(f"Error getting required credential {key}: {e}")
         # Fallback to environment variable
         value = os.environ.get(key)
         if value is None:

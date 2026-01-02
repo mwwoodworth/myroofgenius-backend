@@ -99,8 +99,15 @@ echo ""
 echo "4️⃣ DATABASE"
 echo "-----------"
 echo -n "Checking database... "
-export DATABASE_URL="postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-if psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
+# Use DATABASE_URL from environment (should be set by _secure/BrainOps.env)
+if [[ -z "${DATABASE_URL:-}" ]] && [[ -f "$HOME/dev/_secure/BrainOps.env" ]]; then
+    set -a
+    source "$HOME/dev/_secure/BrainOps.env"
+    set +a
+fi
+if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "⚠️  DATABASE_URL not set"
+elif psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
     echo "✅ Connected"
 else
     echo "⚠️  Connection issues"

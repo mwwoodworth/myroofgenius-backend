@@ -31,7 +31,7 @@ docker push mwwoodworth/brainops-backend:v9.20
 docker push mwwoodworth/brainops-backend:latest
 
 echo "Triggering deployment..."
-curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM" -H "Accept: application/json"
+curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}" -H "Accept: application/json"
 
 echo ""
 echo "✅ EMERGENCY DEPLOYMENT TRIGGERED"

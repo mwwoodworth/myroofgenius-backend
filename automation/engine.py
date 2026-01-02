@@ -508,9 +508,10 @@ class RuleEngine:
         table = table_map.get(entity_type)
         if not table:
             return {}
-        
-        query = f"SELECT * FROM {table} WHERE id = :entity_id"
-        result = self.db.execute(text(query), {'entity_id': entity_id})
+
+        # Table name is from whitelist (table_map) so it's safe
+        query = text(f"SELECT * FROM {table} WHERE id = :entity_id")
+        result = self.db.execute(query, {'entity_id': entity_id})
         row = result.fetchone()
         
         return dict(row) if row else {}

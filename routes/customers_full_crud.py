@@ -487,6 +487,10 @@ async def list_customers(
             "job_count": "job_count"
         }
 
+        # Ensure safe sort column and order to prevent SQL injection
+        safe_sort_column = sort_mapping.get(sort_by, 'c.created_at')
+        safe_sort_order = "DESC" if sort_order.upper() == "DESC" else "ASC"
+
         list_query = f"""
             SELECT c.*,
                    COALESCE(SUM(i.amount), 0) as total_spent,
@@ -500,7 +504,7 @@ async def list_customers(
             WHERE {where_clause}
             GROUP BY c.id
             HAVING {having_clause}
-            ORDER BY {sort_mapping.get(sort_by, 'c.created_at')} {sort_order.upper()}
+            ORDER BY {safe_sort_column} {safe_sort_order}
             LIMIT %s OFFSET %s
         """
         params.extend([per_page, offset])

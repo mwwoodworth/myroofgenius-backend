@@ -5,7 +5,10 @@ Fix all broken endpoints in v129
 
 import os
 import shutil
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 def fix_all_endpoints():
     print("🔧 Fixing all broken endpoints for v129...")
@@ -36,10 +39,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -123,7 +123,8 @@ async def get_current_user_optional(token: str = Depends(oauth2_scheme_optional)
         if user_id is None:
             return None
         return {"id": user_id, "email": payload.get("email")}
-    except:
+    except Exception as e:
+        logger.warning(f"Token verification failed: {e}")
         return None
 '''
             auth_file.write_text(content)

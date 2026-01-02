@@ -1,6 +1,7 @@
 """
 LangGraph Integration
 """
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -8,6 +9,8 @@ from typing import Dict, Any, Optional, List
 import uuid
 from datetime import datetime
 import json
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/langgraph", tags=["LangGraph"])
 
@@ -34,7 +37,8 @@ async def get_status(db: Session = Depends(get_db)):
             "active_executions": 0,
             "health": 100.0
         }
-    except:
+    except Exception as e:
+        logger.warning(f"Error getting LangGraph status: {e}")
         return {
             "status": "operational",
             "workflows": ["Customer Journey", "Revenue Pipeline", "Service Delivery"],
@@ -72,9 +76,9 @@ async def execute_workflow(
                 "context": json.dumps(input_data)
             })
             db.commit()
-    except:
-        pass
-    
+    except Exception as e:
+        logger.warning(f"Error starting workflow execution: {e}")
+
     return {
         "execution_id": execution_id,
         "workflow_name": workflow_name,

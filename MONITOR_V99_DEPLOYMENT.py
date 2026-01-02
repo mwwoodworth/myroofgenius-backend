@@ -6,7 +6,10 @@ Monitor v9.9 deployment - Connection Pool Fix
 import requests
 import time
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 
@@ -144,7 +147,8 @@ def check_connection_pool():
         try:
             resp = requests.get(f"{BASE_URL}/api/v1/health", timeout=5)
             return resp.status_code == 200
-        except:
+        except Exception as e:
+            logger.warning(f"Request {i} failed: {e}")
             return False
     
     # Test with 20 concurrent requests (should handle with pool of 5)

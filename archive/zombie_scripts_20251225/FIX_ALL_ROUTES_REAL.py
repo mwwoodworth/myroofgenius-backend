@@ -146,13 +146,10 @@ def fix_route_file(filepath: Path) -> Dict[str, Any]:
             db_connection = '''
 # Database connection
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -183,13 +180,10 @@ async def get_db():
 
 async def populate_task_tracking():
     """Populate database with all tasks to track"""
-    conn = await asyncpg.connect(
-        host='aws-0-us-east-2.pooler.supabase.com',
-        port=5432,
-        user='postgres.yomagoqdmxszqtdwuhab',
-        password='<DB_PASSWORD_REDACTED>',
-        database='postgres'
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
 
     try:
         # Clear existing data
@@ -231,13 +225,10 @@ async def main():
     await populate_task_tracking()
 
     # Connect to database for tracking
-    conn = await asyncpg.connect(
-        host='aws-0-us-east-2.pooler.supabase.com',
-        port=5432,
-        user='postgres.yomagoqdmxszqtdwuhab',
-        password='<DB_PASSWORD_REDACTED>',
-        database='postgres'
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
 
     try:
         routes_dir = Path('routes')

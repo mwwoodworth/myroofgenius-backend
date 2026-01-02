@@ -151,9 +151,12 @@ class AIOS:
                 decode_responses=True
             )
             
-            # PostgreSQL for persistent storage
+            # PostgreSQL for persistent storage - NO fallback defaults for security
+            db_url = os.getenv('DATABASE_URL')
+            if not db_url:
+                raise RuntimeError("DATABASE_URL environment variable is required but not set")
             self.pg_pool = await asyncpg.create_pool(
-                os.getenv('DATABASE_URL', 'postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost/ai_os'),
+                db_url,
                 min_size=5,
                 max_size=20
             )
@@ -415,7 +418,7 @@ class AIOS:
         try:
             response_data = json.loads(last_message.content)
             next_agents = response_data.get("next_agents", [])
-            
+
             if next_agents:
                 # Return the first suggested next agent
                 return next_agents[0]
@@ -426,7 +429,8 @@ class AIOS:
                     return task["agent"]
                 else:
                     return "end"
-        except:
+        except Exception as e:
+            logger.warning(f"Error routing to next agent: {e}")
             return "end"
     
     async def _process_agent_task(
@@ -523,7 +527,8 @@ class AIOS:
         for ws in self.websocket_connections:
             try:
                 await ws.send_json(message)
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to send websocket message: {e}")
                 self.websocket_connections.remove(ws)
     
     # Tool implementations

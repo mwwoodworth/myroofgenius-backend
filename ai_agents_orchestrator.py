@@ -22,13 +22,35 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Database configuration with connection pooling
+# Database configuration with connection pooling - NO FALLBACK DEFAULTS
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PORT = os.getenv("DB_PORT")
+
+# Validate all required environment variables
+_missing_vars = []
+if not DB_HOST:
+    _missing_vars.append("DB_HOST")
+if not DB_NAME:
+    _missing_vars.append("DB_NAME")
+if not DB_USER:
+    _missing_vars.append("DB_USER")
+if not DB_PASSWORD:
+    _missing_vars.append("DB_PASSWORD")
+if not DB_PORT:
+    _missing_vars.append("DB_PORT")
+
+if _missing_vars:
+    raise RuntimeError(f"Required environment variables missing: {', '.join(_missing_vars)}")
+
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
-    "database": os.getenv("DB_NAME", "postgres"),
-    "user": os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-    "password": os.getenv("DB_PASSWORD", "<DB_PASSWORD_REDACTED>"),
-    "port": int(os.getenv("DB_PORT", 5432))
+    "host": DB_HOST,
+    "database": DB_NAME,
+    "user": DB_USER,
+    "password": DB_PASSWORD,
+    "port": int(DB_PORT)
 }
 
 # Create connection pool - OPTIMIZED FOR PRODUCTION

@@ -14,7 +14,7 @@ class WorkflowConfig:
     BRAINOPS_AGENTS = "https://brainops-ai-agents.onrender.com"
 
     # Database connection (uses existing db_pool from main.py)
-    SUPABASE_URL = "https://yomagoqdmxszqtdwuhab.supabase.co"
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
 
     # Anthropic API for LLM reasoning
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

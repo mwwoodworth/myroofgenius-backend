@@ -242,13 +242,10 @@ router = APIRouter()
 
 # Database connection
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -441,18 +438,17 @@ def run_migration(name):
     """Run migration for a specific table"""
     migration_file = f"migrations/{name}_tables.sql"
     if os.path.exists(migration_file):
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return "error: DATABASE_URL environment variable not set"
         cmd = [
             "psql",
-            "-h", "aws-0-us-east-2.pooler.supabase.com",
-            "-U", "postgres.yomagoqdmxszqtdwuhab",
-            "-d", "postgres",
+            db_url,
             "-f", migration_file
         ]
-        env = os.environ.copy()
-        env['PGPASSWORD'] = '<DB_PASSWORD_REDACTED>'
 
         try:
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             return "success" if result.returncode == 0 else f"error: {result.stderr[:100]}"
         except Exception as e:
             return f"error: {str(e)}"

@@ -7,11 +7,11 @@
 Host: aws-0-us-east-2.pooler.supabase.com
 User: postgres.yomagoqdmxszqtdwuhab
 Database: postgres
-Password: Brain0ps2O2S
+Password: ${DB_PASSWORD}
 ```
 
 **Connection Strings**:
-- Pooler: `postgresql://postgres.yomagoqdmxszqtdwuhab:Brain0ps2O2S@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
+- Pooler: `${DATABASE_URL}` (see secure credentials file)
 
 ### Production URLs
 | Service | URL |
@@ -33,7 +33,7 @@ AI: Claude, Gemini, GPT-4
 
 ```bash
 # Login
-docker login -u mwwoodworth -p 'dckr_pat_iI44t5EXTpawhU8Rwnc91ETcZho'
+docker login -u mwwoodworth -p '${DOCKER_PAT}'
 
 # Build and push
 docker build -t mwwoodworth/brainops-backend:vX.X.X -f Dockerfile .
@@ -42,7 +42,7 @@ docker push mwwoodworth/brainops-backend:vX.X.X
 docker push mwwoodworth/brainops-backend:latest
 ```
 
-**Render Deploy Hook**: `https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM`
+**Render Deploy Hook**: `https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}`
 
 ## Test Credentials
 - Admin: admin@brainops.com / AdminPassword123!
@@ -73,7 +73,7 @@ Required:
 curl https://brainops-backend-prod.onrender.com/api/v1/health
 
 # Check DB
-PGPASSWORD=Brain0ps2O2S psql -h aws-0-us-east-2.pooler.supabase.com \
+PGPASSWORD=${DB_PASSWORD} psql -h aws-0-us-east-2.pooler.supabase.com \
   -U postgres.yomagoqdmxszqtdwuhab -d postgres -c "SELECT COUNT(*) FROM customers;"
 ```
 

@@ -17,19 +17,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# CenterPoint Production Credentials (from BrainOps.env)
+# CenterPoint Production Credentials (from environment variables)
 CENTERPOINT_CONFIG = {
-    "base_url": "https://api.centerpointconnect.io",
-    "bearer_token": "eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6ImM4ZDdiMDIyNGQ4NDQ5OGI5M2M",
-    "client_id": "eyJvcmciOiI2NmJlMzEwMzFiMGJjMTAwMDEwM2RiN2MiLCJpZCI6ImM4ZDdiMDIyNGQ4NDQ5OGI5M2MwYzY4MTc0NWU5M2Y0IiwiaCI6Im11cm11cjEyOCJ9",
-    "client_secret": "62784cbbcdeb906bdbbf7f3f8082feca",
-    "tenant_id": "97f82b360baefdd73400ad342562586",
-    "username": "matthew@weathercraft.net",
-    "password": "Matt1304"
+    "base_url": os.getenv("CENTERPOINT_BASE_URL", "https://api.centerpointconnect.io"),
+    "bearer_token": os.getenv("CENTERPOINT_BEARER_TOKEN"),
+    "client_id": os.getenv("CENTERPOINT_CLIENT_ID"),
+    "client_secret": os.getenv("CENTERPOINT_CLIENT_SECRET"),
+    "tenant_id": os.getenv("CENTERPOINT_TENANT_ID"),
+    "username": os.getenv("CENTERPOINT_USERNAME"),
+    "password": os.getenv("CENTERPOINT_PASSWORD")
 }
 
 # Supabase connection
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yomagoqdmxszqtdwuhab.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

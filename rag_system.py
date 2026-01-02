@@ -19,10 +19,21 @@ from sqlalchemy import create_engine
 import hashlib
 
 # Environment configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://wvkoiekcybvhpqvgqvtc.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+if not SUPABASE_URL:
+    raise RuntimeError("SUPABASE_URL environment variable is required")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost/weathercraft_erp")
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY environment variable is required")
+
+REDIS_HOST = os.getenv("REDIS_HOST")
+if not REDIS_HOST:
+    raise RuntimeError("REDIS_HOST environment variable is required")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 class RAGQuery(BaseModel):
     query: str

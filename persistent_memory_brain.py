@@ -18,7 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Initialize connections
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yomagoqdmxszqtdwuhab.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

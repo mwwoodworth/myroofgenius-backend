@@ -233,9 +233,14 @@ class AgentOrchestratorV2:
         import aiohttp
         import os
 
-        # Get AI agents service URL from environment or use default
-        ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL", "https://brainops-ai-agents.onrender.com")
-        api_key = os.getenv("BRAINOPS_API_KEY", "brainops_prod_key_2025")
+        # Get AI agents service URL from environment - NO DEFAULTS
+        ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL")
+        api_key = os.getenv("BRAINOPS_API_KEY")
+
+        if not ai_agents_url:
+            raise RuntimeError("BRAINOPS_AI_AGENTS_URL environment variable is required")
+        if not api_key:
+            raise RuntimeError("BRAINOPS_API_KEY environment variable is required")
 
         try:
             # Prepare the request payload

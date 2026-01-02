@@ -3,14 +3,14 @@
 FINAL BACKEND FIX - Make 100% Operational Without Breaking Foreign Keys
 """
 
+import os
 import asyncpg
 import asyncio
-import os
 from datetime import datetime, timedelta
 import uuid
 import json
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 async def main():
     print("=" * 80)

@@ -12,18 +12,13 @@ import json
 from datetime import datetime, timedelta
 
 # Database connection
-DB_CONFIG = {
-    'host': 'aws-0-us-east-2.pooler.supabase.com',
-    'database': 'postgres',
-    'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': '<DB_PASSWORD_REDACTED>'
-}
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def fix_automations():
     """Enable and schedule all automations"""
     print("🔧 Fixing automation system...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     # Update all automations to be active and set proper triggers
@@ -122,7 +117,7 @@ def fix_data_consistency():
     """Ensure all data responses are consistent"""
     print("🔧 Fixing data consistency...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     # Create response format standards table if needed
@@ -180,7 +175,7 @@ def enable_real_ai_everywhere():
     """Ensure AI is integrated at all decision points"""
     print("🔧 Integrating real AI everywhere...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     # Update all AI agents to active status
@@ -241,7 +236,7 @@ def create_automation_triggers():
     """Create database triggers for event-driven automations"""
     print("🔧 Creating automation triggers...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     # Create automation events table
@@ -311,7 +306,7 @@ def test_system_readiness():
     """Test that all systems are operational"""
     print("\n🧪 Testing system readiness...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
     tests = []

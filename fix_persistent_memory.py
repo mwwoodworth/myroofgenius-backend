@@ -12,7 +12,7 @@ async def fix_persistent_memory():
     """Fix the persistent memory database tables"""
     try:
         conn = await asyncpg.connect(
-            'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres'
+            os.environ.get('DATABASE_URL')
         )
         
         print("🔧 Fixing persistent memory system...")

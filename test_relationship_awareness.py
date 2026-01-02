@@ -8,8 +8,12 @@ import asyncpg
 from datetime import datetime
 import uuid
 import json
+import os
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Validate required environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 async def test_relationship_awareness():
     """Test complete relationship awareness system"""

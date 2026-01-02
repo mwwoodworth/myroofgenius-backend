@@ -1,12 +1,19 @@
 import os
 
-# Ensure required environment variables are present for import-time validation.
-os.environ.setdefault("DATABASE_URL", "postgresql://user:<DB_PASSWORD_REDACTED>@localhost:5432/testdb")
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret")
-os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
+# Validate required environment variables for tests
+# These must be set in the test environment, not hardcoded
+required_env_vars = [
+    "DATABASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_JWT_SECRET",
+    "SUPABASE_SERVICE_KEY",
+]
+
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    raise RuntimeError(f"Required environment variables missing for tests: {', '.join(missing_vars)}")
 
 from typing import Any, Optional
 

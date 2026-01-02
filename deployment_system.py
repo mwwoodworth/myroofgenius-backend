@@ -165,7 +165,8 @@ class DeploymentSystem:
                 check=True
             )
             return result.stdout.split()[0][:7]
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to get latest commit: {e}")
             return "unknown"
     
     async def run_tests(self) -> Dict:

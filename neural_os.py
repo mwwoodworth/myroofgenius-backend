@@ -14,21 +14,22 @@ import subprocess
 import psycopg2
 import docker
 import httpx
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+# Database connection - NO fallback defaults for security
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required but not set")
 
 # ============================================================================
 # COMPLETE AGENT REGISTRY - EVERY COMPONENT COVERED
@@ -612,7 +613,8 @@ class SpecializedAgent:
                     timeout=5
                 )
                 return "available" if result.returncode == 0 else "unavailable"
-            except:
+            except Exception as e:
+                logger.warning(f"Error checking dependency {dependency}: {e}")
                 return "error"
         return "unknown"
     

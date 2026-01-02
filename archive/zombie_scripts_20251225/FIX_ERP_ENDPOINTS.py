@@ -17,10 +17,7 @@ from sqlalchemy.orm import sessionmaker
 router = APIRouter(prefix="/api/v1/erp", tags=["ERP"])
 
 # Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -9,18 +9,35 @@ import json
 import psycopg2
 from datetime import datetime
 import sys
+import os
 
-# Configuration
-BACKEND_URL = "https://brainops-backend-prod.onrender.com"
-AI_SERVICE_URL = "https://brainops-ai-agents.onrender.com"
-FRONTEND_URL = "https://weathercraft-erp.vercel.app"
+# Validate required environment variables
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-# Database config
+if not all([DB_HOST, DB_USER, DB_PASSWORD]):
+    raise RuntimeError("DB_HOST, DB_USER, and DB_PASSWORD environment variables are required")
+
+BACKEND_URL = os.getenv("BACKEND_URL")
+if not BACKEND_URL:
+    raise RuntimeError("BACKEND_URL environment variable is required")
+
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL")
+if not AI_SERVICE_URL:
+    raise RuntimeError("AI_SERVICE_URL environment variable is required")
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+if not FRONTEND_URL:
+    raise RuntimeError("FRONTEND_URL environment variable is required")
+
+# Database config from environment variables
 DB_CONFIG = {
-    'host': 'aws-0-us-east-2.pooler.supabase.com',
-    'database': 'postgres',
-    'user': 'postgres.yomagoqdmxszqtdwuhab',
-    'password': '<DB_PASSWORD_REDACTED>'
+    'host': DB_HOST,
+    'database': DB_NAME or 'postgres',
+    'user': DB_USER,
+    'password': DB_PASSWORD
 }
 
 class SystemTester:

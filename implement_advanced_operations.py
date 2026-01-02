@@ -173,15 +173,14 @@ from decimal import Decimal
 
 router = APIRouter()
 
-# Database connection
+# Database connection - credentials from environment variables
+import os
+
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:

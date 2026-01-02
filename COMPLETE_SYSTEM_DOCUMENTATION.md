@@ -371,7 +371,7 @@ Password: <DB_PASSWORD_REDACTED>
 docker build -t mwwoodworth/brainops-backend:vX.X.X .
 
 # Deploy to Render
-curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}"
 
 # Database Migration
 psql -h aws-0-us-east-2.pooler.supabase.com -U postgres.yomagoqdmxszqtdwuhab -d postgres -f migration.sql

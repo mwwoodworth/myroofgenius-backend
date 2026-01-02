@@ -5,6 +5,9 @@ Add all missing revenue, AI, and automation endpoints
 """
 
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create comprehensive billing routes
 billing_routes = '''
@@ -160,7 +163,8 @@ async def get_ai_agents(db: Session = Depends(get_db)):
                 "capabilities": row.capabilities if row.capabilities else []
             })
         return {"agents": agents}
-    except:
+    except Exception as e:
+        logger.warning(f"Error fetching agents: {e}")
         # Return mock agents
         return {
             "agents": [
@@ -216,7 +220,8 @@ async def get_neural_pathways(db: Session = Depends(get_db)):
                 "strength": row.strength
             })
         return {"pathways": pathways, "total": len(pathways)}
-    except:
+    except Exception as e:
+        logger.warning(f"Error fetching pathways: {e}")
         # Return mock pathways
         return {
             "pathways": [
@@ -271,7 +276,8 @@ async def get_persistent_memory_status(db: Session = Depends(get_db)):
             "storage_used_mb": count * 0.1,  # Estimate
             "last_access": datetime.now().isoformat()
         }
-    except:
+    except Exception as e:
+        logger.warning(f"Error fetching memory status: {e}")
         return {
             "status": "operational",
             "total_memories": 1247,
@@ -335,7 +341,8 @@ async def get_active_automations(db: Session = Depends(get_db)):
                 "run_count": row.run_count if hasattr(row, 'run_count') else 0
             })
         return {"automations": automations, "total": len(automations)}
-    except:
+    except Exception as e:
+        logger.warning(f"Error fetching automations: {e}")
         return {
             "automations": [
                 {"id": "1", "name": "Lead Welcome", "trigger": "new_lead", "status": "active"},
@@ -395,7 +402,8 @@ async def get_workflows(db: Session = Depends(get_db)):
                 "version": row.version
             })
         return {"workflows": workflows, "total": len(workflows)}
-    except:
+    except Exception as e:
+        logger.warning(f"Error fetching workflows: {e}")
         return {
             "workflows": [
                 {"id": "1", "name": "Customer Journey", "status": "active", "version": "1.0"},

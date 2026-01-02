@@ -39,7 +39,7 @@ if [ $? -eq 0 ]; then
     echo "  ✅ Docker is running"
     docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | head -5
 else
-    echo "  ⚠️ Docker not running (needs sudo: echo 'Mww00dw0rth@2O1S$' | sudo -S systemctl start docker)"
+    echo "  ⚠️ Docker not running (needs sudo: sudo systemctl start docker)"
 fi
 
 # Check production API
@@ -57,15 +57,26 @@ except:
 # Check database
 echo ""
 echo "🗄️ Database quick check:"
-python3 -c "
+# Source credentials if available
+if [[ -f "$HOME/dev/_secure/BrainOps.env" ]]; then
+    set -a
+    source "$HOME/dev/_secure/BrainOps.env"
+    set +a
+fi
+
+if [[ -z "${DB_PASSWORD:-}" ]]; then
+    echo "  ⚠️ DB_PASSWORD not set. Source _secure/BrainOps.env"
+else
+    python3 -c "
 import psycopg2
+import os
 try:
     conn = psycopg2.connect(
-        host='aws-0-us-east-2.pooler.supabase.com',
-        port='6543',
-        database='postgres',
-        user='postgres.yomagoqdmxszqtdwuhab',
-        password='<DB_PASSWORD_REDACTED>',
+        host=os.environ.get('DB_HOST', 'aws-0-us-east-2.pooler.supabase.com'),
+        port=os.environ.get('DB_PORT', '6543'),
+        database=os.environ.get('DB_NAME', 'postgres'),
+        user=os.environ.get('DB_USER', 'postgres.yomagoqdmxszqtdwuhab'),
+        password=os.environ.get('DB_PASSWORD'),
         sslmode='require',
         connect_timeout=3
     )
@@ -81,6 +92,7 @@ try:
 except Exception as e:
     print(f'  ❌ Database error: {e}')
 " 2>/dev/null
+fi
 
 # Check repositories
 echo ""
@@ -146,7 +158,7 @@ echo "📊 CONTEXT INITIALIZATION COMPLETE"
 echo "================================================================================"
 echo ""
 echo "🎯 Quick Actions Available:"
-echo "  • Start Docker: echo 'Mww00dw0rth@2O1S$' | sudo -S systemctl start docker"
+echo "  • Start Docker: sudo systemctl start docker"
 echo "  • Launch DevOps: ./launch_devops.sh"
 echo "  • Run Demo: python3 devops_demo.py"
 echo "  • Sync Notion: python3 notion_live_integration.py"
@@ -157,15 +169,19 @@ echo "💡 All context gathered. System ready for operations."
 # Check AI OS activation status
 echo ""
 echo "🧠 AI OS Power Status:"
-python3 -c "
+if [[ -z "${DB_PASSWORD:-}" ]]; then
+    echo "  ⚠️ DB_PASSWORD not set. Source _secure/BrainOps.env"
+else
+    python3 -c "
 import psycopg2
+import os
 try:
     conn = psycopg2.connect(
-        host='aws-0-us-east-2.pooler.supabase.com',
-        port='6543',
-        database='postgres',
-        user='postgres.yomagoqdmxszqtdwuhab',
-        password='<DB_PASSWORD_REDACTED>',
+        host=os.environ.get('DB_HOST', 'aws-0-us-east-2.pooler.supabase.com'),
+        port=os.environ.get('DB_PORT', '6543'),
+        database=os.environ.get('DB_NAME', 'postgres'),
+        user=os.environ.get('DB_USER', 'postgres.yomagoqdmxszqtdwuhab'),
+        password=os.environ.get('DB_PASSWORD'),
         sslmode='require',
         connect_timeout=3
     )
@@ -188,5 +204,6 @@ try:
 except Exception as e:
     print('  ⚠️ Could not check AI OS status')
 " 2>/dev/null || echo "  ⚠️ AI OS status check failed"
+fi
 
 echo "================================================================================"

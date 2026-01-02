@@ -6,6 +6,7 @@ import json
 import asyncio
 import aiohttp
 import numpy as np
+import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import asyncpg
@@ -16,11 +17,15 @@ from PIL import Image
 import hashlib
 import random
 
+logger = logging.getLogger(__name__)
+
 # AI Agent Service URL
 AI_AGENTS_URL = "https://brainops-ai-agents.onrender.com"
 
-# Database connection
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres")
+# Database connection - NO fallback defaults for security
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required but not set")
 
 class ComprehensiveAIService:
     """Complete AI service with real implementations for all agents"""
@@ -527,7 +532,8 @@ class ComprehensiveAIService:
                     ORDER BY DATE_TRUNC('month', created_at)
                 """, customer_id)
                 return [float(row['monthly_revenue']) for row in rows]
-        except:
+        except Exception as e:
+            logger.error(f"Error getting customer revenue history: {e}")
             return []
 
     def _predict_new_customer_revenue(self, months: int) -> Dict:

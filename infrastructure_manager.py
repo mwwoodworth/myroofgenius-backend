@@ -44,8 +44,8 @@ class InfrastructureManager:
             try:
                 self.docker_client = docker.from_env()
                 logger.info("Docker client initialized")
-            except:
-                logger.warning("Docker not available")
+            except Exception as e:
+                logger.warning(f"Docker not available: {e}")
             
             # Initialize infrastructure tables
             await self._init_infrastructure_tables()
@@ -149,8 +149,8 @@ class InfrastructureManager:
                         "cpu": self._calculate_cpu_percent(stats),
                         "memory": stats.get("memory_stats", {}).get("usage", 0)
                     })
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Error getting Docker stats: {e}")
         
         return {
             "timestamp": datetime.now().isoformat(),
@@ -196,8 +196,8 @@ class InfrastructureManager:
             
             if system_delta > 0 and cpu_delta > 0:
                 return (cpu_delta / system_delta) * 100.0
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error calculating CPU percent: {e}")
         return 0.0
     
     async def store_metrics(self, metrics: Dict):
@@ -329,7 +329,8 @@ class InfrastructureManager:
                     WHERE recorded_at > NOW() - INTERVAL '5 minutes'
                 ''')
                 return avg_time
-        except:
+        except Exception as e:
+            logger.error(f"Error getting average response time: {e}")
             return None
     
     async def perform_scaling(self, action: str):

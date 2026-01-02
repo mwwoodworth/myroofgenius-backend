@@ -9,9 +9,12 @@ import json
 import time
 import psycopg2
 import requests
+import logging
 from datetime import datetime
 from typing import Dict, Any, List
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 class DevOpsCapabilityDemo:
     """Demonstrates all capabilities of the DevOps environment"""
@@ -57,14 +60,10 @@ class DevOpsCapabilityDemo:
 
         # Connect to production database
         try:
-            conn = psycopg2.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port="6543",
-                database="postgres",
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
-                sslmode="require"
-            )
+            db_url = os.environ.get("DATABASE_URL")
+            if not db_url:
+                raise RuntimeError("DATABASE_URL environment variable is required but not set")
+            conn = psycopg2.connect(db_url)
             cur = conn.cursor()
 
             # Get production statistics
@@ -171,7 +170,8 @@ class DevOpsCapabilityDemo:
             local_conn.close()
             operations["local_db"] = "operational"
             print("  • Local Database: ✅ Operational")
-        except:
+        except Exception as e:
+            logger.warning(f"Local database not available: {e}")
             operations["local_db"] = "not_running"
             print("  • Local Database: ⚠️ Not running (Docker required)")
 

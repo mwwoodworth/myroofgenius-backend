@@ -4,14 +4,14 @@ FIX BACKEND FINAL - Make 100% Operational
 Works with existing database schema
 """
 
+import os
 import asyncpg
 import asyncio
-import os
 from datetime import datetime, timedelta
 import uuid
 import json
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # All 59 AI agents - using existing table structure
 AI_AGENTS_DATA = [

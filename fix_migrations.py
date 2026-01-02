@@ -3,6 +3,7 @@
 Fix and run all migrations properly
 """
 
+import os
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import logging
@@ -10,7 +11,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def fix_missing_tables(conn):
     """Create any missing tables that had errors"""

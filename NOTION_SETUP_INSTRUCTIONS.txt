@@ -8,7 +8,7 @@ Since we need proper Notion integration permissions, please follow these steps:
 1. OPEN NOTION:
    - Go to https://notion.so
    - Login with: matthew@brainstackstudio.com
-   - Password: Mww00dw0rth@2O1S$
+   - Password: (stored in _secure/BrainOps.env)
 
 2. CREATE NEW WORKSPACE PAGE:
    - Click "+ New Page" 
@@ -43,7 +43,7 @@ Since we need proper Notion integration permissions, please follow these steps:
 4. ENABLE API INTEGRATION:
    - Go to Settings & Members → Integrations
    - Click "Develop your own integrations"
-   - Use token: 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
+   - Use token: ${NOTION_TOKEN} (stored in _secure/BrainOps.env)
    - Add integration to your workspace
 
 5. IMPORT DATA:

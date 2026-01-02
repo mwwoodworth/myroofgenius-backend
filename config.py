@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=100, alias="DATABASE_MAX_OVERFLOW")
     database_pool_recycle: int = Field(default=3600, alias="DATABASE_POOL_RECYCLE")
 
-    supabase_project_ref: str = Field(default="yomagoqdmxszqtdwuhab", alias="SUPABASE_PROJECT_REF")
+    supabase_project_ref: Optional[str] = Field(default=None, alias="SUPABASE_PROJECT_REF")
     supabase_anon_key: Optional[str] = Field(default=None, alias="SUPABASE_ANON_KEY")
     supabase_service_role_key: Optional[str] = Field(default=None, alias="SUPABASE_SERVICE_ROLE_KEY")
 

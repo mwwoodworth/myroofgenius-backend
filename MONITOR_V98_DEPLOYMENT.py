@@ -6,7 +6,10 @@ Monitor v9.8 deployment with DevOps context
 import requests
 import time
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 CONTEXT_FILE = "/home/mwwoodworth/brainops/context/deployment_v98.json"
@@ -24,8 +27,8 @@ def update_context(status, result=None):
         
         with open(CONTEXT_FILE, 'w') as f:
             json.dump(context, f, indent=2)
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to update context: {e}")
 
 def monitor_deployment():
     """Monitor v9.8 deployment"""
@@ -76,7 +79,8 @@ def monitor_deployment():
                             print(f"✅ {path}")
                         else:
                             print(f"❌ {path}: {r.status_code}")
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Error checking {path}: {e}")
                         print(f"❌ {path}: Error")
                 
                 success_rate = (working/len(endpoints))*100

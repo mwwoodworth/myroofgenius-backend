@@ -56,8 +56,8 @@ class SystemArchitectAgent(Agent):
         
         self.database = {
             'provider': 'Supabase',
-            'host': 'aws-0-us-east-2.pooler.supabase.com',
-            'database': 'postgres',
+            'host': os.getenv("DB_HOST"),
+            'database': os.getenv("DB_NAME", "postgres"),
             'tables_count': 400  # Will update dynamically
         }
     

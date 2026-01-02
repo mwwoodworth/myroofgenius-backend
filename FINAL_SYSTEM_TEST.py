@@ -7,7 +7,10 @@ Validates entire MyRoofGenius revenue system
 import httpx
 import json
 import time
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
@@ -85,7 +88,8 @@ def test_system():
                 print(f"   ✅ {endpoint} - WORKING")
             else:
                 print(f"   ⚠️  {endpoint} - Status {response.status_code}")
-        except:
+        except Exception as e:
+            logger.warning(f"Error testing AI endpoint {endpoint}: {e}")
             print(f"   ❌ {endpoint} - ERROR")
     
     results["tests"].append({
@@ -111,7 +115,8 @@ def test_system():
                 print(f"   ✅ {endpoint} - Ready")
             else:
                 print(f"   ⚠️  {endpoint} - Status {response.status_code}")
-        except:
+        except Exception as e:
+            logger.warning(f"Error testing revenue endpoint {endpoint}: {e}")
             print(f"   ❌ {endpoint} - ERROR")
     
     results["tests"].append({
@@ -123,10 +128,9 @@ def test_system():
     # Test 6: Database connectivity
     print("\n6️⃣ Testing Database...")
     try:
+        import os
         import psycopg2
-        conn = psycopg2.connect(
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-        )
+        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM subscription_tiers")
         count = cur.fetchone()[0]

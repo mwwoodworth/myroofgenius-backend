@@ -3,6 +3,7 @@
 VERIFY REAL SYSTEMS - The complete truth about what's running
 """
 
+import os
 import subprocess
 import requests
 import psycopg2
@@ -96,7 +97,7 @@ except Exception as e:
 # 6. Database Reality Check
 print("\n6️⃣ DATABASE REALITY CHECK:")
 try:
-    conn = psycopg2.connect("postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require")
+    conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
     cur = conn.cursor()
     
     # Real AI agents in database

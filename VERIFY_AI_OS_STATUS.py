@@ -4,6 +4,7 @@ Verify AI OS Operational Status - Complete System Check
 Shows exactly what's working and what needs fixing
 """
 
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
@@ -11,9 +12,7 @@ import json
 from datetime import datetime
 
 # Database connection
-conn = psycopg2.connect(
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
 cur = conn.cursor(cursor_factory=RealDictCursor)
 
 print("🤖 AI OS OPERATIONAL STATUS CHECK")

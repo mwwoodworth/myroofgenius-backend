@@ -94,25 +94,33 @@ done
 echo -e "\n${GREEN}Step 4: Creating Environment Configuration...${NC}"
 
 # Create .env file for Docker Compose
+# NOTE: Credentials should be set via environment or sourced from _secure/BrainOps.env
+if [[ -f "$HOME/dev/_secure/BrainOps.env" ]]; then
+    echo "  ✅ Using credentials from _secure/BrainOps.env"
+    set -a
+    source "$HOME/dev/_secure/BrainOps.env"
+    set +a
+fi
+
 cat > .env <<EOF
-# Database
-DATABASE_URL=postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:5432/postgres
-PROD_DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+# Database - Set these environment variables externally
+DATABASE_URL=\${DATABASE_URL:-postgresql://postgres:\${DB_PASSWORD}@localhost:5432/postgres}
+PROD_DATABASE_URL=\${PROD_DATABASE_URL:-}
 
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
+NEXT_PUBLIC_SUPABASE_URL=\${NEXT_PUBLIC_SUPABASE_URL:-https://yomagoqdmxszqtdwuhab.supabase.co}
+NEXT_PUBLIC_SUPABASE_ANON_KEY=\${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
 
 # Redis
 REDIS_URL=redis://localhost:6379
 
 # Notion
-NOTION_TOKEN=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
+NOTION_TOKEN=\${NOTION_TOKEN:-}
 
 # AI Keys (add your own)
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
+OPENAI_API_KEY=\${OPENAI_API_KEY:-}
+ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY:-}
+GEMINI_API_KEY=\${GEMINI_API_KEY:-}
 EOF
 
 echo "  ✓ Environment configuration created"

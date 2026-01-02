@@ -12,8 +12,10 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Validate required environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 def run_migration(conn, migration_file):
     """Run a single migration file"""

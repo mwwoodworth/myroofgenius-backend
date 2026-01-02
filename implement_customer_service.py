@@ -23,13 +23,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -185,13 +182,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -323,13 +317,10 @@ import asyncio
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -424,13 +415,10 @@ async def websocket_endpoint(
             message_data = json.loads(data)
 
             # Save message to database
-            conn = await asyncpg.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port=5432,
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
-                database="postgres"
-            )
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                raise RuntimeError("DATABASE_URL environment variable is required but not set")
+            conn = await asyncpg.connect(db_url)
 
             try:
                 query = """
@@ -513,13 +501,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -681,13 +666,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -810,13 +792,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -953,13 +932,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -1120,13 +1096,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -1259,13 +1232,10 @@ import uuid
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:
@@ -1437,13 +1407,10 @@ import json
 router = APIRouter()
 
 async def get_db():
-    conn = await asyncpg.connect(
-        host="aws-0-us-east-2.pooler.supabase.com",
-        port=5432,
-        user="postgres.yomagoqdmxszqtdwuhab",
-        password="<DB_PASSWORD_REDACTED>",
-        database="postgres"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    conn = await asyncpg.connect(db_url)
     try:
         yield conn
     finally:

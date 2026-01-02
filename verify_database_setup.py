@@ -7,6 +7,7 @@ Verifies that all tables and columns are properly created and functional.
 import asyncio
 import asyncpg
 import logging
+import os
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -14,7 +15,10 @@ from typing import Dict, List, Optional
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Validate required environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 class DatabaseVerifier:
     def __init__(self, database_url: str):

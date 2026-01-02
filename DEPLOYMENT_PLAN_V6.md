@@ -269,7 +269,7 @@ docker push mwwoodworth/brainops-backend:v6.0
 docker push mwwoodworth/brainops-backend:latest
 
 # 3. Trigger deployment
-curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}"
 
 # 4. Test production
 python3 test_all_endpoints.py

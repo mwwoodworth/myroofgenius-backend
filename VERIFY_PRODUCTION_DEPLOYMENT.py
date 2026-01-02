@@ -4,6 +4,7 @@ Production Deployment Verification Script
 Checks that all AI automation systems are fully operational
 """
 
+import os
 import requests
 import json
 import time
@@ -15,7 +16,7 @@ from termcolor import colored
 # Configuration
 BACKEND_URL = "https://brainops-backend-prod.onrender.com"
 FRONTEND_URL = "https://myroofgenius.com"
-DATABASE_URL = "postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 class ProductionVerifier:
     def __init__(self):

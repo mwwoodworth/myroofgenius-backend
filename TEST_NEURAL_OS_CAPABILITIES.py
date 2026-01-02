@@ -6,12 +6,13 @@ This script demonstrates the Neural OS utilizing its newly acquired
 comprehensive knowledge to make intelligent decisions and provide insights.
 """
 
+import os
 import psycopg2
 import json
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 class NeuralOSIntelligence:
     """Neural OS with access to comprehensive system knowledge"""

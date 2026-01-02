@@ -4,6 +4,7 @@ Database Table Checker
 Checks existing tables and their schemas to understand current database structure.
 """
 
+import os
 import asyncio
 import asyncpg
 import logging
@@ -12,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 async def check_database_structure():
     """Check existing database structure"""

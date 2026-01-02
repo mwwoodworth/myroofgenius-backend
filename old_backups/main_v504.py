@@ -46,13 +46,10 @@ except Exception as e:
     logger.error(f"❌ Failed to load revenue routes: {e}")
 
 # Initialize Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "<STRIPE_KEY_REDACTED>")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 # Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Global database
 db_engine = None

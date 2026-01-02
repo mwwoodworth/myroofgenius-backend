@@ -4,6 +4,7 @@ Complete AI Infrastructure Setup
 Finishes all remaining AI agents, orchestration, and automation
 """
 
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
@@ -11,9 +12,7 @@ import uuid
 from datetime import datetime
 
 # Database connection
-conn = psycopg2.connect(
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
 cur = conn.cursor(cursor_factory=RealDictCursor)
 
 print("🚀 COMPLETING AI INFRASTRUCTURE")

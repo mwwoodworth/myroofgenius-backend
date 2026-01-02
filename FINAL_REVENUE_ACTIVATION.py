@@ -10,7 +10,7 @@ import subprocess
 import psycopg2
 from datetime import datetime, timedelta
 
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = os.environ.get("DATABASE_URL")
 
 def main():
     print("="*60)

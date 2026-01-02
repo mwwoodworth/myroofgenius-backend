@@ -69,10 +69,9 @@ class MonitoringService:
         }
         
         # Database connection for health checks
-        self.database_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-        )
+        self.database_url = os.getenv("DATABASE_URL")
+        if not self.database_url:
+            raise RuntimeError("DATABASE_URL environment variable is required")
         
         self.monitoring_started = datetime.now()
         

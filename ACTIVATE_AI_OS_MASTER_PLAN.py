@@ -9,10 +9,13 @@ This script connects and activates EVERYTHING that already exists.
 import psycopg2
 import json
 import asyncio
+import logging
 from datetime import datetime
 from typing import Dict, List, Any
 import subprocess
 import os
+
+logger = logging.getLogger(__name__)
 
 class BrainOpsAIActivator:
     """Master activation system for the complete AI OS"""
@@ -30,14 +33,10 @@ class BrainOpsAIActivator:
 
     def connect_database(self):
         """Connect to master production database"""
-        self.conn = psycopg2.connect(
-            host="aws-0-us-east-2.pooler.supabase.com",
-            port="6543",
-            database="postgres",
-            user="postgres.yomagoqdmxszqtdwuhab",
-            password="<DB_PASSWORD_REDACTED>",
-            sslmode="require"
-        )
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            raise RuntimeError("DATABASE_URL environment variable is required but not set")
+        self.conn = psycopg2.connect(db_url)
         return self.conn.cursor()
 
     def phase_1_complete_inventory(self):
@@ -261,7 +260,8 @@ class BrainOpsAIActivator:
             import requests
             response = requests.get("https://brainops-backend-prod.onrender.com/health", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception as e:
+            logger.error(f"API health check failed: {e}")
             return False
 
     def test_database_sync(self):
@@ -270,7 +270,8 @@ class BrainOpsAIActivator:
             cur = self.conn.cursor()
             cur.execute("SELECT 1")
             return cur.fetchone()[0] == 1
-        except:
+        except Exception as e:
+            logger.error(f"Database sync test failed: {e}")
             return False
 
     def test_agent_communication(self):
@@ -282,7 +283,8 @@ class BrainOpsAIActivator:
                 WHERE strength > 0.5
             """)
             return cur.fetchone()[0] > 0
-        except:
+        except Exception as e:
+            logger.error(f"Agent communication test failed: {e}")
             return False
 
     def test_workflow_execution(self):
@@ -294,7 +296,8 @@ class BrainOpsAIActivator:
                 WHERE status = 'active'
             """)
             return cur.fetchone()[0] > 0
-        except:
+        except Exception as e:
+            logger.error(f"Workflow execution test failed: {e}")
             return False
 
     def test_memory_persistence(self):
@@ -308,7 +311,8 @@ class BrainOpsAIActivator:
             """, (json.dumps({"activated": True, "timestamp": str(datetime.now())}),))
             self.conn.commit()
             return True
-        except:
+        except Exception as e:
+            logger.error(f"Memory persistence test failed: {e}")
             return False
 
     def phase_5_monitoring(self):
