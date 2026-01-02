@@ -106,6 +106,50 @@ async def get_payment_methods():
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhooks"""
-    # Just acknowledge for now
-    return {"received": True}
+    """Handle Stripe webhooks with signature verification"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+    if not webhook_secret:
+        logger.error("STRIPE_WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+    if not sig_header:
+        logger.warning("Missing Stripe signature header")
+        raise HTTPException(status_code=400, detail="Missing signature header")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except stripe.error.SignatureVerificationError as e:
+        logger.error(f"Invalid Stripe webhook signature: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except ValueError as e:
+        logger.error(f"Invalid webhook payload: {e}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    # Handle specific event types
+    event_type = event.get("type")
+    data = event.get("data", {}).get("object", {})
+
+    logger.info(f"Received Stripe webhook: {event_type}")
+
+    if event_type == "checkout.session.completed":
+        # Handle successful checkout
+        logger.info(f"Checkout completed: {data.get('id')}")
+    elif event_type == "invoice.payment_failed":
+        # Handle failed payment
+        logger.warning(f"Payment failed for invoice: {data.get('id')}")
+    elif event_type == "customer.subscription.deleted":
+        # Handle subscription cancellation
+        logger.info(f"Subscription cancelled: {data.get('id')}")
+    elif event_type == "charge.refunded":
+        # Handle refund
+        logger.info(f"Charge refunded: {data.get('id')}")
+
+    return {"received": True, "type": event_type}

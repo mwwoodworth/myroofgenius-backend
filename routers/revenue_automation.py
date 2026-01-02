@@ -15,11 +15,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import os
 
-# Create database session
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-)
+# Create database session - MUST use environment variable, no fallback
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -148,20 +147,23 @@ async def get_revenue_metrics(db: Session = Depends(get_db)):
         )
         
     except Exception as e:
-        # Return demo data on error
+        # Log error and return zeros instead of fake data
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to get revenue metrics: {e}")
         return RevenueMetrics(
-            today=8542.00,
-            month=285420.00,
-            year=2854200.00,
-            mrr=285420.00,
-            arr=3425040.00,
-            subscriptions=142,
-            conversionRate=6.8,
-            aov=185.00,
-            ltv=4500.00,
-            churn=2.1,
-            growth=15.4,
-            projected=3500000.00
+            today=0.0,
+            month=0.0,
+            year=0.0,
+            mrr=0.0,
+            arr=0.0,
+            subscriptions=0,
+            conversionRate=0.0,
+            aov=0.0,
+            ltv=0.0,
+            churn=0.0,
+            growth=0.0,
+            projected=0.0
         )
 
 @router.get("/transactions")
@@ -171,9 +173,9 @@ async def get_recent_transactions(
 ):
     """Get recent transactions"""
     try:
-        # Try to get real transactions
-        result = db.execute(f"""
-            SELECT 
+        # Try to get real transactions - parameterized query to prevent SQL injection
+        result = db.execute(text("""
+            SELECT
                 id,
                 customer_name as customer,
                 amount,
@@ -182,8 +184,8 @@ async def get_recent_transactions(
                 created_at as date
             FROM payments
             ORDER BY created_at DESC
-            LIMIT {limit}
-        """).fetchall()
+            LIMIT :limit
+        """), {"limit": limit}).fetchall()
         
         if result:
             transactions = [
@@ -198,24 +200,13 @@ async def get_recent_transactions(
                 for row in result
             ]
             return {"transactions": transactions}
-    except:
-        pass
-    
-    # Return realistic demo transactions
-    demo_transactions = [
-        {"id": str(uuid.uuid4()), "customer": "Johnson Roofing LLC", "amount": 45000, "type": "New Roof Installation", "status": "completed", "date": datetime.now()},
-        {"id": str(uuid.uuid4()), "customer": "Sarah Williams", "amount": 8500, "type": "Roof Repair", "status": "completed", "date": datetime.now() - timedelta(hours=2)},
-        {"id": str(uuid.uuid4()), "customer": "ABC Construction", "amount": 125000, "type": "Commercial Project", "status": "pending", "date": datetime.now() - timedelta(hours=5)},
-        {"id": str(uuid.uuid4()), "customer": "Tesla Gigafactory", "amount": 250000, "type": "Industrial Roofing", "status": "processing", "date": datetime.now() - timedelta(days=1)},
-        {"id": str(uuid.uuid4()), "customer": "Hill Country Homes", "amount": 35000, "type": "Residential Complex", "status": "completed", "date": datetime.now() - timedelta(days=1)},
-        {"id": str(uuid.uuid4()), "customer": "Mike's Roofing", "amount": 15000, "type": "Emergency Repair", "status": "completed", "date": datetime.now() - timedelta(days=2)},
-        {"id": str(uuid.uuid4()), "customer": "Downtown Plaza", "amount": 85000, "type": "Commercial Retrofit", "status": "completed", "date": datetime.now() - timedelta(days=2)},
-        {"id": str(uuid.uuid4()), "customer": "Jennifer Chen", "amount": 12000, "type": "Solar Integration", "status": "processing", "date": datetime.now() - timedelta(days=3)},
-        {"id": str(uuid.uuid4()), "customer": "State Building", "amount": 450000, "type": "Government Contract", "status": "pending", "date": datetime.now() - timedelta(days=3)},
-        {"id": str(uuid.uuid4()), "customer": "Green Energy Co", "amount": 67000, "type": "Eco-Friendly Upgrade", "status": "completed", "date": datetime.now() - timedelta(days=4)}
-    ]
-    
-    return {"transactions": demo_transactions[:limit]}
+        # No transactions found - return empty list (not fake data)
+        return {"transactions": []}
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to get transactions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve transactions: {str(e)}")
 
 # ============= A/B Testing & Optimization =============
 
