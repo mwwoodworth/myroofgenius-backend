@@ -6,7 +6,10 @@ Final test for v9.6 - check if all endpoints are working
 import requests
 import json
 import time
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 
@@ -25,8 +28,8 @@ def wait_for_version(target_version="9.6", timeout=300):
             if version == target_version:
                 print(f"✅ v{target_version} is deployed!")
                 return True
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error checking deployment version: {e}")
         
         time.sleep(15)
     
@@ -84,8 +87,8 @@ def test_all_endpoints():
                         error = resp.json()
                         if "detail" in error:
                             print(f"   Error: {error['detail'][:100]}")
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to parse error response: {e}")
         except Exception as e:
             print(f"❌ {name}: Connection error")
             results["errors"] += 1

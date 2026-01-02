@@ -44,35 +44,45 @@ class UltimateDevOpsEnvironment:
             "supabase": "https://yomagoqdmxszqtdwuhab.supabase.co"
         }
 
-        # Database configurations
+        # Database configurations - loaded from environment variables
+        prod_db_host = os.getenv("PROD_DB_HOST")
+        prod_db_user = os.getenv("PROD_DB_USER")
+        prod_db_password = os.getenv("PROD_DB_PASSWORD")
+        local_db_password = os.getenv("LOCAL_DB_PASSWORD")
+
+        if not all([prod_db_host, prod_db_user, prod_db_password]):
+            raise RuntimeError("Production database credentials (PROD_DB_HOST, PROD_DB_USER, PROD_DB_PASSWORD) are required but not set")
+        if not local_db_password:
+            raise RuntimeError("LOCAL_DB_PASSWORD environment variable is required but not set")
+
         self.db_config = {
             "prod": {
-                "host": "aws-0-us-east-2.pooler.supabase.com",
-                "port": "6543",
-                "database": "postgres",
-                "user": "postgres.yomagoqdmxszqtdwuhab",
-                "password": "<DB_PASSWORD_REDACTED>"
+                "host": prod_db_host,
+                "port": os.getenv("PROD_DB_PORT", "6543"),
+                "database": os.getenv("PROD_DB_NAME", "postgres"),
+                "user": prod_db_user,
+                "password": prod_db_password
             },
             "local": {
                 "host": "localhost",
                 "port": "5432",
-                "database": "brainops",
-                "user": "postgres",
-                "password": "<DB_PASSWORD_REDACTED>"
+                "database": os.getenv("LOCAL_DB_NAME", "brainops"),
+                "user": os.getenv("LOCAL_DB_USER", "postgres"),
+                "password": local_db_password
             }
         }
 
-        # AI API Keys
+        # AI API Keys - loaded from environment variables only
         self.ai_keys = {
-            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "<ANTHROPIC_API_KEY_REDACTED>")
+            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY")
         }
 
-        # Notion configuration
+        # Notion configuration - loaded from environment variables only
         self.notion_config = {
-            "token": os.getenv("NOTION_TOKEN", ""),
-            "workspace_id": os.getenv("NOTION_WORKSPACE_ID", "609966813963")
+            "token": os.getenv("NOTION_TOKEN"),
+            "workspace_id": os.getenv("NOTION_WORKSPACE_ID")
         }
 
     async def setup_complete_environment(self):
@@ -217,8 +227,8 @@ services:
     image: supabase/postgres:15.1.0.117
     container_name: brainops-postgres
     environment:
-      POSTGRES_PASSWORD: <DB_PASSWORD_REDACTED>
-      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD}
+      POSTGRES_DB: ${LOCAL_DB_NAME:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -235,7 +245,7 @@ services:
     container_name: supabase-studio
     environment:
       SUPABASE_URL: http://kong:8000
-      SUPABASE_ANON_KEY: <JWT_REDACTED>
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     ports:
       - "54323:3000"
 
@@ -255,10 +265,10 @@ services:
       dockerfile: Dockerfile
     container_name: brainops-backend
     environment:
-      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/postgres
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379
       SYNC_WITH_PROD: "true"
-      PROD_DATABASE_URL: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+      PROD_DATABASE_URL: ${PROD_DATABASE_URL}
     ports:
       - "8000:8000"
     volumes:
@@ -294,7 +304,7 @@ services:
     image: grafana/grafana:latest
     container_name: brainops-grafana
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: BrainOps2025
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     ports:
       - "3002:3000"
     volumes:
@@ -396,13 +406,22 @@ import threading
 def sync_tables():
     while True:
         try:
+            # Load credentials from environment
+            prod_host = os.getenv("PROD_DB_HOST")
+            prod_user = os.getenv("PROD_DB_USER")
+            prod_password = os.getenv("PROD_DB_PASSWORD")
+            local_password = os.getenv("LOCAL_DB_PASSWORD")
+
+            if not all([prod_host, prod_user, prod_password, local_password]):
+                raise RuntimeError("Database credentials not set in environment")
+
             # Connect to production
             prod_conn = psycopg2.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port="6543",
-                database="postgres",
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
+                host=prod_host,
+                port=os.getenv("PROD_DB_PORT", "6543"),
+                database=os.getenv("PROD_DB_NAME", "postgres"),
+                user=prod_user,
+                password=prod_password,
                 sslmode="require"
             )
 
@@ -410,9 +429,9 @@ def sync_tables():
             local_conn = psycopg2.connect(
                 host="localhost",
                 port="5432",
-                database="postgres",
-                user="postgres",
-                password="<DB_PASSWORD_REDACTED>"
+                database=os.getenv("LOCAL_DB_NAME", "postgres"),
+                user=os.getenv("LOCAL_DB_USER", "postgres"),
+                password=local_password
             )
 
             # Get list of tables
@@ -480,8 +499,8 @@ if __name__ == "__main__":
                 # Create .env.local with production API
                 env_content = f"""
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
+NEXT_PUBLIC_SUPABASE_URL=${{SUPABASE_URL}}
+NEXT_PUBLIC_SUPABASE_ANON_KEY=${{SUPABASE_ANON_KEY}}
 """
                 with open(app_path / ".env.local", "w") as f:
                     f.write(env_content)
@@ -637,12 +656,16 @@ if __name__ == "__main__":
                 capture_output=True
             )
 
-        # Create Notion automation script
+        # Create Notion automation script - token from environment
         notion_script = f"""#!/usr/bin/env python3
 from notion_client import Client
 import json
+import os
 
-notion = Client(auth="{self.notion_config['token']}")
+notion_token = os.getenv("NOTION_TOKEN")
+if not notion_token:
+    raise RuntimeError("NOTION_TOKEN environment variable is required")
+notion = Client(auth=notion_token)
 
 def sync_to_notion(data_type, data):
     # Sync data to Notion workspace

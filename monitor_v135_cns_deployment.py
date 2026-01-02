@@ -8,6 +8,9 @@ import os
 import time
 import requests
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 print("🧠 Monitoring BrainOps Backend v135.0.0 CNS deployment...")
 print("=" * 60)
@@ -105,7 +108,8 @@ if deployment_success:
                     data = response.json()
                     version = data.get('version', 'N/A')
                     print(f"  ✅ {name:20} - {status_code} - v{version}")
-                except:
+                except Exception as e:
+                    logger.warning(f"Could not parse response: {e}")
                     print(f"  ✅ {name:20} - {status_code}")
             else:
                 print(f"  ❌ {name:20} - {status_code}")

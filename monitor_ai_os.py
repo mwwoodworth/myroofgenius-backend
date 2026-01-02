@@ -4,6 +4,7 @@ AI OS Continuous Monitoring System
 Monitors the health and performance of the activated AI OS
 """
 
+import os
 import psycopg2
 import json
 import time
@@ -22,17 +23,10 @@ class AISystemMonitor:
             "agent_learning": {},
             "system_resources": {}
         }
-        
+
     def connect_db(self):
         """Connect to production database"""
-        self.conn = psycopg2.connect(
-            host="aws-0-us-east-2.pooler.supabase.com",
-            port="6543",
-            database="postgres",
-            user="postgres.yomagoqdmxszqtdwuhab",
-            password="<DB_PASSWORD_REDACTED>",
-            sslmode="require"
-        )
+        self.conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
         return self.conn.cursor()
     
     def monitor_api_health(self):

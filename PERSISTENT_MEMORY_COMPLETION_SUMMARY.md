@@ -105,7 +105,7 @@ The Persistent Memory System has been successfully implemented as the central ne
 
 3. **Deploy on Render**
    ```bash
-   curl -X POST 'https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM'
+   curl -X POST 'https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}'
    ```
 
 4. **Monitor AUREA QC**

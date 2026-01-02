@@ -24,8 +24,8 @@ if weathercraft_path.exists():
 NEXT_PUBLIC_API_URL=https://brainops-backend-prod.onrender.com
 NEXT_PUBLIC_BACKEND_URL=https://brainops-backend-prod.onrender.com
 
-# Database (Real)
-DATABASE_URL=postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+# Database (Real) - Use environment variable
+DATABASE_URL=${DATABASE_URL}
 NEXT_PUBLIC_SUPABASE_URL=https://yomagoqdmxszqtdwuhab.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<JWT_REDACTED>
 

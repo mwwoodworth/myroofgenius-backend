@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: brainops
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: <DB_PASSWORD_REDACTED>
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -45,12 +45,12 @@ services:
       dockerfile: Dockerfile
     container_name: brainops-backend-dev
     environment:
-      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/brainops
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/brainops
       REDIS_URL: redis://redis:6379
       ENV: development
       SYNC_WITH_PROD: "true"
-      PROD_DATABASE_URL: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
-      NOTION_TOKEN: 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
+      PROD_DATABASE_URL: ${PROD_DATABASE_URL}
+      NOTION_TOKEN: ${NOTION_TOKEN}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
@@ -80,10 +80,10 @@ services:
       dockerfile: Dockerfile.sync
     container_name: brainops-prod-sync
     environment:
-      LOCAL_DB: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/brainops
-      PROD_DB: postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require
+      LOCAL_DB: postgresql://postgres:${DB_PASSWORD}@postgres:5432/brainops
+      PROD_DB: ${PROD_DATABASE_URL}
       SYNC_INTERVAL: 300
-      NOTION_TOKEN: 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
+      NOTION_TOKEN: ${NOTION_TOKEN}
     volumes:
       - ./.devops/sync:/app/sync
       - ./.devops/logs/sync:/app/logs
@@ -98,7 +98,7 @@ services:
     image: grafana/grafana:latest
     container_name: brainops-grafana
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: BrainOps2025
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-BrainOps2025}
       GF_INSTALL_PLUGINS: redis-datasource,alexanderzobnin-zabbix-datasource,grafana-postgresql-datasource
     ports:
       - "3001:3000"
@@ -157,7 +157,7 @@ services:
     container_name: brainops-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@brainops.com
-      PGADMIN_DEFAULT_PASSWORD: BrainOps2025
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-BrainOps2025}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
       - "5050:80"
@@ -196,12 +196,12 @@ services:
       dockerfile: Dockerfile.ai
     container_name: brainops-ai-orchestrator
     environment:
-      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/brainops
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/brainops
       REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      NOTION_TOKEN: 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
+      NOTION_TOKEN: ${NOTION_TOKEN}
     ports:
       - "8001:8001"
     volumes:
@@ -222,8 +222,8 @@ services:
       dockerfile: Dockerfile.notion
     container_name: brainops-notion-sync
     environment:
-      DATABASE_URL: postgresql://postgres:<DB_PASSWORD_REDACTED>@postgres:5432/brainops
-      NOTION_TOKEN: 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
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/brainops
+      NOTION_TOKEN: ${NOTION_TOKEN}
       SYNC_INTERVAL: 300
     volumes:
       - ./notion_sync:/app

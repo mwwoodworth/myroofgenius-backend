@@ -7,10 +7,13 @@ import os
 import jwt
 import hashlib
 import uuid
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from fastapi import HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+logger = logging.getLogger(__name__)
 
 # Configuration - Use same secret as auth_middleware for compatibility
 import os
@@ -55,7 +58,8 @@ def verify_token(token: str) -> dict:
     """Verify JWT token"""
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except:
+    except Exception as e:
+        logger.warning(f"Token verification failed: {e}")
         return None
 
 def get_current_user_optional(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):

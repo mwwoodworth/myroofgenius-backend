@@ -11,14 +11,18 @@ import sys
 # Add the current directory to Python path
 sys.path.append(os.path.dirname(__file__))
 
+# Validate required environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
+
+
 async def run_vector_migration():
     try:
         # Use the same connection as other scripts
         import asyncpg
-        
-        conn = await asyncpg.connect(
-            'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres'
-        )
+
+        conn = await asyncpg.connect(DATABASE_URL)
         
         print("🚀 Running vector database migration...")
         

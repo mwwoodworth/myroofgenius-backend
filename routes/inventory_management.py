@@ -471,7 +471,14 @@ async def get_inventory_items(
         if low_stock:
             query += " AND COALESCE(s.on_hand, 0) <= i.reorder_point"
 
-        query += f" ORDER BY i.name LIMIT {limit} OFFSET {offset}"
+        # Use parameterized LIMIT and OFFSET to prevent SQL injection
+        param_count += 1
+        query += f" ORDER BY i.name LIMIT ${param_count}"
+        params.append(limit)
+
+        param_count += 1
+        query += f" OFFSET ${param_count}"
+        params.append(offset)
 
         rows = await conn.fetch(query, *params)
 

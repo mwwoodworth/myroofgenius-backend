@@ -33,7 +33,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yomagoqdmxszqtdwuhab.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -204,7 +204,8 @@ class NeuralNetwork:
             # Check if tables exist, if not create them
             # Agent Memories Table
             self.supabase.table("agent_memories").select("*").limit(1).execute()
-        except:
+        except Exception as e:
+            logger.warning(f"Memory tables may not exist, creating schema: {e}")
             # Create tables via SQL
             await self._create_memory_schema()
     

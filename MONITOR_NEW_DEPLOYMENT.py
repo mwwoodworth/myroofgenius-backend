@@ -53,8 +53,9 @@ def main():
             print("\n🎉 Deployment Complete!")
             
             # Store success in persistent memory
+            import os
             import psycopg2
-            DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
+            DATABASE_URL = os.environ.get("DATABASE_URL")
             
             try:
                 conn = psycopg2.connect(DATABASE_URL)

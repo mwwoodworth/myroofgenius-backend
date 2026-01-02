@@ -158,8 +158,13 @@ async def list_customers(
         # Build final query with grouping and pagination
         query += base_from + where_clause
         query += " GROUP BY c.id "
-        query += f" ORDER BY {sort_by} {sort_order.upper()} "
-        query += f" LIMIT :limit OFFSET :offset"
+
+        # Whitelist allowed sort columns to prevent SQL injection
+        allowed_sort_columns = {"name": "c.name", "email": "c.email", "created_at": "c.created_at", "total_revenue": "total_revenue"}
+        safe_sort_by = allowed_sort_columns.get(sort_by, "c.created_at")
+        safe_sort_order = "DESC" if sort_order.upper() == "DESC" else "ASC"
+        query += f" ORDER BY {safe_sort_by} {safe_sort_order} "
+        query += " LIMIT :limit OFFSET :offset"
 
         params["limit"] = per_page
         params["offset"] = (page - 1) * per_page

@@ -14,6 +14,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,9 +34,11 @@ class AgentRole(Enum):
 
 class AIBrainCore:
     """Central AI Brain that orchestrates all system intelligence"""
-    
+
     def __init__(self):
-        self.conn_str = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+        self.conn_str = os.getenv("DATABASE_URL")
+        if not self.conn_str:
+            raise RuntimeError("DATABASE_URL environment variable is required")
         self.agents = {}
         self.neural_pathways = []
         self.active_decisions = {}

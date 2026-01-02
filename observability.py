@@ -308,7 +308,8 @@ class MonitoringSystem:
                 async with self.pg_pool.acquire() as conn:
                     await conn.fetchval("SELECT 1")
                     self.health_checks["database"] = {"status": "healthy"}
-            except:
+            except Exception as e:
+                logger.error(f"Database health check failed: {e}")
                 self.health_checks["database"] = {"status": "unhealthy"}
                 status = "unhealthy"
                 

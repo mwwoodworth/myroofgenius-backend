@@ -5,12 +5,13 @@ ENABLE REVENUE GENERATION FOR MYROOFGENIUS
 This script activates all revenue-generating features immediately.
 """
 
+import os
 import psycopg2
 import json
 from datetime import datetime, timedelta
 import random
 
-DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def enable_revenue_features():
     """Enable all revenue generation features"""

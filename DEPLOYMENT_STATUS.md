@@ -131,7 +131,7 @@ docker push mwwoodworth/brainops-backend:latest
 
 ### Trigger Render Deployment
 ```bash
-curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}"
 ```
 
 ### Check Production Health

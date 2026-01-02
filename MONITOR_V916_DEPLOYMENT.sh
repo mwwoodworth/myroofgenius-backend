@@ -22,12 +22,23 @@ for i in {1..20}; do
         echo "$response" | python3 -m json.tool
         
         # Store success in persistent memory
-        python3 -c "
+        # Source credentials if available
+        if [[ -f "$HOME/dev/_secure/BrainOps.env" ]]; then
+            set -a
+            source "$HOME/dev/_secure/BrainOps.env"
+            set +a
+        fi
+
+        if [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "⚠️ DATABASE_URL not set - skipping persistent memory storage"
+        else
+            python3 -c "
 import psycopg2
 import json
+import os
 from datetime import datetime, UTC
 
-DATABASE_URL = 'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 conn = psycopg2.connect(DATABASE_URL)
 cur = conn.cursor()
@@ -41,12 +52,12 @@ deployment_success = {
 }
 
 cur.execute('''
-    INSERT INTO neural_os_knowledge 
-    (component_name, component_type, agent_name, knowledge_type, 
+    INSERT INTO neural_os_knowledge
+    (component_name, component_type, agent_name, knowledge_type,
      knowledge_data, confidence_score, review_id)
     VALUES (%s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (component_name, knowledge_type, agent_name)
-    DO UPDATE SET 
+    DO UPDATE SET
         knowledge_data = EXCLUDED.knowledge_data,
         updated_at = CURRENT_TIMESTAMP
 ''', (
@@ -63,6 +74,7 @@ conn.commit()
 conn.close()
 print('✅ Deployment success stored in persistent memory!')
 "
+        fi
         
         exit 0
     else

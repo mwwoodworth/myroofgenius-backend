@@ -9,7 +9,10 @@ import json
 import time
 import socket
 import requests
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 def check_port(port):
     """Check if a port is open"""
@@ -19,7 +22,8 @@ def check_port(port):
         result = sock.connect_ex(('localhost', port))
         sock.close()
         return result == 0
-    except:
+    except Exception as e:
+        logger.warning(f"Error checking port {port}: {e}")
         return False
 
 def main():
@@ -116,8 +120,8 @@ def main():
     print("-" * 40)
     
     try:
-        db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-        
+        db_url = os.environ.get("DATABASE_URL")
+
         # Get table count
         cmd = f'psql "{db_url}" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \'public\';"'
         table_count = subprocess.check_output(cmd, shell=True).decode().strip()
@@ -130,7 +134,8 @@ def main():
                 count = subprocess.check_output(cmd, shell=True).decode().strip()
                 print(f"{table.capitalize()}: {count}")
                 results["database"][table] = int(count)
-            except:
+            except Exception as e:
+                logger.error(f"Error querying table {table}: {e}")
                 print(f"{table.capitalize()}: ❌ Error")
                 results["database"][table] = 0
         
@@ -179,7 +184,8 @@ def main():
         
         results["persistence"]["cron_5min"] = has_5min
         results["persistence"]["cron_reboot"] = has_reboot
-    except:
+    except Exception as e:
+        logger.error(f"Error checking cron jobs: {e}")
         print("Cron jobs: ❌ ERROR checking")
         results["persistence"]["cron_5min"] = False
         results["persistence"]["cron_reboot"] = False
@@ -191,7 +197,8 @@ def main():
             has_bashrc = "start_all_services.sh" in bashrc_content
         print(f"Bashrc autostart: {'✅ EXISTS' if has_bashrc else '❌ MISSING'}")
         results["persistence"]["bashrc"] = has_bashrc
-    except:
+    except Exception as e:
+        logger.error(f"Error checking bashrc: {e}")
         print("Bashrc autostart: ❌ ERROR checking")
         results["persistence"]["bashrc"] = False
     

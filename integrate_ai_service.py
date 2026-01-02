@@ -4,6 +4,9 @@ This will add all the AI endpoints to expose the new functionality
 """
 
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # AI endpoint code to add to main.py
 AI_ENDPOINTS_CODE = '''
@@ -69,8 +72,8 @@ async def analyze_roof(request: RoofAnalysisRequest):
                         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                     """, request.customer_id, request.address,
                     json.dumps(result), result.get('confidence', 0.85))
-            except:
-                pass  # Table might not exist
+            except Exception as e:
+                logger.warning(f"Failed to store roof analysis: {e}")
 
         return result
     except Exception as e:
@@ -93,8 +96,8 @@ async def score_lead(request: LeadScoringRequest):
                     )
                     if lead:
                         lead_data = dict(lead)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch lead data: {e}")
 
         result = await ai_service.score_lead(lead_data, request.behavior_data)
 
@@ -108,8 +111,8 @@ async def score_lead(request: LeadScoringRequest):
                         WHERE id = $3
                     """, result['score'], json.dumps(result.get('factors', [])),
                     request.lead_id)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to update lead score: {e}")
 
         return result
     except Exception as e:
@@ -138,8 +141,8 @@ async def predict_analytics(request: PredictiveAnalyticsRequest):
                         request.customer_id
                     )
                     data['jobs'] = [dict(j) for j in jobs]
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch customer data: {e}")
 
         if request.analysis_type == "revenue":
             result = await ai_service.predict_revenue(data, request.timeframe)
@@ -176,8 +179,8 @@ async def execute_workflow(request: WorkflowRequest):
                         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                     """, request.workflow_type, json.dumps(request.context),
                     json.dumps(result), result.get('status', 'completed'))
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to log workflow execution: {e}")
 
         return result
     except Exception as e:
@@ -210,8 +213,8 @@ async def optimize_schedule(request: ScheduleOptimizationRequest):
                             WHERE status = 'active'
                         """)
                         employees = [dict(e) for e in emp_rows]
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch schedule data: {e}")
 
         result = await ai_service.optimize_schedule(
             request.date,
@@ -241,8 +244,8 @@ async def optimize_materials(request: MaterialOptimizationRequest):
                     )
                     if job:
                         job_details = dict(job)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch job details: {e}")
 
         result = await ai_service.optimize_materials(job_details or {})
 
@@ -257,8 +260,8 @@ async def optimize_materials(request: MaterialOptimizationRequest):
                         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
                     """, request.job_id, json.dumps(result),
                     result.get('cost_savings', 0))
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to store material optimization: {e}")
 
         return result
     except Exception as e:
@@ -304,8 +307,8 @@ async def get_ai_agents_status():
                                 "predictive_analytics": True
                             }
                         }
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch agents status: {e}")
 
         # Fallback if can't reach agents service
         return {

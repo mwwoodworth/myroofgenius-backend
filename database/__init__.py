@@ -30,8 +30,10 @@ def _get_database_url() -> str:
     if all([host, user, password]):
         return f"postgresql://{user}:{password}@{host}:{port}/{name}?sslmode=require"
 
-    # Fallback for development/testing
-    return "postgresql://localhost:5432/brainops"
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required. "
+        "Set DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD in the environment."
+    )
 
 # Export DATABASE_URL as a module-level variable
 DATABASE_URL: str = _get_database_url()

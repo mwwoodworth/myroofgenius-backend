@@ -119,7 +119,12 @@ async def advanced_search(
 
         # Add GROUP BY and ORDER BY
         query = base_query + where_clause + " GROUP BY c.id "
-        query += f" ORDER BY {sort_by} {sort_order.value.upper()} "
+
+        # Whitelist allowed sort columns to prevent SQL injection
+        allowed_sort_columns = {"name": "c.name", "email": "c.email", "created_at": "c.created_at", "updated_at": "c.updated_at", "total_revenue": "total_revenue", "job_count": "job_count"}
+        safe_sort_by = allowed_sort_columns.get(sort_by, "c.created_at")
+        safe_sort_order = "DESC" if sort_order.value.upper() == "DESC" else "ASC"
+        query += f" ORDER BY {safe_sort_by} {safe_sort_order} "
         query += " LIMIT :limit OFFSET :offset"
 
         params["limit"] = per_page
@@ -451,14 +456,20 @@ async def get_search_suggestions(
     Get autocomplete suggestions for search
     """
     try:
+        # Whitelist allowed fields to prevent SQL injection
+        allowed_fields = {"name": "name", "email": "email", "phone": "phone", "company": "company",
+                         "address": "address", "city": "city", "state": "state", "zip_code": "zip_code",
+                         "status": "status"}
+        safe_field = allowed_fields.get(field.value, "name")
+
         query = f"""
-            SELECT DISTINCT {field.value} as suggestion,
+            SELECT DISTINCT {safe_field} as suggestion,
                    COUNT(*) as frequency
             FROM customers
-            WHERE {field.value} ILIKE :term
+            WHERE {safe_field} ILIKE :term
                 AND status != 'deleted'
-            GROUP BY {field.value}
-            ORDER BY frequency DESC, {field.value}
+            GROUP BY {safe_field}
+            ORDER BY frequency DESC, {safe_field}
             LIMIT :limit
         """
 

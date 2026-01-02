@@ -4,10 +4,12 @@ Monitor v132.0.0 deployment with FULL functionality
 """
 
 import os
-
 import time
 import requests
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 print("🚀 Monitoring BrainOps Backend v132.0.0 deployment...")
 print("=" * 60)
@@ -90,7 +92,8 @@ if deployment_success:
                         print(f"✅ {name:20} - {status_code} - v{version}")
                     else:
                         print(f"✅ {name:20} - {status_code}")
-                except:
+                except Exception as e:
+                    logger.warning(f"Could not parse response JSON: {e}")
                     print(f"✅ {name:20} - {status_code}")
             else:
                 print(f"❌ {name:20} - {status_code}")

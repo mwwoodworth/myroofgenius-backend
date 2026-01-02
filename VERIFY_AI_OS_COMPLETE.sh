@@ -100,7 +100,7 @@ echo "-------------------------"
 echo "Docker Hub: mwwoodworth/brainops-backend"
 echo "Render Service: srv-d1tfs4idbo4c73di6k00"
 echo "Last Deploy ID: dep-d2ii8aur433s73dqf3rg"
-echo "Deploy Hook: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM"
+echo "Deploy Hook: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=\${RENDER_DEPLOY_KEY}"
 
 echo ""
 echo "====================================="

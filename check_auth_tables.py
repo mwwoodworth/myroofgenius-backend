@@ -1,7 +1,7 @@
 import psycopg2
 import os
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def check_auth_tables():
     """Check if auth-related tables exist"""

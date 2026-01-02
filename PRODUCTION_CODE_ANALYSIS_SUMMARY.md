@@ -474,7 +474,7 @@ SUPABASE_JWT_SECRET
 
 **Deploy Hook:**
 ```bash
-curl -X POST https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM
+curl -X POST https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}
 ```
 
 ### Vercel (Frontend)
@@ -613,7 +613,7 @@ Platform: Render.com
 URL: https://brainops-backend-prod.onrender.com
 Method: Docker Hub + Manual trigger
 Docker Repo: mwwoodworth/brainops-backend
-Deploy Hook: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM
+Deploy Hook: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}
 Version: v163.0.26
 Status: OPERATIONAL
 ```

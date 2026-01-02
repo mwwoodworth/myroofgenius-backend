@@ -5,6 +5,9 @@ Debug specific AI endpoint errors
 
 import requests
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 
@@ -43,7 +46,8 @@ for method, path, payload in endpoints:
                 error_data = resp.json()
                 if "detail" in error_data:
                     print(f"Error: {error_data['detail'][:500]}")
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to parse error JSON: {e}")
                 print(f"Error: {resp.text[:500]}")
         elif resp.status_code in [200, 201]:
             print("✅ SUCCESS")

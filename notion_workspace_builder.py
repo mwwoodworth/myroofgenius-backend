@@ -4,11 +4,20 @@ BrainOps AI OS - Notion Workspace Builder
 Builds complete management system in Matthew's Workspace HQ
 """
 
+import os
 import requests
 import json
 import time
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# Get Notion token from environment variable
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+if not NOTION_TOKEN:
+    raise RuntimeError("NOTION_TOKEN environment variable is required")
 
 class NotionWorkspaceBuilder:
     def __init__(self, token: str):
@@ -40,7 +49,8 @@ class NotionWorkspaceBuilder:
                 json={"archived": True}
             )
             return response.status_code == 200
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to archive page {page_id}: {e}")
             return False
     
     def create_page(self, parent_id: Optional[str], title: str, icon: str = "🎯") -> Dict:
@@ -115,7 +125,8 @@ class NotionWorkspaceBuilder:
                         print(f"   ✅ Archived: {title}")
                         deleted_count += 1
                         time.sleep(0.3)  # Rate limiting
-            except:
+            except Exception as e:
+                logger.warning(f"Error processing page: {e}")
                 continue
         
         print(f"   🗑️ Archived {deleted_count} old pages")
@@ -567,11 +578,11 @@ def main():
     print("  🚀 BRAINOPS AI OS - NOTION WORKSPACE BUILDER")
     print("="*60)
     print(f"Build Date: {datetime.now()}")
-    print(f"Integration Token: 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")
+    print(f"Integration Token: ***REDACTED***")
     print("="*60 + "\n")
-    
-    # Initialize builder with the new token
-    builder = NotionWorkspaceBuilder("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")
+
+    # Initialize builder with token from environment variable
+    builder = NotionWorkspaceBuilder(NOTION_TOKEN)
     
     try:
         # Clean old pages

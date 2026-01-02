@@ -313,7 +313,8 @@ class UltimateAISystem:
                         return result[0].get("generated_text", "")
                     return str(result)
 
-            except:
+            except Exception as e:
+                logger.warning(f"Error with HuggingFace model: {e}")
                 continue
 
         return None
@@ -361,7 +362,8 @@ class UltimateAISystem:
                 result = await task
                 if result:
                     responses[name] = result
-            except:
+            except Exception as e:
+                logger.warning(f"Error getting response from {name}: {e}")
                 continue
 
         # Synthesize if requested

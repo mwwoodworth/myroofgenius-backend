@@ -15,16 +15,9 @@ load_dotenv()
 
 def get_connection():
     database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        return psycopg2.connect(database_url)
-    else:
-        return psycopg2.connect(
-            host="aws-0-us-east-2.pooler.supabase.com",
-            database="postgres",
-            user="postgres.yomagoqdmxszqtdwuhab",
-            password="<DB_PASSWORD_REDACTED>",
-            port=5432
-        )
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable is required but not set")
+    return psycopg2.connect(database_url)
 
 def fix_final_columns():
     """Add final missing columns with proper syntax"""

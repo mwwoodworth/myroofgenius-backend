@@ -9,13 +9,16 @@ from langchain_core.messages import HumanMessage, AIMessage
 import asyncio
 import asyncpg
 import json
+import os
 from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Database connection
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Database connection - loaded from environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 class CustomerState(TypedDict):
     """State for customer journey workflow"""

@@ -3,19 +3,24 @@
 ABSOLUTE TRUTH TEST - No bullshit, just facts
 """
 
+import os
 import subprocess
 import requests
 import psycopg2
 import json
 import time
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 def run_cmd(cmd):
     """Run command and return output"""
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
         return result.stdout.strip()
-    except:
+    except Exception as e:
+        logger.error(f"Error running command: {e}")
         return "ERROR"
 
 def test_url(url):
@@ -23,7 +28,8 @@ def test_url(url):
     try:
         r = requests.get(url, timeout=3)
         return r.status_code
-    except:
+    except Exception as e:
+        logger.warning(f"Error testing URL {url}: {e}")
         return 0
 
 print("=" * 80)
@@ -110,9 +116,7 @@ print("\n5. DATABASE TEST:")
 print("-" * 40)
 
 try:
-    conn = psycopg2.connect(
-        "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
-    )
+    conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
     cur = conn.cursor()
     
     # Test queries

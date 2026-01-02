@@ -13,6 +13,7 @@ import docker
 import psycopg2
 import requests
 import subprocess
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -21,6 +22,8 @@ import threading
 import websocket
 from dataclasses import dataclass
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 class ServiceStatus(Enum):
     HEALTHY = "healthy"
@@ -74,9 +77,9 @@ class BrainOpsDevOpsSuite:
                 image="postgres:15-alpine",
                 ports={"5432": 5432},
                 environment={
-                    "POSTGRES_DB": "brainops",
-                    "POSTGRES_USER": "postgres",
-                    "POSTGRES_PASSWORD": "<DB_PASSWORD_REDACTED>"
+                    "POSTGRES_DB": os.getenv("POSTGRES_DB", "brainops"),
+                    "POSTGRES_USER": os.getenv("POSTGRES_USER", "postgres"),
+                    "POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD")
                 },
                 volumes=[
                     "brainops-postgres-data:/var/lib/postgresql/data",
@@ -111,11 +114,11 @@ class BrainOpsDevOpsSuite:
                 image="mwwoodworth/brainops-backend:latest",
                 ports={"8000": 8000},
                 environment={
-                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
-                    "REDIS_URL": "redis://brainops-redis:6379",
-                    "ENV": "development",
-                    "SYNC_WITH_PROD": "true",
-                    "NOTION_TOKEN": "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"
+                    "DATABASE_URL": os.getenv("DATABASE_URL"),
+                    "REDIS_URL": os.getenv("REDIS_URL", "redis://brainops-redis:6379"),
+                    "ENV": os.getenv("ENV", "development"),
+                    "SYNC_WITH_PROD": os.getenv("SYNC_WITH_PROD", "true"),
+                    "NOTION_TOKEN": os.getenv("NOTION_TOKEN")
                 },
                 volumes=[
                     f"{Path.cwd()}:/app",
@@ -136,7 +139,7 @@ class BrainOpsDevOpsSuite:
                 image="grafana/grafana:latest",
                 ports={"3000": 3001},
                 environment={
-                    "GF_SECURITY_ADMIN_PASSWORD": "BrainOps2025",
+                    "GF_SECURITY_ADMIN_PASSWORD": os.getenv("GRAFANA_ADMIN_PASSWORD"),
                     "GF_INSTALL_PLUGINS": "redis-datasource,postgres-datasource"
                 },
                 volumes=[
@@ -193,9 +196,9 @@ class BrainOpsDevOpsSuite:
                 image="python:3.11-slim",
                 ports={},
                 environment={
-                    "NOTION_TOKEN": "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",
-                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
-                    "SYNC_INTERVAL": "300"  # 5 minutes
+                    "NOTION_TOKEN": os.getenv("NOTION_TOKEN"),
+                    "DATABASE_URL": os.getenv("DATABASE_URL"),
+                    "SYNC_INTERVAL": os.getenv("SYNC_INTERVAL", "300")  # 5 minutes
                 },
                 volumes=[
                     f"{Path.cwd()}/notion_sync:/app",
@@ -216,11 +219,11 @@ class BrainOpsDevOpsSuite:
                 image="python:3.11-slim",
                 ports={"8001": 8001},
                 environment={
-                    "DATABASE_URL": "postgresql://postgres:<DB_PASSWORD_REDACTED>@brainops-postgres:5432/brainops",
-                    "REDIS_URL": "redis://brainops-redis:6379",
-                    "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-                    "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-                    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "")
+                    "DATABASE_URL": os.getenv("DATABASE_URL"),
+                    "REDIS_URL": os.getenv("REDIS_URL", "redis://brainops-redis:6379"),
+                    "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+                    "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+                    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY")
                 },
                 volumes=[
                     f"{Path.cwd()}/ai_agents:/app",
@@ -256,13 +259,18 @@ class BrainOpsDevOpsSuite:
         }
 
     def _get_prod_db_config(self) -> Dict[str, str]:
-        """Get production database configuration"""
+        """Get production database configuration from environment variables"""
+        host = os.getenv("PROD_DB_HOST")
+        user = os.getenv("PROD_DB_USER")
+        password = os.getenv("PROD_DB_PASSWORD")
+        if not all([host, user, password]):
+            raise RuntimeError("Production database credentials (PROD_DB_HOST, PROD_DB_USER, PROD_DB_PASSWORD) are required but not set")
         return {
-            "host": "aws-0-us-east-2.pooler.supabase.com",
-            "database": "postgres",
-            "user": "postgres.yomagoqdmxszqtdwuhab",
-            "password": "<DB_PASSWORD_REDACTED>",
-            "port": "6543"
+            "host": host,
+            "database": os.getenv("PROD_DB_NAME", "postgres"),
+            "user": user,
+            "password": password,
+            "port": os.getenv("PROD_DB_PORT", "6543")
         }
 
     async def initialize_environment(self):
@@ -398,10 +406,10 @@ class BrainOpsDevOpsSuite:
                     "name": "PostgreSQL",
                     "type": "postgres",
                     "url": "brainops-postgres:5432",
-                    "database": "brainops",
-                    "user": "postgres",
+                    "database": os.getenv("POSTGRES_DB", "brainops"),
+                    "user": os.getenv("POSTGRES_USER", "postgres"),
                     "secureJsonData": {
-                        "password": "<DB_PASSWORD_REDACTED>"
+                        "password": os.getenv("POSTGRES_PASSWORD", "")
                     }
                 }
             ]
@@ -516,9 +524,9 @@ class BrainOpsDevOpsSuite:
             # Connect to local
             local_conn = psycopg2.connect(
                 host="localhost",
-                database="brainops",
-                user="postgres",
-                password="<DB_PASSWORD_REDACTED>",
+                database=os.getenv("POSTGRES_DB", "brainops"),
+                user=os.getenv("POSTGRES_USER", "postgres"),
+                password=os.getenv("POSTGRES_PASSWORD"),
                 port=5432
             )
 
@@ -601,7 +609,8 @@ class BrainOpsDevOpsSuite:
                     "status": container.status,
                     "health": container.health if hasattr(container, 'health') else "unknown"
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to get status for {name}: {e}")
                 status["services"][name] = {
                     "status": "not_found",
                     "health": "unknown"
@@ -623,8 +632,8 @@ class BrainOpsDevOpsSuite:
             try:
                 container.stop()
                 print(f"  Stopped {name}")
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to stop container {name}: {e}")
 
         print("✅ Environment shutdown complete")
 

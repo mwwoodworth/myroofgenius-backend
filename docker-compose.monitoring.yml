@@ -20,7 +20,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=BrainOps2025!
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-BrainOps2025!}
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - grafana-data:/var/lib/grafana
@@ -39,7 +39,7 @@ services:
     image: prometheuscommunity/postgres-exporter
     container_name: brainops-pg-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@host.docker.internal:6543/postgres?sslmode=require"
+      DATA_SOURCE_NAME: "${DATABASE_URL}"
     ports:
       - "9187:9187"
     restart: unless-stopped

@@ -16,7 +16,7 @@ from cryptography.fernet import Fernet
 logger = logging.getLogger(__name__)
 
 # Initialize Supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yomagoqdmxszqtdwuhab.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -270,7 +270,8 @@ class EnvironmentManager:
                 if var["is_sensitive"] and decrypt:
                     try:
                         value = self.cipher.decrypt(value.encode()).decode()
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Failed to decrypt sensitive value for {key}: {e}")
                         pass  # Return encrypted if decryption fails
                 
                 return value

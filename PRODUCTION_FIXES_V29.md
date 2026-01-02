@@ -66,7 +66,7 @@ ADD COLUMN IF NOT EXISTS unit_of_measure VARCHAR(50) DEFAULT 'unit';
 ### Backend (Render)
 - **URL**: https://brainops-backend-prod.onrender.com
 - **Docker Image**: mwwoodworth/brainops-backend:v29.1
-- **Deploy Hook**: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM
+- **Deploy Hook**: https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}
 - **Connection Pool**: Optimized for 50 base + 100 overflow connections
 
 ### Frontend (Vercel)
@@ -75,7 +75,7 @@ ADD COLUMN IF NOT EXISTS unit_of_measure VARCHAR(50) DEFAULT 'unit';
 - **Mobile Optimizations**: MobileNav component active
 
 ### Database (Supabase)
-- **Connection**: postgresql://postgres:<DB_PASSWORD_REDACTED>@db.yomagoqdmxszqtdwuhab.supabase.co:5432/postgres
+- **Connection**: ${DATABASE_URL}
 - **Schema Updates**: All migrations applied
 - **Missing Columns**: Fixed via SQL migrations
 

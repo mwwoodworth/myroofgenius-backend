@@ -14,6 +14,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import hashlib
 import uuid
+import os
 
 import numpy as np
 import pandas as pd
@@ -70,7 +71,10 @@ class VectorStore:
     def _init_postgres(self):
         """Initialize PostgreSQL with pgvector"""
         try:
-            engine = create_engine('postgresql://postgres:<DB_PASSWORD_REDACTED>@localhost:5432/ai_memory')
+            pg_url = os.getenv("PGVECTOR_DATABASE_URL")
+            if not pg_url:
+                raise RuntimeError("PGVECTOR_DATABASE_URL environment variable is required for PostgreSQL")
+            engine = create_engine(pg_url)
             with engine.connect() as conn:
                 # Create database if it doesn't exist
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

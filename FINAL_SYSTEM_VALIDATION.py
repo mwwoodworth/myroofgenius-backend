@@ -3,10 +3,14 @@
 FINAL SYSTEM VALIDATION - Complete truth about what's operational
 """
 
+import os
 import requests
 import subprocess
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 print("=" * 80)
 print("🏁 FINAL SYSTEM VALIDATION - COMPLETE TRUTH")
@@ -24,7 +28,8 @@ def test_service(name, url):
     try:
         r = requests.get(url, timeout=5)
         return r.status_code in [200, 201]
-    except:
+    except Exception as e:
+        logger.warning(f"Error testing service {name} at {url}: {e}")
         return False
 
 # 1. LOCAL SERVICES
@@ -105,7 +110,7 @@ report["systems"]["frontends"] = f"{working}/{len(frontends)}"
 print("\n4️⃣ DATABASE STATUS:")
 try:
     import psycopg2
-    conn = psycopg2.connect("postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require")
+    conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
     cur = conn.cursor()
     
     # Count real data

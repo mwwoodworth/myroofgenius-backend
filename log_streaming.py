@@ -185,7 +185,8 @@ class LogStreamingService:
         for subscriber in self.subscribers:
             try:
                 await subscriber.send_text(message)
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to send to subscriber: {e}")
                 dead_subscribers.add(subscriber)
         
         # Clean up dead connections

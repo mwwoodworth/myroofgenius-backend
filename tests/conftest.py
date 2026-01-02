@@ -20,13 +20,22 @@ os.environ.setdefault("FAST_TEST_MODE", "1")
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Test database configuration
+# Validate required test database configuration
+TEST_DB_HOST = os.getenv("DB_HOST")
+TEST_DB_NAME = os.getenv("DB_NAME")
+TEST_DB_USER = os.getenv("DB_USER")
+TEST_DB_PASSWORD = os.getenv("DB_PASSWORD")
+TEST_DB_PORT = os.getenv("DB_PORT")
+
+if not all([TEST_DB_HOST, TEST_DB_USER, TEST_DB_PASSWORD]):
+    raise RuntimeError("DB_HOST, DB_USER, and DB_PASSWORD environment variables are required for tests")
+
 TEST_DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
-    "database": os.getenv("DB_NAME", "postgres"),
-    "user": os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-    "password": os.getenv("DB_PASSWORD", ""),
-    "port": int(os.getenv("DB_PORT", "6543"))
+    "host": TEST_DB_HOST,
+    "database": TEST_DB_NAME or "postgres",
+    "user": TEST_DB_USER,
+    "password": TEST_DB_PASSWORD,
+    "port": int(TEST_DB_PORT) if TEST_DB_PORT else 6543
 }
 
 @pytest.fixture(scope="session")

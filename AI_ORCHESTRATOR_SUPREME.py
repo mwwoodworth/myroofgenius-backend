@@ -40,8 +40,7 @@ class AIOrchestrator:
         return {
             'backend_url': 'https://brainops-backend-prod.onrender.com',
             'frontend_url': 'https://www.myroofgenius.com',
-            'database_url': os.getenv('DATABASE_URL', 
-                'postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require'),
+            'database_url': os.getenv('DATABASE_URL'),
             'supabase_url': 'https://yomagoqdmxszqtdwuhab.supabase.co',
             'supabase_key': os.getenv('SUPABASE_SERVICE_ROLE_KEY'),
             'openai_key': os.getenv('OPENAI_API_KEY'),
@@ -192,7 +191,8 @@ class AIOrchestrator:
         result = await self.execute_bash("top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1")
         try:
             return float(result.get('stdout', '0').strip())
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to get CPU usage: {e}")
             return 0.0
     
     async def get_memory_usage(self) -> float:
@@ -200,7 +200,8 @@ class AIOrchestrator:
         result = await self.execute_bash("free | grep Mem | awk '{print ($3/$2) * 100.0}'")
         try:
             return float(result.get('stdout', '0').strip())
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to get memory usage: {e}")
             return 0.0
     
     async def get_disk_usage(self) -> float:
@@ -208,7 +209,8 @@ class AIOrchestrator:
         result = await self.execute_bash("df -h / | tail -1 | awk '{print $5}' | sed 's/%//'")
         try:
             return float(result.get('stdout', '0').strip())
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to get disk usage: {e}")
             return 0.0
     
     async def automate_task(self, task_type: str, params: Dict) -> Dict:
@@ -479,9 +481,10 @@ class AIOrchestrator:
         # Log the report
         logger.info(f"Daily Report: {json.dumps(report, indent=2)}")
         
-        # Store in database
+        # Store in database - use parameterized query to prevent SQL injection
         await self.query_database(
-            f"INSERT INTO system_reports (report_data, created_at) VALUES ('{json.dumps(report)}', NOW())"
+            "INSERT INTO system_reports (report_data, created_at) VALUES ($1::jsonb, NOW())",
+            json.dumps(report)
         )
         
         # Could also send via email, Slack, etc.

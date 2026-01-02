@@ -24,14 +24,21 @@ class MasterCredentialsManager:
         self.warnings = []
 
     def connect_db(self):
-        """Connect to production database"""
+        """Connect to production database using environment variables"""
         try:
+            db_host = os.getenv("PROD_DB_HOST")
+            db_user = os.getenv("PROD_DB_USER")
+            db_password = os.getenv("PROD_DB_PASSWORD")
+
+            if not all([db_host, db_user, db_password]):
+                raise RuntimeError("Production database credentials (PROD_DB_HOST, PROD_DB_USER, PROD_DB_PASSWORD) are required but not set")
+
             self.db_conn = psycopg2.connect(
-                host="aws-0-us-east-2.pooler.supabase.com",
-                port="6543",
-                database="postgres",
-                user="postgres.yomagoqdmxszqtdwuhab",
-                password="<DB_PASSWORD_REDACTED>",
+                host=db_host,
+                port=os.getenv("PROD_DB_PORT", "6543"),
+                database=os.getenv("PROD_DB_NAME", "postgres"),
+                user=db_user,
+                password=db_password,
                 sslmode="require"
             )
             return True
@@ -368,14 +375,18 @@ Generated: {datetime.now()}
             self.env_vars["VERSION"] = "v30.4.0"
             fixes_applied.append("Updated APP_VERSION to v30.4.0")
 
-        # Add missing critical variables with correct values
+        # Add missing critical variables - values must be set via environment, not hardcoded
+        critical_vars = ["NOTION_TOKEN", "DATABASE_URL", "SUPABASE_DB_PASSWORD", "JWT_SECRET_KEY"]
+        missing_critical = [var for var in critical_vars if var not in self.env_vars or not self.env_vars.get(var)]
+        if missing_critical:
+            self.warnings.append(f"Missing critical environment variables: {', '.join(missing_critical)}")
+
+        # Environment should already be set
         critical_fixes = {
-            "NOTION_TOKEN": self.notion_token,
-            "DATABASE_URL": "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres",
-            "SUPABASE_DB_PASSWORD": "<DB_PASSWORD_REDACTED>",
-            "JWT_SECRET_KEY": "brainops-jwt-secret-2025-production",
             "ENVIRONMENT": "production"
         }
+        if self.notion_token:
+            critical_fixes["NOTION_TOKEN"] = self.notion_token
 
         for key, value in critical_fixes.items():
             if key not in self.env_vars or "YOUR_" in self.env_vars.get(key, ""):

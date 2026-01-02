@@ -219,16 +219,18 @@ class MonitoringSystem:
                 pool_free = self.pg_pool.get_idle_size()
                 
                 self.database_connections.set(pool_size - pool_free)
-                
+
                 return result == 1
-        except:
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
             return False
-    
+
     async def check_redis_health(self) -> bool:
         """Check Redis health"""
         try:
             return self.redis.ping()
-        except:
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
             return False
     
     async def check_ai_agents_health(self) -> bool:
@@ -241,7 +243,8 @@ class MonitoringSystem:
                 active_agents = sum(1 for a in status.values() if a.get("active"))
                 return active_agents > 0
             return False
-        except:
+        except Exception as e:
+            logger.error(f"AI agents health check failed: {e}")
             return False
     
     async def check_payment_health(self) -> bool:
@@ -253,9 +256,10 @@ class MonitoringSystem:
             # Make a simple API call to check connectivity
             stripe.Balance.retrieve()
             return True
-        except:
+        except Exception as e:
+            logger.error(f"Payment health check failed: {e}")
             return False
-    
+
     async def check_external_apis(self) -> bool:
         """Check external API health"""
         try:
@@ -270,9 +274,10 @@ class MonitoringSystem:
                 ) as response:
                     if response.status != 200:
                         apis_healthy = False
-            
+
             return apis_healthy
-        except:
+        except Exception as e:
+            logger.error(f"External API health check failed: {e}")
             return False
     
     async def collect_current_metrics(self) -> Dict[str, Any]:

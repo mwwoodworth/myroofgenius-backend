@@ -4,6 +4,7 @@ Fix Remaining Database Tables
 Creates the tables that had errors in the previous run.
 """
 
+import os
 import asyncio
 import asyncpg
 import logging
@@ -17,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 class RemainingTablesFixer:
     def __init__(self, database_url: str):

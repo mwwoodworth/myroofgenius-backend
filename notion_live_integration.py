@@ -5,6 +5,7 @@ Syncs all systems, AI agents, tasks, and memory with Notion
 """
 
 import psycopg2
+import logging
 from psycopg2.extras import RealDictCursor
 import requests
 import json
@@ -12,9 +13,28 @@ import time
 from datetime import datetime
 import os
 
+logger = logging.getLogger(__name__)
+
+# Validate required environment variables
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+if not NOTION_TOKEN:
+    raise RuntimeError("NOTION_TOKEN environment variable is required")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PORT = os.getenv("DB_PORT")
+
+# Require either DATABASE_URL or individual DB components
+if not DATABASE_URL and not all([DB_HOST, DB_USER, DB_PASSWORD]):
+    raise RuntimeError("DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD environment variables are required")
+
+
 class BrainOpsNotionIntegration:
     def __init__(self):
-        self.notion_token = os.environ.get("NOTION_TOKEN")
+        self.notion_token = NOTION_TOKEN
         self.headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",
@@ -22,13 +42,13 @@ class BrainOpsNotionIntegration:
         }
         self.base_url = "https://api.notion.com/v1"
 
-        # Database configuration
+        # Database configuration from environment variables
         self.db_config = {
-            "host": "aws-0-us-east-2.pooler.supabase.com",
-            "database": "postgres",
-            "user": "postgres.yomagoqdmxszqtdwuhab",
-            "password": "<DB_PASSWORD_REDACTED>",
-            "port": 5432
+            "host": DB_HOST,
+            "database": DB_NAME or "postgres",
+            "user": DB_USER,
+            "password": DB_PASSWORD,
+            "port": int(DB_PORT) if DB_PORT else 5432
         }
 
         # Notion database IDs
@@ -480,8 +500,8 @@ class BrainOpsNotionIntegration:
                     stats['jobs'] = cursor.fetchone()[0]
                     cursor.execute("SELECT COUNT(*) FROM ai_agents")
                     stats['ai_agents'] = cursor.fetchone()[0]
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error getting DB stats: {e}")
                 finally:
                     cursor.close()
                     conn.close()

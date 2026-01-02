@@ -54,7 +54,7 @@ npm run email:campaign
 ### Task 3: Monitor and Complete v4.33 Deployment
 ```bash
 # Check deployment status every 5 minutes
-curl -s -H "Authorization: Bearer rnd_gEWiB96SdsrL4dPqPRKvLCIfYpZx" \
+curl -s -H "Authorization: Bearer ${RENDER_API_KEY}" \
   "https://api.render.com/v1/services/srv-d1tfs4idbo4c73di6k00/deploys/dep-d2glesv5r7bs73f6pi6g" \
   | python3 -m json.tool | grep status
 ```

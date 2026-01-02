@@ -6,8 +6,11 @@ Testing EVERYTHING on live production system
 
 import requests
 import json
+import logging
 from datetime import datetime
 import time
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://brainops-backend-prod.onrender.com"
 
@@ -30,7 +33,8 @@ def test_with_details(name, method, url, payload=None, headers=None):
         try:
             data = resp.json()
             print(f"  Response: {json.dumps(data, indent=2)[:200]}")
-        except:
+        except Exception as e:
+            logger.warning(f"Could not parse JSON response: {e}")
             print(f"  Response: {resp.text[:200]}")
         
         if resp.status_code in [200, 201]:
@@ -214,8 +218,8 @@ def main():
                 print(f"  Jobs: {data['stats']['jobs']}")
                 print(f"  AI Agents: {data['stats']['ai_agents']}")
                 results["working"].append("Database Connection")
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error parsing health data: {e}")
     
     # FINAL REPORT
     print("\n" + "=" * 80)

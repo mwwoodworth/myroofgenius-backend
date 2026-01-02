@@ -73,7 +73,7 @@
 
 ● Perfect! Now let me trigger deployment and update our todo list:
 
-● Bash(curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=t2qc-8j6xrM")
+● Bash(curl -X POST "https://api.render.com/deploy/srv-d1tfs4idbo4c73di6k00?key=${RENDER_DEPLOY_KEY}")
   ⎿  {                                   
        "deploy": {
          "id": "dep-d2f2riripnbc73btjbgg"

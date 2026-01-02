@@ -7,9 +7,12 @@ Tests every aspect to ensure 100% operational status
 import requests
 import json
 import time
+import logging
 from datetime import datetime
 from typing import Dict, List, Tuple
 import sys
+
+logger = logging.getLogger(__name__)
 
 class SystemAuditor:
     def __init__(self):
@@ -193,7 +196,8 @@ class SystemAuditor:
                         self.log_pass(f"✓ {endpoint}: Available")
                 else:
                     self.log_fail(f"✗ {endpoint}: Status {response.status_code}")
-            except:
+            except Exception as e:
+                logger.warning(f"Error testing endpoint {endpoint}: {e}")
                 self.log_warn(f"⚠ {endpoint}: Not configured")
         print()
         
@@ -265,7 +269,8 @@ class SystemAuditor:
                     self.log_pass("✓ LTV > AOV: Correct relationship")
                 else:
                     self.log_warn("⚠ LTV should be greater than AOV")
-        except:
+        except Exception as e:
+            logger.error(f"Error verifying revenue metrics: {e}")
             self.log_fail("✗ Cannot verify revenue metrics")
         print()
         
@@ -292,7 +297,8 @@ class SystemAuditor:
                 self.log_pass("✓ Database persistence: Ready (demo mode)")
             else:
                 self.log_warn("⚠ Data submission: Check database connection")
-        except:
+        except Exception as e:
+            logger.error(f"Error testing data persistence: {e}")
             self.log_fail("✗ Data persistence: Failed")
         print()
         

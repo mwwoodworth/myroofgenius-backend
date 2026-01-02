@@ -8,14 +8,17 @@ import os
 import json
 import psycopg2
 import requests
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 print("=" * 80)
 print("🧠 ACTIVATING ALL AI SYSTEMS - MAKING EVERYTHING REAL")
 print("=" * 80)
 
 # Database connection
-DB_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL = os.environ.get("DATABASE_URL")
 
 # 1. Activate LangGraph Workflows
 print("\n1️⃣ ACTIVATING LANGGRAPH WORKFLOWS:")
@@ -318,7 +321,8 @@ for port in range(6001, 6007):
             test_results.append(f"✅ Agent on port {port}")
         else:
             test_results.append(f"⚠️ Agent on port {port} - Status {response.status_code}")
-    except:
+    except Exception as e:
+        logger.warning(f"Agent on port {port} not responding: {e}")
         test_results.append(f"❌ Agent on port {port} - Not responding")
 
 for result in test_results:

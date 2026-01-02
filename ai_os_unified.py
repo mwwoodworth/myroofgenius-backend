@@ -39,7 +39,8 @@ async def get_status(db: Session = Depends(get_db)):
         # Try to get agent count
         try:
             agent_count = db.execute(text("SELECT COUNT(*) FROM ai_agents WHERE status = 'active'")).scalar()
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to get agent count: {e}")
             agent_count = 29  # Default
         
         return {

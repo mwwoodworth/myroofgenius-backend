@@ -5,29 +5,47 @@ Direct Notion Database Sync - Populates existing databases
 
 import os
 import psycopg2
+import logging
 from psycopg2.extras import RealDictCursor
 import requests
 import json
 import time
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
+# Validate required environment variables
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+if not NOTION_TOKEN:
+    raise RuntimeError("NOTION_TOKEN environment variable is required")
+
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PORT = os.getenv("DB_PORT")
+
+if not all([DB_HOST, DB_USER, DB_PASSWORD]):
+    raise RuntimeError("DB_HOST, DB_USER, and DB_PASSWORD environment variables are required")
+
+
 class DirectNotionSync:
     def __init__(self):
-        self.notion_token = os.getenv("NOTION_TOKEN", "")
+        self.notion_token = NOTION_TOKEN
         self.headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",
             "Notion-Version": "2022-06-28"
         }
         self.base_url = "https://api.notion.com/v1"
-        
-        # Database configuration
+
+        # Database configuration from environment variables
         self.db_config = {
-            "host": os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
-            "database": os.getenv("DB_NAME", "postgres"),
-            "user": os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-            "password": os.getenv("DB_PASSWORD", ""),
-            "port": int(os.getenv("DB_PORT", "5432"))
+            "host": DB_HOST,
+            "database": DB_NAME or "postgres",
+            "user": DB_USER,
+            "password": DB_PASSWORD,
+            "port": int(DB_PORT) if DB_PORT else 5432
         }
         
         # Your database IDs from the URLs
@@ -256,7 +274,8 @@ class DirectNotionSync:
                     cursor.execute(f"SELECT COUNT(*) as count FROM {table}")
                     result = cursor.fetchone()
                     stats[table] = result['count'] if result else 0
-                except:
+                except Exception as e:
+                    logger.warning(f"Error querying {table}: {e}")
                     stats[table] = 0
                     
         finally:

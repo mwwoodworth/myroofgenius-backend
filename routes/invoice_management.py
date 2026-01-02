@@ -769,8 +769,8 @@ async def get_overdue_invoices(
         params = {"tenant_id": tenant_id}
 
         if days_overdue:
-            query += " AND i.due_date <= CURRENT_DATE - INTERVAL ':days days'"
-            params["days"] = days_overdue
+            query += " AND i.due_date <= CURRENT_DATE - :days_interval::interval"
+            params["days_interval"] = f"{days_overdue} days"
 
         query += " ORDER BY i.due_date"
 

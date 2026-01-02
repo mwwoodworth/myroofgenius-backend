@@ -9,9 +9,12 @@ import json
 import psycopg2
 import requests
 import subprocess
+import logging
 from datetime import datetime
 from pathlib import Path
 import docker
+
+logger = logging.getLogger(__name__)
 
 class DevOpsStatusCheck:
     """Real-time status of all BrainOps systems"""
@@ -85,7 +88,8 @@ class DevOpsStatusCheck:
                         print(f"  ✅ {endpoint}")
                     else:
                         print(f"  ⚠️ {endpoint} ({resp.status_code})")
-                except:
+                except Exception as e:
+                    logger.warning(f"Error checking endpoint {endpoint}: {e}")
                     print(f"  ❌ {endpoint}")
 
             self.results["api_endpoints"] = f"{working}/{len(endpoints)} working"
@@ -103,11 +107,11 @@ class DevOpsStatusCheck:
 
         try:
             conn = psycopg2.connect(
-                host=os.getenv("DB_HOST", "aws-0-us-east-2.pooler.supabase.com"),
+                host=os.getenv("DB_HOST"),
                 port=os.getenv("DB_PORT", "6543"),
                 database=os.getenv("DB_NAME", "postgres"),
-                user=os.getenv("DB_USER", "postgres.yomagoqdmxszqtdwuhab"),
-                password=os.getenv("DB_PASSWORD", ""),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
                 sslmode="require"
             )
             cur = conn.cursor()
@@ -220,7 +224,8 @@ class DevOpsStatusCheck:
                     branch = branch_result.stdout.strip()
                     print(f"     Branch: {branch}")
 
-                except:
+                except Exception as e:
+                    logger.warning(f"Git error for {name}: {e}")
                     print(f"  ❌ {name}: Git error")
             else:
                 print(f"  ❌ {name}: Not found")

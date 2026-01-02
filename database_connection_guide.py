@@ -6,10 +6,13 @@ Provides connection examples and sample queries for the AI agent database infras
 
 import asyncio
 import asyncpg
+import os
 from datetime import datetime, timedelta
 
-# Database connection string (keep secure in production)
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Validate required environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 class DatabaseGuide:
     """Guide for using the AI agent database infrastructure"""
@@ -19,16 +22,12 @@ class DatabaseGuide:
         print("="*70)
         print("🔗 DATABASE CONNECTION INFORMATION")
         print("="*70)
-        print(f"Database URL: {DATABASE_URL}")
+        print(f"Database URL: ***REDACTED*** (loaded from DATABASE_URL env var)")
         print()
-        print("Connection Components:")
-        print("  • Host: aws-0-us-east-2.pooler.supabase.com")
-        print("  • Port: 5432")
-        print("  • Database: postgres")
-        print("  • Username: postgres.yomagoqdmxszqtdwuhab")
-        print("  • Password: <DB_PASSWORD_REDACTED>")
+        print("Connection Components (from environment variables):")
+        print("  • DATABASE_URL: Required environment variable")
         print()
-        print("⚠️  Security Note: Store connection details in environment variables in production")
+        print("⚠️  Security Note: Connection details are loaded from environment variables")
 
     def print_table_reference(self):
         """Print complete table reference guide"""
@@ -169,12 +168,16 @@ class DatabaseGuide:
         """Print asyncpg usage examples"""
         print("\n💻 ASYNCPG USAGE EXAMPLES")
         print("="*70)
-        
+
         example_code = '''
 import asyncio
 import asyncpg
+import os
 
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+# Load DATABASE_URL from environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 async def get_engaged_users():
     """Get highly engaged users"""

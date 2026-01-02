@@ -11,13 +11,19 @@ import time
 from datetime import datetime
 import uuid
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Direct database connection
-DATABASE_URL = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-BACKEND_URL = "https://brainops-backend-prod.onrender.com"
+# Validate required environment variables
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
+
+BACKEND_URL = os.getenv("BACKEND_URL")
+if not BACKEND_URL:
+    raise RuntimeError("BACKEND_URL environment variable is required")
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)

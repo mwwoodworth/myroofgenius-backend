@@ -3,6 +3,7 @@ Complete API Endpoints for BrainOps AI OS
 Adds all missing endpoints for 100% functionality
 """
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -11,6 +12,8 @@ import uuid
 import json
 import asyncio
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 # Import AI capabilities
 try:
@@ -76,8 +79,8 @@ async def capture_lead(lead: LeadCapture, background_tasks: BackgroundTasks):
                         "ai_analysis": ai_response["response"],
                         "scored_by": ai_response.get("provider", "unknown")
                     }
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error parsing AI response for lead scoring: {e}")
 
         # Store in database using direct pool connection
         from database import get_db_connection
