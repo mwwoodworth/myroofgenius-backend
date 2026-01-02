@@ -14,11 +14,10 @@ from uuid import uuid4
 import numpy as np
 from fastapi import HTTPException
 
-# Database connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-)
+# Database connection - MUST use environment variable, no fallback
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 class BrainOpsCNS:
     """Central Nervous System for persistent memory and task management"""

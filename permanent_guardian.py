@@ -27,8 +27,10 @@ class BrainOpsGuardian:
     """The eternal guardian of the BrainOps AI OS"""
     
     def __init__(self):
-        self.base_url = "https://brainops-backend-prod.onrender.com"
-        self.db_url = "postgresql://postgres.yomagoqdmxszqtdwuhab:<DB_PASSWORD_REDACTED>@aws-0-us-east-2.pooler.supabase.com:6543/postgres?sslmode=require"
+        self.base_url = os.getenv("BACKEND_URL", "https://brainops-backend-prod.onrender.com")
+        self.db_url = os.getenv("DATABASE_URL")
+        if not self.db_url:
+            raise RuntimeError("DATABASE_URL environment variable is required")
         self.critical_endpoints = [
             "/api/v1/health",
             "/api/v1/auth/login",
