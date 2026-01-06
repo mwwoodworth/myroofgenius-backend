@@ -26,3 +26,4 @@ deployment_scripts/revenue_api.py
 venv/
 .venv/
 CLAUDE.md
+node_modules/
