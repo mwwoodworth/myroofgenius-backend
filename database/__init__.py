@@ -6,10 +6,13 @@ Most new code should use async get_pool(). Legacy SQLAlchemy is for compatibilit
 """
 
 import os
+import logging
 from typing import Optional, Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 
 from .async_connection import get_pool
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # DATABASE_URL - Needed by multiple routes
@@ -141,6 +144,67 @@ async def get_db():
 
 
 # =============================================================================
+# Tenant-aware Database class (for RLS enforcement)
+# =============================================================================
+class Database:
+    """Database wrapper with tenant context for RLS enforcement."""
+
+    def __init__(self, pool, tenant_id: Optional[str] = None, user_id: Optional[str] = None):
+        self.pool = pool
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+
+    async def _set_context(self, conn):
+        """Set tenant context on connection for RLS enforcement."""
+        if self.tenant_id:
+            await conn.execute("SELECT set_config('app.current_tenant_id', $1, false)", self.tenant_id)
+        if self.user_id:
+            await conn.execute("SELECT set_config('app.current_user_id', $1, false)", self.user_id)
+
+    async def fetch_one(self, query: str, *args):
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await self._set_context(conn)
+            return await conn.fetchrow(query, *args)
+
+    async def fetch_all(self, query: str, *args):
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await self._set_context(conn)
+            return await conn.fetch(query, *args)
+
+    async def execute(self, query: str, *args):
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await self._set_context(conn)
+            return await conn.execute(query, *args)
+
+
+# =============================================================================
+# Tenant-aware FastAPI dependency
+# =============================================================================
+async def get_tenant_db(request):
+    """
+    FastAPI dependency that provides tenant-isolated database access.
+
+    Usage in routes:
+        @router.get("/items")
+        async def get_items(db: Database = Depends(get_tenant_db)):
+            return await db.fetch_all("SELECT * FROM items")  # RLS enforced
+    """
+    pool = await get_pool()
+
+    # Extract tenant_id and user_id from request state (set by auth middleware)
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
+
+    if not tenant_id:
+        logger.warning(f"No tenant_id in request to {request.url.path} - RLS may not filter correctly")
+
+    return Database(pool, tenant_id=tenant_id, user_id=user_id)
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 __all__ = [
@@ -148,6 +212,8 @@ __all__ = [
     "get_db",
     "get_db_connection",
     "get_db_session",
+    "get_tenant_db",
+    "Database",
     "DATABASE_URL",
     "engine",
     "Session",
