@@ -5,6 +5,8 @@ Unified analytics API for all data needs (no mock/sample responses).
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import re
@@ -15,7 +17,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from core.supabase_auth import get_authenticated_user
@@ -177,7 +179,7 @@ async def execute_analytics_query(
     elif request.query_type == "timeseries":
         result = await execute_timeseries(request, conn, tenant_id)
     elif request.query_type == "funnel":
-        raise HTTPException(status_code=501, detail="Funnel analysis is not implemented")
+        result = await execute_funnel(request, conn, tenant_id)
     else:
         raise HTTPException(status_code=400, detail="Unsupported query_type")
 
@@ -294,7 +296,48 @@ async def export_data(
     tenant_id = current_user.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Tenant assignment required")
-    raise HTTPException(status_code=501, detail="Data export is not implemented on this server")
+    format = (format or "csv").lower()
+    rows: List[Dict[str, Any]]
+
+    if query:
+        try:
+            payload = json.loads(query)
+            request = QueryRequest(**payload)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid query payload: {exc}") from exc
+
+        if request.query_type == "aggregate":
+            rows = await execute_aggregate(request, conn, tenant_id)
+        elif request.query_type == "timeseries":
+            rows = await execute_timeseries(request, conn, tenant_id)
+        elif request.query_type == "funnel":
+            rows = await execute_funnel(request, conn, tenant_id)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported query_type for export")
+    else:
+        if not dataset:
+            raise HTTPException(status_code=400, detail="dataset is required for export")
+        table = _validate_identifier(dataset, "dataset")
+        columns = await _get_table_columns(conn, table)
+        where_sql, params = _build_where_clause({}, columns, {}, tenant_id)
+        sql = f"SELECT {', '.join(columns)} FROM {table}{where_sql} LIMIT ${len(params) + 1}"
+        params.append(10000)
+        records = await conn.fetch(sql, *params)
+        rows = [_normalize_row(row) for row in records]
+
+    if format == "json":
+        return {"rows": rows, "row_count": len(rows)}
+    if format != "csv":
+        raise HTTPException(status_code=400, detail="Unsupported export format")
+
+    if not rows:
+        return Response(content="", media_type="text/csv")
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(content=output.getvalue(), media_type="text/csv")
 
 
 @router.get("/insights/automated")
@@ -472,3 +515,29 @@ async def execute_timeseries(request: QueryRequest, conn: asyncpg.Connection, te
             }
         )
     return series
+
+
+async def execute_funnel(request: QueryRequest, conn: asyncpg.Connection, tenant_id: str) -> List[Dict[str, Any]]:
+    table = _validate_identifier(request.dataset, "dataset")
+    columns = await _get_table_columns(conn, table)
+    if not request.group_by:
+        raise HTTPException(status_code=400, detail="Funnel requires group_by for stage column")
+
+    stage_column = _validate_identifier(request.group_by[0], "group_by")
+    if stage_column not in columns:
+        raise HTTPException(status_code=400, detail=f"Unknown funnel stage column: {stage_column}")
+
+    where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
+    sql = (
+        f"""
+        SELECT {stage_column} AS stage, COUNT(*) AS count
+        FROM {table}{where_sql}
+        GROUP BY {stage_column}
+        ORDER BY {stage_column}
+        LIMIT ${len(params) + 1}
+        """.strip()
+    )
+    params.append(int(request.limit or 1000))
+
+    rows = await conn.fetch(sql, *params)
+    return [{"stage": row["stage"], "count": int(row["count"])} for row in rows]

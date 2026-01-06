@@ -14,11 +14,13 @@ from enum import Enum
 import json
 import uuid
 import asyncpg
+import asyncio
 import os
 import logging
 from decimal import Decimal
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
 from core.supabase_auth import get_authenticated_user
+from services.notifications import send_email_message
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +210,8 @@ async def set_credit_limit(
                 notify_credit_limit_change,
                 request.customer_id,
                 request.credit_limit,
-                action
+                action,
+                tenant_id
             )
             
             return {
@@ -924,8 +927,46 @@ def calculate_risk_score(
 async def notify_credit_limit_change(
     customer_id: str,
     new_limit: float,
-    action: str
+    action: str,
+    tenant_id: str
 ):
-    """Send notification about credit limit change (placeholder)"""
-    logger.info(f"Credit limit {action} for customer {customer_id}: ${new_limit} RETURNING * RETURNING * RETURNING *")
-    # Email notification implementation would go here
+    """Send notification about credit limit change."""
+    conn = await get_db_connection()
+    try:
+        customer = await conn.fetchrow("""
+            SELECT customer_name, email
+            FROM customers
+            WHERE id = $1 AND tenant_id = $2
+        """, uuid.UUID(customer_id), uuid.UUID(tenant_id))
+        if not customer:
+            logger.error("Customer not found for credit limit change: %s", customer_id)
+            return
+        customer = dict(customer)
+        recipient_email = customer.get("email")
+        if not recipient_email:
+            logger.error("Customer missing email for credit limit change: %s", customer_id)
+            return
+
+        subject = "Credit limit update"
+        message_lines = [
+            f"Hello {customer.get('customer_name') or ''},".strip(),
+            "",
+            f"Your credit limit has been {action}.",
+            f"New limit: ${new_limit:,.2f}",
+            "",
+            "If you have questions, contact support.",
+        ]
+        text_body = "\n".join([line for line in message_lines if line])
+        html_body = "<br>".join([line for line in message_lines if line])
+
+        success = await asyncio.to_thread(
+            send_email_message,
+            recipient_email,
+            subject,
+            html_body,
+            text_body,
+        )
+        if not success:
+            logger.error("Failed to send credit limit email: %s", customer_id)
+    finally:
+        await conn.close()

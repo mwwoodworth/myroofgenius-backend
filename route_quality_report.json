@@ -651,7 +651,7 @@
   },
   {
     "file": "customer_pipeline.py",
-    "lines": 501,
+    "lines": 505,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,
@@ -677,7 +677,7 @@
   },
   {
     "file": "customer_search.py",
-    "lines": 553,
+    "lines": 564,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,
@@ -703,7 +703,7 @@
   },
   {
     "file": "customers_complete.py",
-    "lines": 567,
+    "lines": 572,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,
@@ -716,7 +716,7 @@
   },
   {
     "file": "customers_full_crud.py",
-    "lines": 940,
+    "lines": 944,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,
@@ -1301,7 +1301,7 @@
   },
   {
     "file": "inventory_management.py",
-    "lines": 1208,
+    "lines": 1215,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,
@@ -1366,7 +1366,7 @@
   },
   {
     "file": "iso_compliance.py",
-    "lines": 207,
+    "lines": 215,
     "has_db_queries": true,
     "has_real_logic": true,
     "has_todo": false,

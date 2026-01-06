@@ -105,10 +105,8 @@ async def calculate_feature(feature: FeatureInput):
     """
     
     # 1. Calculate Raw Metrics
-    # NOTE: This assumes the coordinates are already projected/scaled to FEET or METERS
-    # In a real app, we'd handle CRS projection here.
-    # For this vertical slice, we assume the frontend sends "Feet" (Plan mode) or we accept raw Lat/Lon and converting is TODO.
-    # Let's assume Plan Mode (Cartesian Feet) for the math to hold simple.
+    # NOTE: This assumes coordinates are already projected/scaled to feet or meters.
+    # CRS projection should be handled upstream before invoking this endpoint.
     
     raw_area = 0.0
     raw_len = 0.0

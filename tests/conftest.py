@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 import sys
 from pathlib import Path
 import os
+from datetime import datetime, timedelta
+import jwt
 
 # Speed up tests by skipping heavy dynamic route loading
 os.environ.setdefault("SKIP_ROUTE_LOADING", "1")
@@ -103,9 +105,19 @@ def test_client():
 @pytest.fixture
 def auth_headers():
     """Authentication headers for tests"""
-    # TODO: Generate test JWT token
+    os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret")
+    os.environ.setdefault("SUPABASE_JWT_AUDIENCE", "authenticated")
+    secret = os.getenv("SUPABASE_JWT_SECRET")
+    payload = {
+        "sub": "test-user",
+        "role": "authenticated",
+        "tenant_id": "test-tenant",
+        "aud": os.getenv("SUPABASE_JWT_AUDIENCE"),
+        "exp": datetime.utcnow() + timedelta(hours=1),
+    }
+    token = jwt.encode(payload, secret, algorithm="HS256")
     return {
-        "Authorization": "Bearer test_token",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 

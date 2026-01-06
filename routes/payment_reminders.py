@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date, timedelta
 from pydantic import BaseModel, Field, EmailStr
 from enum import Enum
+import asyncio
 import json
 import uuid
 import asyncpg
@@ -20,6 +21,7 @@ from collections import defaultdict
 from database import DATABASE_URL as RESOLVED_DATABASE_URL
 from config import settings
 from core.supabase_auth import get_authenticated_user
+from services.notifications import send_email_message, send_sms_message
 
 logger = logging.getLogger(__name__)
 
@@ -777,10 +779,95 @@ async def handle_email_status_webhook(data: Dict[str, Any]):
 # ==================== Helper Functions ====================
 
 async def send_reminder(reminder_id: str, email: str, phone: str):
-    """Send a payment reminder (placeholder)"""
-    logger.info(f"Sending reminder {reminder_id} to {email}")
-    # Actual sending implementation would go here
-    # This would integrate with email service, SMS provider, etc.
+    """Send a payment reminder using configured notification providers."""
+    conn = await get_db_connection()
+    try:
+        reminder = await conn.fetchrow("""
+            SELECT r.*, i.*, c.customer_name, c.email as customer_email, c.phone as customer_phone
+            FROM payment_reminders r
+            JOIN invoices i ON r.invoice_id = i.id
+            JOIN customers c ON i.customer_id = c.id
+            WHERE r.id = $1
+        """, uuid.UUID(reminder_id))
+        if not reminder:
+            logger.error("Reminder not found: %s", reminder_id)
+            return False
+        reminder = dict(reminder)
+
+        channels = reminder.get("channels")
+        if isinstance(channels, str):
+            try:
+                channels = json.loads(channels)
+            except json.JSONDecodeError:
+                channels = []
+        channels = channels or []
+
+        recipient_email = email or reminder.get("customer_email")
+        recipient_phone = phone or reminder.get("customer_phone")
+
+        template_subject = None
+        template_body = None
+        template_sms = None
+        if reminder.get("template_id"):
+            template = await conn.fetchrow("""
+                SELECT subject, body, sms_message
+                FROM reminder_templates
+                WHERE id = $1 AND is_active = true
+            """, reminder["template_id"])
+            if template:
+                template_subject = template["subject"]
+                template_body = template["body"]
+                template_sms = template["sms_message"]
+
+        invoice_number = reminder.get("invoice_number") or reminder.get("number") or str(reminder.get("invoice_id"))
+        subject = template_subject or f"Payment reminder for invoice {invoice_number}"
+        body_template = template_body or "Hello {customer_name}, your invoice {invoice_number} has an outstanding balance of {amount_due}."
+        sms_template = template_sms or "Reminder: invoice {invoice_number} balance {amount_due}."
+
+        invoice_data = {
+            "id": reminder.get("invoice_id"),
+            "customer_name": reminder.get("customer_name"),
+            "invoice_number": invoice_number,
+            "balance_cents": reminder.get("balance_cents") or reminder.get("balance_due_cents") or 0,
+            "due_date": reminder.get("due_date"),
+        }
+
+        custom_message = reminder.get("custom_message")
+        body_message = generate_reminder_message(body_template, invoice_data)
+        if custom_message:
+            body_message = f"{body_message}\n\n{custom_message}"
+
+        sms_message = generate_reminder_message(sms_template, invoice_data)
+        if custom_message:
+            sms_message = f"{sms_message} {custom_message}"
+
+        tasks = []
+        success = True
+
+        if "email" in channels and recipient_email:
+            tasks.append(asyncio.to_thread(
+                send_email_message,
+                recipient_email,
+                subject,
+                body_message.replace("\n", "<br>"),
+                body_message,
+            ))
+        if "sms" in channels and recipient_phone:
+            tasks.append(send_sms_message(recipient_phone, sms_message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception) or result is False:
+                    success = False
+
+        if not tasks:
+            logger.error("No valid channels configured for reminder %s", reminder_id)
+            success = False
+
+        return success
+    finally:
+        await conn.close()
 
 async def process_scheduled_reminders():
     """Process scheduled reminders (to be called by cron/scheduler)"""
@@ -800,19 +887,26 @@ async def process_scheduled_reminders():
             for reminder in reminders:
                 try:
                     # Send reminder
-                    await send_reminder(
+                    success = await send_reminder(
                         str(reminder['id']),
                         reminder['email'],
                         reminder['phone']
                     )
                     
                     # Update status
-                    await conn.execute("""
-                        UPDATE payment_reminders
-                        SET status = 'sent',
-                            sent_at = NOW()
-                        WHERE id = $1
-                    """, reminder['id'])
+                    if success:
+                        await conn.execute("""
+                            UPDATE payment_reminders
+                            SET status = 'sent',
+                                sent_at = NOW()
+                            WHERE id = $1
+                        """, reminder['id'])
+                    else:
+                        await conn.execute("""
+                            UPDATE payment_reminders
+                            SET status = 'failed'
+                            WHERE id = $1
+                        """, reminder['id'])
                 except Exception as e:
                     logger.error(f"Failed to send reminder {reminder['id']}: {e}")
         finally:

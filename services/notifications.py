@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -16,15 +17,224 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
+def _merge_config(base: Dict[str, Any], overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    merged = dict(base)
+    if overrides:
+        for key, value in overrides.items():
+            if value is not None:
+                merged[key] = value
+    return merged
+
+
+def _default_email_config() -> Dict[str, Any]:
+    return {
+        "sendgrid_api_key": os.getenv("SENDGRID_API_KEY"),
+        "sendgrid_from_email": os.getenv("SENDGRID_FROM_EMAIL"),
+        "sendgrid_from_name": os.getenv("SENDGRID_FROM_NAME"),
+        "smtp_server": os.getenv("SMTP_SERVER"),
+        "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+        "smtp_username": os.getenv("SMTP_USERNAME"),
+        "smtp_password": os.getenv("SMTP_PASSWORD"),
+        "smtp_from_email": os.getenv("SMTP_FROM_EMAIL"),
+        "smtp_from_name": os.getenv("SMTP_FROM_NAME"),
+        "smtp_use_tls": os.getenv("SMTP_USE_TLS", "true").lower() == "true",
+    }
+
+
+def _default_sms_config() -> Dict[str, Any]:
+    return {
+        "twilio_account_sid": os.getenv("TWILIO_ACCOUNT_SID"),
+        "twilio_auth_token": os.getenv("TWILIO_AUTH_TOKEN"),
+        "twilio_from_number": os.getenv("TWILIO_FROM_NUMBER"),
+    }
+
+
+def _default_push_config() -> Dict[str, Any]:
+    return {
+        "push_webhook_url": os.getenv("PUSH_WEBHOOK_URL"),
+        "push_webhook_token": os.getenv("PUSH_WEBHOOK_TOKEN"),
+    }
+
+
+def _format_from_address(email: Optional[str], name: Optional[str]) -> Optional[str]:
+    if not email:
+        return None
+    if name:
+        return f"{name} <{email}>"
+    return email
+
+
+def _send_via_sendgrid_sync(
+    to_email: str,
+    subject: str,
+    html_content: str,
+    text_content: Optional[str],
+    config: Dict[str, Any],
+) -> bool:
+    api_key = config.get("sendgrid_api_key")
+    from_email = _format_from_address(
+        config.get("sendgrid_from_email"),
+        config.get("sendgrid_from_name"),
+    )
+    if not api_key or not from_email:
+        logger.error("SendGrid not configured: missing API key or from address")
+        return False
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+    except Exception as exc:
+        logger.error("SendGrid dependency missing: %s", exc)
+        return False
+
+    message = Mail(
+        from_email=from_email,
+        to_emails=to_email,
+        subject=subject,
+        html_content=html_content or text_content or "",
+    )
+    if text_content:
+        message.plain_text_content = text_content
+
+    try:
+        client = SendGridAPIClient(api_key)
+        response = client.send(message)
+        if 200 <= response.status_code < 300:
+            return True
+        logger.error("SendGrid send failed: status=%s", response.status_code)
+        return False
+    except Exception as exc:
+        logger.error("SendGrid send failed: %s", exc)
+        return False
+
+
+def _send_via_smtp_sync(
+    to_email: str,
+    subject: str,
+    html_content: str,
+    text_content: Optional[str],
+    config: Dict[str, Any],
+) -> bool:
+    server = config.get("smtp_server")
+    port = config.get("smtp_port")
+    username = config.get("smtp_username")
+    password = config.get("smtp_password")
+    use_tls = bool(config.get("smtp_use_tls", True))
+    from_email = _format_from_address(
+        config.get("smtp_from_email"),
+        config.get("smtp_from_name"),
+    )
+    if not server or not from_email:
+        logger.error("SMTP not configured: missing server or from address")
+        return False
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+
+    if text_content:
+        msg.attach(MIMEText(text_content, "plain"))
+    if html_content:
+        msg.attach(MIMEText(html_content, "html"))
+
+    try:
+        with smtplib.SMTP(server, port) as smtp:
+            if use_tls:
+                smtp.starttls()
+            if username and password:
+                smtp.login(username, password)
+            smtp.sendmail(from_email, [to_email], msg.as_string())
+        return True
+    except Exception as exc:
+        logger.error("SMTP send failed: %s", exc)
+        return False
+
+
+def send_email_message(
+    to_email: str,
+    subject: str,
+    html_content: str,
+    text_content: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Send an email using SendGrid or SMTP based on configuration."""
+    merged = _merge_config(_default_email_config(), config or {})
+    if merged.get("sendgrid_api_key"):
+        return _send_via_sendgrid_sync(to_email, subject, html_content, text_content, merged)
+    if merged.get("smtp_server"):
+        return _send_via_smtp_sync(to_email, subject, html_content, text_content, merged)
+    logger.error("Email provider not configured")
+    return False
+
+
+async def send_sms_message(
+    to_phone: str,
+    message: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Send SMS via Twilio when configured."""
+    merged = _merge_config(_default_sms_config(), config or {})
+    account_sid = merged.get("twilio_account_sid")
+    auth_token = merged.get("twilio_auth_token")
+    from_number = merged.get("twilio_from_number")
+    if not account_sid or not auth_token or not from_number:
+        logger.error("Twilio not configured: missing credentials or from number")
+        return False
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+    payload = {"To": to_phone, "From": from_number, "Body": message}
+    try:
+        async with aiohttp.ClientSession(auth=aiohttp.BasicAuth(account_sid, auth_token)) as session:
+            async with session.post(url, data=payload) as response:
+                if 200 <= response.status < 300:
+                    return True
+                body = await response.text()
+                logger.error("Twilio send failed: status=%s body=%s", response.status, body)
+                return False
+    except Exception as exc:
+        logger.error("Twilio send failed: %s", exc)
+        return False
+
+
+async def send_push_message(
+    message: str,
+    data: Optional[Dict[str, Any]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Send push notification via webhook when configured."""
+    merged = _merge_config(_default_push_config(), config or {})
+    webhook_url = merged.get("push_webhook_url")
+    token = merged.get("push_webhook_token")
+    if not webhook_url:
+        logger.error("Push webhook not configured")
+        return False
+
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    payload = {"message": message, "data": data or {}}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(webhook_url, json=payload, headers=headers) as response:
+                if 200 <= response.status < 300:
+                    return True
+                body = await response.text()
+                logger.error("Push webhook failed: status=%s body=%s", response.status, body)
+                return False
+    except Exception as exc:
+        logger.error("Push webhook failed: %s", exc)
+        return False
+
 class NotificationService:
     """Comprehensive notification service for all communication channels"""
     
     def __init__(self, db: Session, config: Dict[str, Any] = None):
         self.db = db
         self.config = config or {}
-        self.email_config = config.get('email', {}) if config else {}
-        self.sms_config = config.get('sms', {}) if config else {}
-        self.push_config = config.get('push', {}) if config else {}
+        self.email_config = _merge_config(_default_email_config(), self.config.get('email'))
+        self.sms_config = _merge_config(_default_sms_config(), self.config.get('sms'))
+        self.push_config = _merge_config(_default_push_config(), self.config.get('push'))
     
     async def process_queue(self):
         """Process pending notifications from queue"""
@@ -84,6 +294,10 @@ class NotificationService:
     async def _send_email(self, notification: Dict) -> bool:
         """Send email notification"""
         try:
+            recipient = notification.get('recipient_email')
+            if not recipient:
+                logger.error("Notification missing recipient_email")
+                return False
             # Get template if specified
             if notification.get('template_id'):
                 template = self._get_email_template(notification['template_id'])
@@ -99,15 +313,15 @@ class NotificationService:
                 subject = notification.get('subject', 'Notification')
                 html_body = notification.get('message', '')
                 text_body = notification.get('message', '')
-            
-            # For production, integrate with email service (SendGrid, AWS SES, etc.)
-            # For now, log the email
-            logger.info(f"Email to {notification['recipient_email']}: {subject}")
-            
-            # In production, uncomment and configure:
-            # await self._send_via_sendgrid(notification['recipient_email'], subject, html_body)
-            
-            return True
+
+            return await asyncio.to_thread(
+                send_email_message,
+                recipient,
+                subject,
+                html_body,
+                text_body,
+                self.email_config,
+            )
             
         except Exception as e:
             logger.error(f"Error sending email: {e}")
@@ -116,16 +330,13 @@ class NotificationService:
     async def _send_sms(self, notification: Dict) -> bool:
         """Send SMS notification"""
         try:
-            phone = notification['recipient_phone']
-            message = notification['message']
-            
-            # For production, integrate with SMS service (Twilio, etc.)
-            logger.info(f"SMS to {phone}: {message}")
-            
-            # In production, uncomment and configure:
-            # await self._send_via_twilio(phone, message)
-            
-            return True
+            phone = notification.get('recipient_phone')
+            message = notification.get('message')
+            if not phone or not message:
+                logger.error("Notification missing recipient_phone or message")
+                return False
+
+            return await send_sms_message(phone, message, self.sms_config)
             
         except Exception as e:
             logger.error(f"Error sending SMS: {e}")
@@ -134,10 +345,12 @@ class NotificationService:
     async def _send_push(self, notification: Dict) -> bool:
         """Send push notification"""
         try:
-            # For production, integrate with push service (Firebase, OneSignal, etc.)
-            logger.info(f"Push notification: {notification['message']}")
-            
-            return True
+            message = notification.get('message', '')
+            if not message:
+                logger.error("Notification missing message for push")
+                return False
+            payload = notification.get('data') if isinstance(notification.get('data'), dict) else {}
+            return await send_push_message(message, payload, self.push_config)
             
         except Exception as e:
             logger.error(f"Error sending push notification: {e}")
@@ -145,13 +358,18 @@ class NotificationService:
     
     async def _send_via_sendgrid(self, to_email: str, subject: str, html_content: str):
         """Send email via SendGrid API"""
-        # Implementation for SendGrid
-        pass
+        return await asyncio.to_thread(
+            _send_via_sendgrid_sync,
+            to_email,
+            subject,
+            html_content,
+            None,
+            self.email_config,
+        )
     
     async def _send_via_twilio(self, to_phone: str, message: str):
         """Send SMS via Twilio API"""
-        # Implementation for Twilio
-        pass
+        return await send_sms_message(to_phone, message, self.sms_config)
     
     def _get_email_template(self, template_id: str) -> Optional[Dict]:
         """Get email template from database"""

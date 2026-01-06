@@ -16,6 +16,7 @@ import logging
 from database import get_db
 from core.supabase_auth import get_current_user  # SUPABASE AUTH
 from pydantic import BaseModel, Field
+from services.notifications import send_email_message
 
 logger = logging.getLogger(__name__)
 
@@ -1053,11 +1054,22 @@ def send_estimate_email(
     estimate_number: str,
     custom_message: Optional[str] = None
 ):
-    """Send estimate email (placeholder for actual email service)"""
-    # In production, this would integrate with an email service
-    # like SendGrid, AWS SES, or similar
-    print(f"Sending estimate {estimate_number} to {recipient_email}")
-    print(f"Customer: {customer_name}")
+    """Send estimate email via configured notification provider."""
+    subject = f"Estimate {estimate_number}"
+    greeting = f"Hello {customer_name}," if customer_name else "Hello,"
+    message_lines = [
+        greeting,
+        "",
+        f"Your estimate {estimate_number} is ready.",
+        "",
+    ]
     if custom_message:
-        print(f"Message: {custom_message} RETURNING * RETURNING *")
+        message_lines.append(custom_message)
+        message_lines.append("")
+    message_lines.append("Please let us know if you have any questions.")
+    text_body = "\n".join(message_lines)
+    html_body = "<br>".join(message_lines)
+
+    if not send_email_message(recipient_email, subject, html_body, text_body):
+        logger.error("Failed to send estimate email: estimate_id=%s recipient=%s", estimate_id, recipient_email)
     

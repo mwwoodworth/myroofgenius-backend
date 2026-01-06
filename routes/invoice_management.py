@@ -12,12 +12,15 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 from enum import Enum
+import logging
 
 from database import get_db
 from core.supabase_auth import get_current_user  # SUPABASE AUTH
 from pydantic import BaseModel, Field
+from services.notifications import send_email_message
 
 router = APIRouter(prefix="/invoices")
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # INVOICE MODELS
@@ -930,10 +933,22 @@ def send_invoice_email(
     invoice_number: str,
     custom_message: Optional[str] = None
 ):
-    """Send invoice email (placeholder for actual email service)"""
-    # In production, this would integrate with an email service
-    print(f"Sending invoice {invoice_number} to {recipient_email}")
-    print(f"Customer: {customer_name}")
+    """Send invoice email via configured notification provider."""
+    subject = f"Invoice {invoice_number}"
+    greeting = f"Hello {customer_name}," if customer_name else "Hello,"
+    message_lines = [
+        greeting,
+        "",
+        f"Your invoice {invoice_number} is ready.",
+        "",
+    ]
     if custom_message:
-        print(f"Message: {custom_message} RETURNING *")
+        message_lines.append(custom_message)
+        message_lines.append("")
+    message_lines.append("Thank you for your business.")
+    text_body = "\n".join(message_lines)
+    html_body = "<br>".join(message_lines)
+
+    if not send_email_message(recipient_email, subject, html_body, text_body):
+        logger.error("Failed to send invoice email: invoice_id=%s recipient=%s", invoice_id, recipient_email)
     

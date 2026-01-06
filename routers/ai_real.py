@@ -1,4 +1,9 @@
 
+"""
+LEGACY MODULE: This router is not loaded by the main application.
+Use routes/ai_real.py for the active AI endpoints.
+"""
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from sqlalchemy.orm import Session
 import openai
@@ -329,8 +334,7 @@ async def analyze_roof(file: UploadFile = File(...)):
     # Perform real AI analysis
     result = await analyzer.analyze_roof_image(image_data)
     
-    # Store in database
-    # TODO: Add database storage
+    # Store in database before returning if this legacy module is reactivated.
     
     return result
 

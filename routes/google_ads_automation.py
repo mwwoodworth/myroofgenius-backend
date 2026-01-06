@@ -10,6 +10,7 @@ from datetime import datetime, date
 import json
 import os
 import uuid
+import logging
 from sqlalchemy import Column, String, Integer, Float, Boolean, JSON, DateTime, ForeignKey, Text, Date, text
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,6 +19,7 @@ from database import get_db, engine
 from core.supabase_auth import get_current_user
 
 router = APIRouter(tags=["Google Ads"])
+logger = logging.getLogger(__name__)
 
 # Google Ads configuration
 GOOGLE_ADS_CUSTOMER_ID = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
@@ -299,23 +301,46 @@ async def get_campaign_performance(
         """)
         campaigns = db.execute(campaigns_query, {"tenant_id": tenant_id}).fetchall()
         
-        # Calculate ROI
-        # Assuming revenue_tracking might not have tenant_id in some legacy setups, 
-        # but we should try to filter if possible. If table doesn't exist, this will throw.
-        # We wrap in try/catch specifically for the revenue part or assume table exists.
-        # Given the "stub" nature, let's assume revenue_tracking is global or per-tenant.
-        # Ideally it should be per tenant.
+        # Calculate ROI with tenant-aware revenue when possible
+        revenue_today = 0.0
         try:
-            revenue_query = text("""
-                SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as revenue
-                FROM revenue_tracking
-                WHERE source LIKE '%google%'
-                AND DATE(created_at) = CURRENT_DATE
-                -- AND tenant_id = :tenant_id  -- Uncomment if revenue_tracking has tenant_id
-            """)
-            # revenue_today = db.execute(revenue_query, {"tenant_id": tenant_id}).scalar()
-            revenue_today = db.execute(revenue_query).scalar()
-        except Exception:
+            has_table = db.execute(text("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'revenue_tracking'
+                )
+            """)).scalar()
+            if has_table:
+                has_tenant = db.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'revenue_tracking'
+                          AND column_name = 'tenant_id'
+                    )
+                """)).scalar()
+                if has_tenant:
+                    revenue_query = text("""
+                        SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as revenue
+                        FROM revenue_tracking
+                        WHERE source LIKE '%google%'
+                          AND DATE(created_at) = CURRENT_DATE
+                          AND tenant_id = :tenant_id
+                    """)
+                    revenue_today = db.execute(revenue_query, {"tenant_id": tenant_id}).scalar()
+                else:
+                    revenue_query = text("""
+                        SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as revenue
+                        FROM revenue_tracking
+                        WHERE source LIKE '%google%'
+                          AND DATE(created_at) = CURRENT_DATE
+                    """)
+                    revenue_today = db.execute(revenue_query).scalar()
+        except Exception as exc:
+            logger.error("Revenue tracking query failed: %s", exc)
             revenue_today = 0.0
         
         total_spend = today_stats.total_spend if today_stats and today_stats.total_spend else 0

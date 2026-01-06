@@ -18,6 +18,7 @@ class CredentialManager:
     def __init__(self, db_pool: asyncpg.Pool = None):
         self.db_pool = db_pool
         self.credentials: Dict[str, str] = {}
+        self.credential_meta: Dict[str, Dict[str, Optional[str]]] = {}
         self.initialized = False
 
     async def initialize(self):
@@ -42,9 +43,18 @@ class CredentialManager:
                     key = row['key']
                     value = row['value']
                     is_sensitive = row['is_sensitive']
+                    category = row['category']
+                    service = row['service']
+                    notes = row['notes']
 
                     # Store in memory
                     self.credentials[key] = value
+                    self.credential_meta[key] = {
+                        "category": category,
+                        "service": service,
+                        "notes": notes,
+                        "is_sensitive": is_sensitive,
+                    }
 
                     # Set as environment variable for compatibility
                     os.environ[key] = value
@@ -91,8 +101,11 @@ class CredentialManager:
             return {}
 
         if category:
-            # TODO: Add category filtering
-            return self.credentials
+            return {
+                key: value
+                for key, value in self.credentials.items()
+                if self.credential_meta.get(key, {}).get("category") == category
+            }
         return self.credentials
 
     async def store(self, key: str, value: str, category: str = 'GENERAL',
@@ -116,6 +129,12 @@ class CredentialManager:
 
             # Update in-memory cache
             self.credentials[key] = value
+            self.credential_meta[key] = {
+                "category": category,
+                "service": service,
+                "notes": notes,
+                "is_sensitive": is_sensitive,
+            }
             os.environ[key] = value
 
             logger.info(f"✅ Stored credential: {key}")
