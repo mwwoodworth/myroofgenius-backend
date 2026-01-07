@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.2.0"
-__build__ = "2026-01-07T16:10:00Z"
+__version__ = "163.2.1"
+__build__ = "2026-01-07T16:21:51Z"
 __status__ = "production"
+# v163.2.1: Accept X-Diagnostics-Key header for diagnostics auth
 # v163.2.0: Live readiness + credits + SiteSeer video analysis + SQL hardening
 # - Added /ready, /capabilities, /diagnostics endpoints
 # - Added credits balance/debit API with HMAC signing + nonce replay protection

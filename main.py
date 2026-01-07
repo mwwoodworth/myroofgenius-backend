@@ -705,7 +705,9 @@ def _require_diagnostics_key(request: Request) -> None:
     if not expected:
         raise HTTPException(status_code=503, detail="Diagnostics key not configured")
     provided = (
-        request.headers.get("X-Admin-Key")
+        request.headers.get("X-Diagnostics-Key")
+        or request.headers.get("x-diagnostics-key")
+        or request.headers.get("X-Admin-Key")
         or request.headers.get("x-admin-key")
         or request.headers.get("Authorization")
         or ""

@@ -24,3 +24,14 @@ def test_diagnostics_with_admin_key(test_client, auth_headers, monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
+
+
+def test_diagnostics_with_diagnostics_key_header(test_client, auth_headers, monkeypatch):
+    monkeypatch.setenv("BRAINOPS_DIAGNOSTICS_KEY", "diag-key")
+    response = test_client.get(
+        "/diagnostics",
+        headers={**auth_headers, "X-Diagnostics-Key": "diag-key"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
