@@ -13,6 +13,10 @@ from datetime import datetime
 import os
 import hashlib
 import asyncpg
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 from core.supabase_auth import get_authenticated_user
 
@@ -22,6 +26,108 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+def _run_ai_analysis(image_bytes: bytes) -> Dict[str, Any]:
+    """Run GPT-4o vision analysis on raw image bytes."""
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+
+    analysis_prompt = """
+    You are an expert roofing contractor with 20+ years of experience. Analyze this roof photo and provide:
+
+    1. DAMAGE ASSESSMENT:
+       - Visible damage (missing shingles, holes, wear patterns)
+       - Severity level (1-10)
+       - Urgent repairs needed
+
+    2. MATERIAL ANALYSIS:
+       - Roofing material type
+       - Age estimation
+       - Quality assessment
+
+    3. MEASUREMENTS:
+       - Estimated square footage
+       - Roof complexity (simple/moderate/complex)
+       - Number of stories
+
+    4. COST ESTIMATION:
+       - Repair costs (if damage found)
+       - Full replacement cost range
+       - Material costs
+
+    5. RECOMMENDATIONS:
+       - Immediate actions needed
+       - Long-term maintenance
+       - Safety concerns
+
+    6. WEATHER RESISTANCE:
+       - Current weather vulnerability
+       - Storm damage potential
+
+    Provide response in JSON format with specific, actionable insights.
+    """
+
+    response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": analysis_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                    },
+                ],
+            }
+        ],
+        max_tokens=2000,
+        temperature=0.3,
+    )
+
+    ai_analysis = response.choices[0].message.content
+    try:
+        return json.loads(ai_analysis)
+    except json.JSONDecodeError:
+        return {
+            "raw_analysis": ai_analysis,
+            "confidence": 0.85,
+            "analysis_type": "detailed_text",
+        }
+
+
+def _aggregate_frame_analyses(analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate multi-frame analyses into a single summary."""
+    if not analyses:
+        return {}
+
+    def _avg_numeric(key: str, default: float) -> float:
+        values = []
+        for item in analyses:
+            value = item.get(key)
+            if isinstance(value, (int, float)):
+                values.append(float(value))
+        if not values:
+            return default
+        return sum(values) / len(values)
+
+    def _mode_value(key: str, default: str) -> str:
+        counts: Dict[str, int] = {}
+        for item in analyses:
+            value = item.get(key)
+            if isinstance(value, str) and value:
+                counts[value] = counts.get(value, 0) + 1
+        if not counts:
+            return default
+        return max(counts, key=counts.get)
+
+    return {
+        "damage_severity": round(_avg_numeric("damage_severity", 5.0), 2),
+        "estimated_sq_ft": round(_avg_numeric("estimated_sq_ft", 2000.0), 2),
+        "material_type": _mode_value("material_type", "asphalt_shingle"),
+        "complexity": _mode_value("complexity", "moderate"),
+        "frame_count": len(analyses),
+        "frame_analyses": analyses,
+    }
 
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     pool = getattr(request.app.state, "db_pool", None)
@@ -53,84 +159,13 @@ async def analyze_roof_photo(
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
 
-        # Read and encode image
+        # Read and analyze image
         image_data = await file.read()
-        base64_image = base64.b64encode(image_data).decode('utf-8')
-
-        # AI Vision Analysis Prompt
-        analysis_prompt = """
-        You are an expert roofing contractor with 20+ years of experience. Analyze this roof photo and provide:
-
-        1. DAMAGE ASSESSMENT:
-           - Visible damage (missing shingles, holes, wear patterns)
-           - Severity level (1-10)
-           - Urgent repairs needed
-
-        2. MATERIAL ANALYSIS:
-           - Roofing material type
-           - Age estimation
-           - Quality assessment
-
-        3. MEASUREMENTS:
-           - Estimated square footage
-           - Roof complexity (simple/moderate/complex)
-           - Number of stories
-
-        4. COST ESTIMATION:
-           - Repair costs (if damage found)
-           - Full replacement cost range
-           - Material costs
-
-        5. RECOMMENDATIONS:
-           - Immediate actions needed
-           - Long-term maintenance
-           - Safety concerns
-
-        6. WEATHER RESISTANCE:
-           - Current weather vulnerability
-           - Storm damage potential
-
-        Provide response in JSON format with specific, actionable insights.
-        """
-
-        # Call GPT-4 Vision API
-        response = openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": analysis_prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=2000,
-            temperature=0.3
-        )
-
-        # Parse AI response
-        ai_analysis = response.choices[0].message.content
-
-        try:
-            # Try to parse as JSON
-            analysis_data = json.loads(ai_analysis)
-        except json.JSONDecodeError:
-            # If not JSON, structure the response
-            analysis_data = {
-                "raw_analysis": ai_analysis,
-                "confidence": 0.85,
-                "analysis_type": "detailed_text"
-            }
+        analysis_data = _run_ai_analysis(image_data)
 
         # Generate estimate based on analysis
         estimate_data = await generate_estimate_from_analysis(
-            analysis_data, customer_id, job_id, db
+            analysis_data, customer_id, job_id
         )
 
         # Store analysis in database (if the table exists)
@@ -187,17 +222,128 @@ async def analyze_roof_photo(
         logger.error(f"Roof analysis error: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
+
+@router.post("/analyze-video")
+async def analyze_roof_video(
+    request: Request,
+    file: UploadFile = File(...),
+    customer_id: str = None,
+    job_id: str = None,
+    db_pool: asyncpg.Pool = Depends(get_db_pool),
+    current_user: dict = Depends(get_authenticated_user),
+):
+    """
+    🎥 SiteSeer - Video-based roof analysis.
+    Extracts key frames and aggregates AI analysis into a single estimate.
+    """
+    if not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="File must be a video")
+
+    if not shutil.which("ffmpeg"):
+        raise HTTPException(status_code=503, detail="ffmpeg is required for video analysis")
+
+    max_mb = int(os.getenv("SITESEER_MAX_VIDEO_MB", "50"))
+    max_bytes = max_mb * 1024 * 1024
+
+    video_bytes = await file.read()
+    if len(video_bytes) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"Video too large (>{max_mb}MB)")
+
+    frame_analyses: List[Dict[str, Any]] = []
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        video_path = temp_path / "upload.mp4"
+        frame_pattern = temp_path / "frame_%03d.jpg"
+
+        video_path.write_bytes(video_bytes)
+
+        cmd = [
+            "ffmpeg",
+            "-i",
+            str(video_path),
+            "-vf",
+            "fps=1",
+            "-frames:v",
+            str(int(os.getenv("SITESEER_MAX_FRAMES", "3"))),
+            str(frame_pattern),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error("ffmpeg failed: %s", result.stderr)
+            raise HTTPException(status_code=500, detail="Failed to extract video frames")
+
+        frames = sorted(temp_path.glob("frame_*.jpg"))
+        if not frames:
+            raise HTTPException(status_code=400, detail="No frames extracted from video")
+
+        for frame in frames:
+            frame_bytes = frame.read_bytes()
+            frame_analyses.append(_run_ai_analysis(frame_bytes))
+
+    aggregated = _aggregate_frame_analyses(frame_analyses)
+    estimate_data = await generate_estimate_from_analysis(aggregated, customer_id, job_id)
+
+    analysis_id = None
+    try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO roof_analyses (customer_email, photo_data, ai_analysis, confidence_score, created_at)
+                VALUES ($1, $2, $3::jsonb, $4, NOW())
+                RETURNING id
+                """,
+                current_user.get("email"),
+                "video",
+                json.dumps(
+                    {
+                        "analysis": aggregated,
+                        "estimate": estimate_data,
+                        "customer_id": customer_id,
+                        "job_id": job_id,
+                        "filename": file.filename,
+                        "ai_model": "gpt-4o",
+                        "frames_analyzed": len(frame_analyses),
+                        "created_by": current_user.get("id"),
+                    }
+                ),
+                0.9,
+            )
+            if row and row.get("id"):
+                analysis_id = str(row["id"])
+    except Exception as db_error:
+        logger.warning("Failed to persist SiteSeer analysis: %s", db_error)
+
+    return {
+        "success": True,
+        "analysis_id": analysis_id,
+        "analysis": aggregated,
+        "estimate": estimate_data,
+        "frames_analyzed": len(frame_analyses),
+        "confidence": 0.9,
+        "features": {
+            "video_frame_sampling": True,
+            "damage_detection": True,
+            "material_identification": True,
+            "cost_estimation": True,
+        },
+    }
+
 async def generate_estimate_from_analysis(
     analysis: Dict[Any, Any],
     customer_id: str,
     job_id: str,
-    db: Any = None  # Optional - kept for compatibility but unused
 ) -> Dict[str, Any]:
     """Generate cost estimate based on AI analysis"""
 
     # Extract key metrics from analysis
-    damage_severity = analysis.get("damage_severity", 5)
-    square_footage = analysis.get("estimated_sq_ft", 2000)
+    def _coerce_float(value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    damage_severity = _coerce_float(analysis.get("damage_severity", 5), 5)
+    square_footage = max(1.0, _coerce_float(analysis.get("estimated_sq_ft", 2000), 2000))
     material_type = analysis.get("material_type", "asphalt_shingle")
     complexity = analysis.get("complexity", "moderate")
 
@@ -235,9 +381,9 @@ async def generate_estimate_from_analysis(
             "permits": permit_cost,
             "cleanup": cleanup_cost
         },
-        "square_footage": square_footage,
+        "square_footage": round(square_footage, 2),
         "cost_per_sq_ft": round(total_cost / square_footage, 2),
-        "timeline": f"{max(3, damage_severity)} days",
+        "timeline": f"{max(3, int(damage_severity))} days",
         "warranty": "10 years materials, 2 years labor"
     }
 

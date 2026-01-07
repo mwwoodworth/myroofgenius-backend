@@ -266,6 +266,7 @@ class AgentOrchestratorV2:
                 f"{ai_agents_url}/api/v1/agents/{agent_name}/execute",
                 f"{ai_agents_url}/agents/{agent_name}/trigger"
             ]
+            errors: list[str] = []
 
             async with aiohttp.ClientSession() as session:
                 for endpoint in endpoints:
@@ -287,19 +288,18 @@ class AgentOrchestratorV2:
                                 continue
                             else:
                                 error_text = await response.text()
-                                logger.warning(f"Agent invocation failed at {endpoint}: {response.status} - {error_text[:200]}")
+                                errors.append(f"{endpoint} {response.status}: {error_text[:200]}")
                                 continue
                     except aiohttp.ClientError as e:
-                        logger.warning(f"HTTP error calling {endpoint}: {e}")
+                        errors.append(f"{endpoint} error: {e}")
                         continue
 
-                # All endpoints failed, return fallback result
-                logger.warning(f"All agent invocation endpoints failed for {agent_name}, using fallback")
-                return f"{agent_name} completed: {action} (fallback - service unreachable)"
+                error_summary = "; ".join(errors) if errors else "Unknown error"
+                raise RuntimeError(f"Agent invocation failed for {agent_name}: {error_summary}")
 
         except Exception as e:
             logger.error(f"Agent invocation error for {agent_name}: {e}")
-            return f"{agent_name} error: {str(e)}"
+            raise
 
     async def _record_agent_message(self, agent_name: str, action: str, result: str):
         """Record inter-agent communication in database"""

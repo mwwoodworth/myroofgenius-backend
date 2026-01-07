@@ -44,7 +44,7 @@ async def ai_think(request: AIRequest, db: Session = Depends(get_db)):
     Uses OpenAI GPT-4, falls back to Claude or Gemini
     """
     try:
-        # Process with real AI (will use fallback if no API keys)
+        # Process with real AI providers (no simulated fallback)
         response = await process_with_ai(
             request.prompt,
             request.context,

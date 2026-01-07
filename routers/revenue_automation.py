@@ -8,12 +8,13 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import json
-import random
-import uuid
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 import os
+from core.supabase_auth import get_current_user
 
 # Create database session - MUST use environment variable, no fallback
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -30,7 +31,20 @@ def get_db():
     finally:
         db.close()
 
-router = APIRouter(prefix="/api/v1/revenue", tags=["revenue"])
+router = APIRouter(
+    prefix="/api/v1/revenue",
+    tags=["revenue"],
+    dependencies=[Depends(get_current_user)],
+)
+logger = logging.getLogger(__name__)
+
+def _is_schema_missing_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return (
+        "does not exist" in message
+        or "undefined table" in message
+        or "relation" in message and "does not exist" in message
+    )
 
 # ============= Models =============
 
@@ -96,41 +110,87 @@ class AIRecommendation(BaseModel):
 async def get_revenue_metrics(db: Session = Depends(get_db)):
     """Get real-time revenue metrics"""
     try:
-        # Get today's metrics from database
-        result = db.execute("""
-            SELECT 
-                COALESCE(SUM(CASE WHEN DATE(created_at) = CURRENT_DATE THEN amount ELSE 0 END), 0) as today,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN amount ELSE 0 END), 0) as month,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('year', created_at) = DATE_TRUNC('year', CURRENT_DATE) THEN amount ELSE 0 END), 0) as year,
-                COUNT(DISTINCT CASE WHEN status = 'active' THEN customer_id END) as subscriptions
+        payments_row = db.execute(text("""
+            SELECT
+                COALESCE(SUM(CASE WHEN status = 'completed' AND DATE(created_at) = CURRENT_DATE THEN amount ELSE 0 END), 0) as today,
+                COALESCE(SUM(CASE WHEN status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN amount ELSE 0 END), 0) as month,
+                COALESCE(SUM(CASE WHEN status = 'completed' AND DATE_TRUNC('year', created_at) = DATE_TRUNC('year', CURRENT_DATE) THEN amount ELSE 0 END), 0) as year,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END), 0) as total_revenue,
+                COUNT(*) FILTER (WHERE status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)) as month_count,
+                COUNT(DISTINCT CASE WHEN status = 'completed' THEN customer_id END) as unique_customers
+            FROM payments
+        """)).first()
+
+        if not payments_row:
+            raise HTTPException(status_code=500, detail="Payments query returned no rows.")
+
+        prev_month_row = db.execute(text("""
+            SELECT
+                COALESCE(SUM(amount), 0) as prev_month
             FROM payments
             WHERE status = 'completed'
-        """).first()
-        
-        if result:
-            today_revenue = float(result.today or 0)
-            month_revenue = float(result.month or 0)
-            year_revenue = float(result.year or 0)
-            active_subs = result.subscriptions or 0
-        else:
-            # Use realistic demo data if no real data
-            today_revenue = 8542.00
-            month_revenue = 285420.00
-            year_revenue = 2854200.00
-            active_subs = 142
-        
-        # Calculate derived metrics
-        mrr = month_revenue
+              AND created_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month'
+              AND created_at < DATE_TRUNC('month', CURRENT_DATE)
+        """)).first()
+
+        subs_row = db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'active') as active,
+                COUNT(*) FILTER (WHERE status IN ('cancelled', 'expired')) as cancelled_total,
+                COUNT(*) FILTER (WHERE cancelled_at >= CURRENT_DATE - INTERVAL '30 days') as cancelled_recent,
+                COALESCE(SUM(
+                    CASE
+                        WHEN status = 'active' THEN
+                            CASE
+                                WHEN billing_cycle = 'yearly' THEN amount / 12
+                                ELSE amount
+                            END
+                        ELSE 0
+                    END
+                ), 0) as mrr
+            FROM subscriptions
+        """)).first()
+
+        leads_row = db.execute(text("""
+            SELECT
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE status = 'converted' OR converted_at IS NOT NULL) as converted
+            FROM leads
+        """)).first()
+
+        today_revenue = float(payments_row.today or 0)
+        month_revenue = float(payments_row.month or 0)
+        year_revenue = float(payments_row.year or 0)
+        total_revenue = float(payments_row.total_revenue or 0)
+        month_count = int(payments_row.month_count or 0)
+        unique_customers = int(payments_row.unique_customers or 0)
+
+        active_subs = int(subs_row.active or 0) if subs_row else 0
+        cancelled_total = int(subs_row.cancelled_total or 0) if subs_row else 0
+        cancelled_recent = int(subs_row.cancelled_recent or 0) if subs_row else 0
+        mrr = float(subs_row.mrr or 0) if subs_row else 0.0
         arr = mrr * 12
-        conversion_rate = 6.8  # Default 6.8%
-        aov = month_revenue / max(active_subs, 1) if active_subs > 0 else 185.00
-        ltv = aov * 24  # 24 month average lifetime
-        churn_rate = 2.1  # Default 2.1%
-        growth_rate = 15.4  # Default 15.4%
-        
-        # Calculate projection based on growth rate
+
+        total_leads = int(leads_row.total or 0) if leads_row else 0
+        converted_leads = int(leads_row.converted or 0) if leads_row else 0
+        conversion_rate = (converted_leads / total_leads * 100) if total_leads > 0 else 0.0
+
+        aov = (month_revenue / month_count) if month_count > 0 else 0.0
+        ltv = (total_revenue / unique_customers) if unique_customers > 0 else 0.0
+
+        total_subs = active_subs + cancelled_total
+        churn_rate = (cancelled_recent / total_subs * 100) if total_subs > 0 else 0.0
+
+        prev_month_revenue = float(prev_month_row.prev_month or 0) if prev_month_row else 0.0
+        if prev_month_revenue > 0:
+            growth_rate = ((month_revenue - prev_month_revenue) / prev_month_revenue) * 100
+        else:
+            if month_revenue > 0:
+                logger.warning("Previous month revenue is zero; growth rate set to 0.")
+            growth_rate = 0.0
+
         projected_annual = year_revenue * (1 + growth_rate / 100)
-        
+
         return RevenueMetrics(
             today=today_revenue,
             month=month_revenue,
@@ -146,25 +206,14 @@ async def get_revenue_metrics(db: Session = Depends(get_db)):
             projected=projected_annual
         )
         
-    except Exception as e:
-        # Log error and return zeros instead of fake data
-        import logging
-        logger = logging.getLogger(__name__)
+    except SQLAlchemyError as e:
         logger.error(f"Failed to get revenue metrics: {e}")
-        return RevenueMetrics(
-            today=0.0,
-            month=0.0,
-            year=0.0,
-            mrr=0.0,
-            arr=0.0,
-            subscriptions=0,
-            conversionRate=0.0,
-            aov=0.0,
-            ltv=0.0,
-            churn=0.0,
-            growth=0.0,
-            projected=0.0
-        )
+        if _is_schema_missing_error(e):
+            raise HTTPException(status_code=503, detail="Required revenue tables are missing.")
+        raise HTTPException(status_code=500, detail="Failed to get revenue metrics.")
+    except Exception as e:
+        logger.error(f"Failed to get revenue metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get revenue metrics.")
 
 @router.get("/transactions")
 async def get_recent_transactions(
@@ -200,7 +249,8 @@ async def get_recent_transactions(
                 for row in result
             ]
             return {"transactions": transactions}
-        # No transactions found - return empty list (not fake data)
+        logger.info("No transactions found for recent transactions query.")
+        # No transactions found - return empty list
         return {"transactions": []}
     except Exception as e:
         import logging
@@ -232,10 +282,9 @@ async def assign_experiment(
         
         return {"success": True, "variant": assignment.variant_id}
     except Exception as e:
-        # Fallback to random assignment
-        variants = ["control", "variant_a", "variant_b"]
-        selected = random.choice(variants)
-        return {"success": True, "variant": selected}
+        logger.error("Failed to assign experiment: %s", e)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to assign experiment")
 
 @router.post("/conversions/track")
 async def track_conversion(
@@ -265,7 +314,9 @@ async def track_conversion(
         
         return {"success": True, "message": "Conversion tracked"}
     except Exception as e:
-        return {"success": True, "message": "Conversion tracked (demo)"}
+        logger.error("Failed to track conversion: %s", e)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to track conversion")
 
 @router.post("/optimization/track")
 async def track_optimization_event(
@@ -287,7 +338,9 @@ async def track_optimization_event(
         
         return {"success": True, "message": "Event tracked"}
     except Exception as e:
-        return {"success": True, "message": "Event tracked (demo)"}
+        logger.error("Failed to track optimization event: %s", e)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to track optimization event")
 
 # ============= Email Automation =============
 
@@ -328,13 +381,71 @@ async def schedule_email(
         
         return {"success": True, "email_id": str(email_id)}
     except Exception as e:
-        return {"success": True, "email_id": str(uuid.uuid4()), "demo": True}
+        logger.error("Failed to schedule email: %s", e)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to schedule email")
 
 async def send_email_when_due(email_id: str, scheduled_for: datetime):
     """Background task to send email at scheduled time"""
-    # This would integrate with your email service
-    # For now, just log that it would be sent
-    pass
+    from services.notifications import send_email_message
+    from main import SessionLocal
+
+    db = SessionLocal()
+    try:
+        result = db.execute(text("""
+            SELECT id, email, subject, template, personalization_data
+            FROM scheduled_emails
+            WHERE id = :email_id
+        """), {"email_id": email_id}).fetchone()
+
+        if not result:
+            logger.error("Scheduled email not found: %s", email_id)
+            return
+
+        if datetime.utcnow() < scheduled_for:
+            logger.info("Scheduled email %s not due yet.", email_id)
+            return
+
+        template_result = db.execute(text("""
+            SELECT subject, html_body, text_body
+            FROM email_templates
+            WHERE template_key = :template_key AND is_active = true
+            LIMIT 1
+        """), {"template_key": result.template}).fetchone()
+
+        if not template_result:
+            logger.error("Email template not found or inactive: %s", result.template)
+            db.execute(text("""
+                UPDATE scheduled_emails
+                SET status = 'failed', error = :error, updated_at = NOW()
+                WHERE id = :email_id
+            """), {"email_id": email_id, "error": "Template not found or inactive"})
+            db.commit()
+            return
+
+        personalization = json.loads(result.personalization_data or "{}")
+        subject = _render_template(template_result.subject or result.subject, personalization)
+        html_body = _render_template(template_result.html_body or "", personalization)
+        text_body = _render_template(template_result.text_body or "", personalization)
+
+        if not html_body and not text_body:
+            raise RuntimeError("Email template missing body content")
+
+        success = send_email_message(result.email, subject, html_body, text_body)
+        status = "sent" if success else "failed"
+        error = None if success else "Email delivery failed"
+
+        db.execute(text("""
+            UPDATE scheduled_emails
+            SET status = :status, error = :error, sent_at = NOW(), updated_at = NOW()
+            WHERE id = :email_id
+        """), {"email_id": email_id, "status": status, "error": error})
+        db.commit()
+    except Exception as e:
+        logger.error("Failed to send scheduled email %s: %s", email_id, e)
+        db.rollback()
+    finally:
+        db.close()
 
 @router.get("/emails/pending")
 async def get_pending_emails(db: Session = Depends(get_db)):
@@ -348,60 +459,19 @@ async def get_pending_emails(db: Session = Depends(get_db)):
         """).fetchall()
         
         return {"emails": [dict(row) for row in result]}
-    except:
-        return {"emails": [], "demo": True}
+    except Exception as e:
+        logger.error("Failed to fetch pending emails: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch pending emails")
 
 # ============= AI Recommendations =============
 
 @router.get("/ai/recommendations")
 async def get_ai_recommendations(db: Session = Depends(get_db)):
     """Get AI-generated optimization recommendations"""
-    
-    # Generate smart recommendations based on current metrics
-    recommendations = [
-        AIRecommendation(
-            title="Enable Exit-Intent Popups",
-            description="Capture 15-20% more leads by showing targeted offers when visitors attempt to leave",
-            impact_score=8.5,
-            confidence_score=9.2,
-            estimated_revenue_impact=25000,
-            auto_implement=True
-        ),
-        AIRecommendation(
-            title="Optimize Pricing Display",
-            description="A/B test showing annual pricing first increased conversions by 23% in similar businesses",
-            impact_score=7.8,
-            confidence_score=8.5,
-            estimated_revenue_impact=35000,
-            auto_implement=True
-        ),
-        AIRecommendation(
-            title="Add Social Proof Notifications",
-            description="Display real-time customer activity to build trust and urgency",
-            impact_score=6.9,
-            confidence_score=8.8,
-            estimated_revenue_impact=15000,
-            auto_implement=True
-        ),
-        AIRecommendation(
-            title="Implement Cart Abandonment Sequence",
-            description="Recover 30% of abandoned carts with a 3-email sequence",
-            impact_score=9.1,
-            confidence_score=9.5,
-            estimated_revenue_impact=45000,
-            auto_implement=True
-        ),
-        AIRecommendation(
-            title="Launch Referral Program",
-            description="Incentivize customers to refer others with a 20% commission structure",
-            impact_score=7.5,
-            confidence_score=7.8,
-            estimated_revenue_impact=50000,
-            auto_implement=False
-        )
-    ]
-    
-    return {"recommendations": recommendations}
+    raise HTTPException(
+        status_code=501,
+        detail="AI recommendations are not implemented. Configure a real recommendation engine.",
+    )
 
 @router.post("/ai/recommendations/{id}/implement")
 async def implement_recommendation(
@@ -409,60 +479,37 @@ async def implement_recommendation(
     db: Session = Depends(get_db)
 ):
     """Implement an AI recommendation"""
-    # This would trigger actual implementation
-    # For now, just mark as implemented
-    
-    return {
-        "success": True,
-        "message": "Recommendation implemented successfully",
-        "estimated_impact": "$25,000/month"
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="Recommendation execution is not implemented. Implement workflow orchestration before use.",
+    )
 
 # ============= Dashboard Data =============
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(db: Session = Depends(get_db)):
     """Get comprehensive dashboard data"""
-    
-    metrics = await get_revenue_metrics(db)
-    transactions = await get_recent_transactions(5, db)
-    recommendations = await get_ai_recommendations(db)
-    
-    # Calculate conversion funnel
-    funnel = {
-        "visitors": 10000,
-        "leads": 680,  # 6.8% conversion
-        "trials": 204,  # 30% of leads
-        "customers": 142,  # 70% trial to paid
-        "revenue": metrics.month
-    }
-    
-    return {
-        "metrics": metrics,
-        "transactions": transactions["transactions"],
-        "recommendations": recommendations["recommendations"][:3],
-        "funnel": funnel,
-        "health_score": 92,  # System health 0-100
-        "automation_level": 95  # % automated
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="Dashboard summary is not implemented. Build real funnel metrics before use.",
+    )
 
 # ============= Testing Endpoint =============
 
 @router.get("/test")
 async def test_revenue_system():
     """Test that revenue automation system is working"""
-    return {
-        "status": "operational",
-        "message": "Revenue automation system is fully operational",
-        "features": [
-            "Real-time metrics tracking",
-            "A/B testing engine",
-            "Email automation",
-            "AI recommendations",
-            "Conversion optimization",
-            "Social proof engine",
-            "Exit-intent recovery"
-        ],
-        "automation_level": "95%",
-        "expected_revenue": "$500K-$1M/year"
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="Use /api/v1/revenue/metrics for runtime checks. This endpoint is not implemented.",
+    )
+
+
+def _render_template(template: str, data: Dict[str, Any]) -> str:
+    """Render simple {{key}} templates with provided data."""
+    if not template:
+        return ""
+    rendered = template
+    for key, value in data.items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", str(value))
+    return rendered

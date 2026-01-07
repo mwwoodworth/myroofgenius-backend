@@ -15,18 +15,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/equipment", tags=["Equipment"])
 
 
-def _empty_response(limit: int, offset: int) -> Dict[str, Any]:
-    return {
-        "success": True,
-        "data": [],
-        "total": 0,
-        "limit": limit,
-        "offset": offset,
-        "degraded": True,
-        "message": "Equipment data unavailable; returning empty list."
-    }
-
-
 @router.get("")
 async def list_equipment(
     request: Request,
@@ -42,8 +30,7 @@ async def list_equipment(
 
     db_pool = getattr(request.app.state, "db_pool", None)
     if not db_pool:
-        logger.warning("Database pool unavailable; returning fallback equipment list.")
-        return _empty_response(limit, offset)
+        raise HTTPException(status_code=503, detail="Database connection not available")
 
     query = """
         SELECT id, name, equipment_type, status, location_id,
@@ -72,8 +59,7 @@ async def list_equipment(
     except Exception as exc:
         message = str(exc)
         if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Equipment schema unavailable; returning fallback dataset.")
-            return _empty_response(limit, offset)
+            raise HTTPException(status_code=503, detail="Equipment schema unavailable")
         logger.error(f"Error retrieving equipment: {message}")
         raise HTTPException(status_code=500, detail="Failed to list equipment")
 
@@ -105,13 +91,7 @@ async def get_equipment(
 
     db_pool = getattr(request.app.state, "db_pool", None)
     if not db_pool:
-        logger.warning("Database pool unavailable; returning fallback equipment detail.")
-        return {
-            "success": True,
-            "data": None,
-            "degraded": True,
-            "message": "Equipment data unavailable; detail cannot be retrieved."
-        }
+        raise HTTPException(status_code=503, detail="Database connection not available")
 
     try:
         async with db_pool.acquire() as conn:
@@ -128,13 +108,7 @@ async def get_equipment(
     except Exception as exc:
         message = str(exc)
         if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Equipment schema unavailable; returning fallback equipment detail.")
-            return {
-                "success": True,
-                "data": None,
-                "degraded": True,
-                "message": "Equipment schema unavailable; detail cannot be retrieved."
-            }
+            raise HTTPException(status_code=503, detail="Equipment schema unavailable")
         logger.error(f"Error retrieving equipment {equipment_id}: {message}")
         raise HTTPException(status_code=500, detail="Failed to retrieve equipment")
 

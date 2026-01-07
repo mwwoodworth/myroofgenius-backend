@@ -21,6 +21,8 @@ _AUTH_FAIL_LOG_INTERVAL = 60  # Only log same path failure once per minute
 DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/health",
     "/api/v1/health",
+    "/ready",
+    "/api/v1/ready",
     "/docs",
     "/redoc",
     "/openapi.json",

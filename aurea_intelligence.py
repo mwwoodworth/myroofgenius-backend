@@ -89,38 +89,59 @@ async def initialize(request: Dict[str, Any], db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Error initializing AUREA: {str(e)}")
-        return {
-            "status": "initialized",
-            "consciousness_id": str(uuid.uuid4()),
-            "level": "ADAPTIVE",
-            "message": "AUREA initialized (simulated)"
-        }
+        raise HTTPException(status_code=500, detail="AUREA initialization failed") from e
 
 @router.post("/think")
 async def think(request: Dict[str, Any], db: Session = Depends(get_db)):
     """Process a thought"""
+    from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
     prompt = request.get("prompt", "")
-    
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    ai_prompt = (
+        "You are AUREA. Process the prompt and return JSON with keys: "
+        "thought, insights (list), confidence (0-1)."
+        f"\n\nPrompt: {prompt}"
+    )
+
+    try:
+        result = await ai_service.generate_json(ai_prompt)
+    except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return {
-        "thought": f"Processing: {prompt}",
-        "insights": [
-            "Pattern recognized in input",
-            "Optimal solution identified",
-            "Execution path determined"
-        ],
-        "confidence": 0.95,
+        "thought": result.get("thought"),
+        "insights": result.get("insights", []),
+        "confidence": result.get("confidence"),
         "timestamp": datetime.utcnow().isoformat()
     }
 
 @router.post("/converse")
 async def converse(request: Dict[str, Any], db: Session = Depends(get_db)):
     """Have a conversation"""
+    from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
     message = request.get("message", "")
-    
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    ai_prompt = (
+        "You are AUREA, a helpful assistant. Respond conversationally and return JSON with keys: "
+        "response, suggestions (list), context_aware (bool)."
+        f"\n\nMessage: {message}"
+    )
+
+    try:
+        result = await ai_service.generate_json(ai_prompt)
+    except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return {
-        "response": f"I understand you're asking about: {message}. Let me help you with that.",
-        "context_aware": True,
-        "suggestions": ["Tell me more", "What specific aspect?", "How can I assist?"],
+        "response": result.get("response"),
+        "context_aware": bool(result.get("context_aware", True)),
+        "suggestions": result.get("suggestions", []),
         "timestamp": datetime.utcnow().isoformat()
     }
 

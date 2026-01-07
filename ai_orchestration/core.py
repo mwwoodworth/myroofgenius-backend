@@ -237,7 +237,7 @@ class Agent:
                 error_memories = await self.memory.search(context['error'], limit=3)
                 memories.extend(error_memories)
             
-            # Process with LLM (placeholder - integrate with actual LLM)
+            # Process with LLM via provider-backed integration
             decision = await self._llm_process(context, memories)
             
             # Store this thinking process
@@ -412,24 +412,32 @@ class Agent:
             """, self.status.value, datetime.utcnow(), self.agent_id)
     
     async def _llm_process(self, context: Dict, memories: List[Dict]) -> Dict:
-        """Process with LLM (placeholder for actual implementation)"""
-        # This will be replaced with actual LLM calls
-        # For now, return a simple decision structure
+        """Process with real LLM providers via the AI integration service."""
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            "You are an orchestration agent in BrainOps AI OS. "
+            "Given the context and recent memories, decide the next best action.\n\n"
+            f"Context:\n{json.dumps(context, default=str)}\n\n"
+            f"Recent memories:\n{json.dumps(memories[-5:], default=str)}\n\n"
+            "Return JSON with keys: action, confidence (0-1), reasoning, next_steps (list)."
+        )
+
+        try:
+            decision = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise RuntimeError(f"AI provider unavailable for orchestration: {exc}") from exc
+
         return {
-            'action': 'investigate',
-            'confidence': 0.8,
-            'reasoning': 'Based on context and past experiences',
-            'next_steps': ['analyze', 'test', 'deploy']
+            "action": decision.get("action"),
+            "confidence": decision.get("confidence"),
+            "reasoning": decision.get("reasoning"),
+            "next_steps": decision.get("next_steps", [])
         }
     
     async def _execute_action(self, action: Dict) -> Dict:
         """Execute an action (to be overridden by specific agents)"""
-        # Base implementation - specific agents will override
-        return {
-            'success': True,
-            'result': 'Action executed',
-            'details': action
-        }
+        raise RuntimeError("Action execution not implemented for base orchestration agent")
     
     async def _identify_patterns(self, experiences: List[Dict]) -> List[Dict]:
         """Identify patterns in experiences"""

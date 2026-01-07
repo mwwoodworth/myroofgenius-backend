@@ -5,8 +5,11 @@ from sqlalchemy import text
 from typing import Dict, Any, List
 import json
 from datetime import datetime
+import logging
+from core.supabase_auth import get_current_user
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 def get_db():
     """Database dependency"""
@@ -30,17 +33,11 @@ async def get_ai_board_status(db: Session = Depends(get_db)):
             "active_agents": active_agents,
             "total_agents": active_agents,
             "last_sync": datetime.now().isoformat(),
-            "health": "healthy"
+            "health": "healthy" if active_agents > 0 else "degraded",
         }
     except Exception as e:
-        # Return mock data on error
-        return {
-            "status": "operational",
-            "active_agents": 6,
-            "total_agents": 6,
-            "last_sync": datetime.now().isoformat(),
-            "health": "healthy"
-        }
+        logger.error("Failed to fetch AI board status: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch AI board status")
 
 @router.get("/agents")
 async def get_ai_agents(db: Session = Depends(get_db)):
@@ -61,15 +58,6 @@ async def get_ai_agents(db: Session = Depends(get_db)):
                 "capabilities": row.capabilities if row.capabilities else []
             })
         return {"agents": agents}
-    except:
-        # Return mock agents
-        return {
-            "agents": [
-                {"id": "1", "name": "Sophie", "type": "customer_support", "status": "active"},
-                {"id": "2", "name": "Max", "type": "sales", "status": "active"},
-                {"id": "3", "name": "Elena", "type": "estimation", "status": "active"},
-                {"id": "4", "name": "Victoria", "type": "analytics", "status": "active"},
-                {"id": "5", "name": "AUREA", "type": "executive", "status": "active"},
-                {"id": "6", "name": "BrainLink", "type": "coordinator", "status": "active"}
-            ]
-        }
+    except Exception as e:
+        logger.error("Failed to fetch AI agents: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch AI agents")

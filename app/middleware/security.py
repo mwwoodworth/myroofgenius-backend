@@ -3,6 +3,7 @@ Security middleware for rate limiting, API key validation, and request protectio
 """
 
 import time
+import os
 import hashlib
 import hmac
 from collections import OrderedDict
@@ -57,6 +58,8 @@ class _CachedAPIKey:
 DEFAULT_PUBLIC_PATHS: Sequence[str] = (
     "/health",
     "/api/v1/health",
+    "/ready",
+    "/api/v1/ready",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -237,6 +240,16 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         """Validate API key against database with caching."""
         if not api_key or len(api_key) < 16:
             return None
+
+        internal_key = os.getenv("BACKEND_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
+        now = time.time()
+        if internal_key and hmac.compare_digest(api_key, internal_key):
+            return _CachedAPIKey(
+                key_id="internal",
+                expires_at_ts=None,
+                cache_expiry_ts=now + self.cache_ttl,
+                last_touch_ts=now,
+            )
 
         if not db_pool:
             logger.error("Database pool unavailable for API key validation")

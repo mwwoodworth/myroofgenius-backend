@@ -3,15 +3,14 @@ Central Nervous System (CNS) Service - Simplified Version
 Works with database tables and provides intelligent fallbacks when AI unavailable
 """
 
-import asyncio
 import asyncpg
 import json
-import numpy as np
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 import logging
-import hashlib
+import openai
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +21,8 @@ class BrainOpsCNS:
         """Initialize CNS with database pool"""
         self.db_pool = db_pool
         self.initialized = False
+        self._openai_client = None
+        self._openai_key = os.getenv("OPENAI_API_KEY")
 
     async def initialize(self):
         """Initialize CNS and verify database tables"""
@@ -48,24 +49,32 @@ class BrainOpsCNS:
             logger.error(f"CNS initialization failed: {e}")
             raise
 
-    def _generate_embedding(self, text: str) -> List[float]:
-        """Generate a deterministic embedding from text (fallback when no AI)"""
-        # Use SHA256 to generate deterministic values from text
-        hash_obj = hashlib.sha256(text.encode())
-        hash_hex = hash_obj.hexdigest()
+    def _get_openai_client(self) -> openai.AsyncOpenAI:
+        if not self._openai_key:
+            raise HTTPException(
+                status_code=503,
+                detail="OPENAI_API_KEY is required for CNS embeddings",
+            )
+        if self._openai_client is None:
+            self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
+        return self._openai_client
 
-        # Convert hex to floats between -1 and 1
-        embedding = []
-        for i in range(0, min(len(hash_hex), 1536*2), 2):
-            hex_pair = hash_hex[i:i+2]
-            value = (int(hex_pair, 16) / 127.5) - 1.0  # Normalize to [-1, 1]
-            embedding.append(value)
+    async def _generate_embedding(self, text: str) -> List[float]:
+        """Generate vector embedding using OpenAI."""
+        client = self._get_openai_client()
+        truncated = text[:30000] if len(text) > 30000 else text
+        try:
+            response = await client.embeddings.create(
+                model="text-embedding-3-small",
+                input=truncated,
+            )
+        except Exception as exc:
+            logger.error("Embedding generation failed: %s", exc, exc_info=True)
+            raise HTTPException(status_code=502, detail="Embedding generation failed") from exc
 
-        # Pad to 1536 dimensions if needed
-        while len(embedding) < 1536:
-            embedding.append(0.0)
-
-        return embedding[:1536]
+        if not response.data:
+            raise HTTPException(status_code=502, detail="Embedding generation returned no data")
+        return response.data[0].embedding
 
     async def remember(self, data: Dict) -> str:
         """Store anything in permanent memory"""
@@ -75,7 +84,7 @@ class BrainOpsCNS:
         async with self.db_pool.acquire() as conn:
             # Generate embedding from full payload
             text = json.dumps(data)
-            embedding = self._generate_embedding(text)
+            embedding = await self._generate_embedding(text)
 
             # Serialize content to JSON string to match TEXT columns safely.
             content_str = json.dumps(data)
@@ -107,7 +116,7 @@ class BrainOpsCNS:
 
         async with self.db_pool.acquire() as conn:
             # Generate query embedding
-            query_embedding = self._generate_embedding(query)
+            query_embedding = await self._generate_embedding(query)
 
             # Search with vector similarity (using cosine distance)
             results = await conn.fetch("""

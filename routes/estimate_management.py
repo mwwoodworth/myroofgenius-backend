@@ -378,18 +378,11 @@ async def list_estimates(
     except Exception as e:
         message = str(e)
         if "does not exist" in message or "UndefinedTable" in message:
-            logger.warning("Estimates schema unavailable; returning fallback dataset.")
-            return {
-                "success": True,
-                "data": {
-                    "total": 0,
-                    "estimates": [],
-                    "limit": limit,
-                    "offset": offset
-                },
-                "degraded": True,
-                "message": "Estimates schema unavailable; returning empty list."
-            }
+            logger.error("Estimates schema unavailable; failing request.")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Estimates schema unavailable"
+            )
         logger.error(f"Failed to list estimates: {message}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

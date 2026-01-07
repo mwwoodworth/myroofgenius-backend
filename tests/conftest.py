@@ -17,6 +17,13 @@ import jwt
 # Speed up tests by skipping heavy dynamic route loading
 os.environ.setdefault("SKIP_ROUTE_LOADING", "1")
 os.environ.setdefault("FAST_TEST_MODE", "1")
+os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret")
+os.environ.setdefault("SUPABASE_JWT_AUDIENCE", "authenticated")
+os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/postgres")
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -29,8 +36,10 @@ TEST_DB_USER = os.getenv("DB_USER")
 TEST_DB_PASSWORD = os.getenv("DB_PASSWORD")
 TEST_DB_PORT = os.getenv("DB_PORT")
 
-if not all([TEST_DB_HOST, TEST_DB_USER, TEST_DB_PASSWORD]):
-    raise RuntimeError("DB_HOST, DB_USER, and DB_PASSWORD environment variables are required for tests")
+DB_AVAILABLE = all([TEST_DB_HOST, TEST_DB_USER, TEST_DB_PASSWORD])
+DB_MISSING_REASON = (
+    "DB_HOST, DB_USER, and DB_PASSWORD environment variables are required for DB-backed tests"
+)
 
 TEST_DB_CONFIG = {
     "host": TEST_DB_HOST,
@@ -38,7 +47,7 @@ TEST_DB_CONFIG = {
     "user": TEST_DB_USER,
     "password": TEST_DB_PASSWORD,
     "port": int(TEST_DB_PORT) if TEST_DB_PORT else 6543
-}
+} if DB_AVAILABLE else {}
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -50,6 +59,8 @@ def event_loop():
 @pytest.fixture(scope="session")
 def db_connection():
     """Database connection for tests"""
+    if not DB_AVAILABLE:
+        pytest.skip(DB_MISSING_REASON)
     conn = psycopg2.connect(**TEST_DB_CONFIG)
     yield conn
     conn.close()
@@ -74,6 +85,8 @@ def db_cursor(db_connection):
 @pytest.fixture
 async def async_db_pool():
     """Async database pool"""
+    if not DB_AVAILABLE:
+        pytest.skip(DB_MISSING_REASON)
     import asyncpg
     pool = await asyncpg.create_pool(
         host=TEST_DB_CONFIG["host"],
@@ -155,9 +168,13 @@ def test_job_data():
     }
 
 @pytest.fixture(autouse=True)
-def reset_test_data(db_cursor):
+def reset_test_data(request):
     """Reset test data before each test"""
-    # Clean up test data
+    if not DB_AVAILABLE:
+        yield
+        return
+
+    db_cursor = request.getfixturevalue("db_cursor")
     tables = [
         'test_data',
         'test_sessions'
@@ -165,7 +182,7 @@ def reset_test_data(db_cursor):
     for table in tables:
         try:
             db_cursor.execute(f"DELETE FROM {table} WHERE email LIKE '%@test.com'")
-        except:
+        except Exception:
             pass  # Table may not exist
     yield
 

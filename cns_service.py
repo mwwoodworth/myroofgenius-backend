@@ -8,16 +8,19 @@ import asyncio
 import asyncpg
 import json
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
-import numpy as np
 from fastapi import HTTPException
+import openai
 
 # Database connection - MUST use environment variable, no fallback
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is required")
+
+logger = logging.getLogger(__name__)
 
 class BrainOpsCNS:
     """Central Nervous System for persistent memory and task management"""
@@ -26,6 +29,8 @@ class BrainOpsCNS:
         self.db_pool = db_pool
         self.memory_cache = {}
         self.task_cache = {}
+        self._openai_key = os.getenv("OPENAI_API_KEY")
+        self._openai_client = None
 
     async def initialize(self):
         """Initialize CNS with database connection"""
@@ -48,7 +53,7 @@ class BrainOpsCNS:
             memory_id = str(uuid4())
 
             # Generate embedding (placeholder - would use real embedding model)
-            embedding = self._generate_embedding(json.dumps(data))
+            embedding = await self._generate_embedding(json.dumps(data))
 
             # Calculate importance based on content
             importance = self._calculate_importance(data)
@@ -95,7 +100,7 @@ class BrainOpsCNS:
         """Retrieve relevant memories using semantic search"""
         async with self.db_pool.acquire() as conn:
             # Generate query embedding
-            query_embedding = self._generate_embedding(query)
+            query_embedding = await self._generate_embedding(query)
 
             # Convert query embedding to string for PostgreSQL vector type
             query_embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
@@ -404,7 +409,7 @@ class BrainOpsCNS:
             thread_id = str(uuid4())
 
             # Generate embedding for thread summary
-            embedding = self._generate_embedding(
+            embedding = await self._generate_embedding(
                 thread_data.get('summary', thread_data.get('title', ''))
             )
             # Convert embedding to string for PostgreSQL vector type
@@ -597,12 +602,32 @@ class BrainOpsCNS:
     # HELPER METHODS
     # =====================================================
 
-    def _generate_embedding(self, text: str) -> list:
-        """Generate vector embedding for text (placeholder)"""
-        # In production, would use OpenAI/Anthropic embeddings
-        # For now, generate random 1536-dim vector
-        np.random.seed(hash(text) % (2**32))
-        return np.random.randn(1536).tolist()
+    def _get_openai_client(self) -> openai.AsyncOpenAI:
+        if not self._openai_key:
+            raise HTTPException(
+                status_code=503,
+                detail="OPENAI_API_KEY is required for CNS embeddings",
+            )
+        if self._openai_client is None:
+            self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
+        return self._openai_client
+
+    async def _generate_embedding(self, text: str) -> list:
+        """Generate vector embedding using OpenAI."""
+        client = self._get_openai_client()
+        truncated = text[:30000] if len(text) > 30000 else text
+        try:
+            response = await client.embeddings.create(
+                model="text-embedding-3-small",
+                input=truncated,
+            )
+        except Exception as exc:
+            logger.error("Embedding generation failed: %s", exc, exc_info=True)
+            raise HTTPException(status_code=502, detail="Embedding generation failed") from exc
+
+        if not response.data:
+            raise HTTPException(status_code=502, detail="Embedding generation returned no data")
+        return response.data[0].embedding
 
     def _calculate_importance(self, data: Dict) -> float:
         """Calculate importance score for memory"""

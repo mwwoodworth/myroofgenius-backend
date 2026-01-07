@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from database import get_db, engine
 from core.supabase_auth import get_current_user
+from services.notifications import send_email_message
 
 router = APIRouter(tags=["Customer Pipeline"])
 
@@ -210,8 +211,13 @@ def send_sales_alert(lead: LeadCapture):
     CALL WITHIN 5 MINUTES!
     """
     
-    # Send to sales team (Placeholder)
-    print(message)
+    recipient = os.getenv("SALES_ALERT_EMAIL")
+    if not recipient:
+        logger.error("SALES_ALERT_EMAIL not configured; cannot send sales alert")
+        return
+
+    subject = f"Hot Lead Alert: {lead.first_name} {lead.last_name or ''}".strip()
+    send_email_message(recipient, subject, message, message)
 
 # ============================================================================
 # ROUTES
@@ -372,7 +378,7 @@ def trigger_nurture_sequence(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/lead-analytics")
-def get_lead_analytics(
+async def get_lead_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -434,21 +440,34 @@ def get_lead_analytics(
             d["conversion_rate"] = (d["converted"] / d["total"] * 100) if d["total"] > 0 else 0
             urgency_conversion.append(d)
         
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            "Analyze lead funnel metrics and provide 3-5 actionable recommendations.\n\n"
+            f"Funnel: {json.dumps(funnel, default=str)}\n"
+            f"Sources: {json.dumps(sources, default=str)}\n"
+            f"Urgency conversion: {json.dumps(urgency_conversion, default=str)}\n\n"
+            "Return JSON with key: recommendations (list of strings)."
+        )
+
+        try:
+            ai_result = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        recommendations = ai_result.get("recommendations") or []
+
         return {
             "funnel": funnel,
             "sources": sources,
             "urgency_conversion": urgency_conversion,
-            "recommendations": [
-                "Hot leads convert 5x better - prioritize immediate follow-up",
-                "Google Ads generating highest quality leads",
-                "Emergency leads have 73% conversion rate"
-            ]
+            "recommendations": recommendations
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upsell-opportunity/{customer_id}")
-def identify_upsell_opportunity(
+async def identify_upsell_opportunity(
     customer_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -479,26 +498,26 @@ def identify_upsell_opportunity(
             logger.warning(f"Could not fetch purchases for customer {customer_id}: {e}")
             purchases = []
         
-        opportunities = []
-        
-        # Basic to Pro upgrade
-        # Assuming purchases have 'product_tier' or similar. Mock logic preserved.
-        if len(purchases) > 0:
-             pass # Add logic here if schema known
-        
-        # Default mock opportunities if no data
-        opportunities.append({
-            "type": "tier_upgrade",
-            "product": "Pro Plan",
-            "reason": "Customer actively using basic features",
-            "potential_value": 50.00,
-            "confidence": 0.75
-        })
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            "Given the customer profile and purchase history, identify upsell opportunities.\n\n"
+            f"Customer: {json.dumps(dict(customer._mapping), default=str)}\n"
+            f"Purchases: {json.dumps([dict(p._mapping) for p in purchases], default=str)}\n\n"
+            "Return JSON with key: opportunities (list of objects with type, product, reason, potential_value, confidence)."
+        )
+
+        try:
+            ai_result = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        opportunities = ai_result.get("opportunities") or []
         
         return {
             "customer_id": customer_id,
             "opportunities": opportunities,
-            "total_potential_value": sum(o["potential_value"] for o in opportunities),
+            "total_potential_value": sum(float(o.get("potential_value") or 0) for o in opportunities),
             "recommended_action": opportunities[0] if opportunities else None
         }
     except Exception as e:

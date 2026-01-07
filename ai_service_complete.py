@@ -27,6 +27,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is required but not set")
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production").strip().lower()
+ALLOW_AI_SERVICE_COMPLETE = os.getenv("ALLOW_AI_SERVICE_COMPLETE", "").strip().lower() in {"1", "true", "yes"}
+if ENVIRONMENT in {"production", "prod"}:
+    raise RuntimeError("ai_service_complete is not permitted in production. Use ai_services.real_ai_integration.")
+if not ALLOW_AI_SERVICE_COMPLETE:
+    raise RuntimeError(
+        "ai_service_complete is deprecated. Use ai_services.real_ai_integration or set "
+        "ALLOW_AI_SERVICE_COMPLETE=true for explicit dev-only usage."
+    )
+
 class ComprehensiveAIService:
     """Complete AI service with real implementations for all agents"""
 

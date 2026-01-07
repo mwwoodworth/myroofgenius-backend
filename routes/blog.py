@@ -8,15 +8,10 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import json
-import asyncio
-import httpx
 from sqlalchemy import text
 
 from database import get_db_connection
 import os
-
-# AI service configuration
-AI_AGENTS_URL = os.getenv("AI_AGENTS_URL", "https://brainops-ai-agents.onrender.com")
 
 router = APIRouter(prefix="/blog", tags=["Blog"])
 
@@ -44,47 +39,6 @@ class BlogGenerationRequest(BaseModel):
     include_stats: bool = True
     include_cta: bool = True
     research_depth: str = "comprehensive"
-
-def generate_fallback_content(topic: str, research_data: dict) -> str:
-    """Generate fallback content when AI service is unavailable"""
-    intro = f"""# {topic}
-
-The roofing industry is constantly evolving, and understanding {topic.lower()} is crucial for homeowners and contractors alike. This comprehensive guide will explore the key aspects you need to know.
-
-## Key Statistics and Trends
-"""
-
-    if research_data.get("statistics"):
-        for stat in research_data["statistics"][:3]:
-            intro += f"- {stat}\n"
-
-    intro += "\n## What You Need to Know\n\n"
-    intro += f"When it comes to {topic.lower()}, there are several important factors to consider. Let's dive into the details that matter most for your roofing project.\n\n"
-
-    sections = [
-        "### Planning and Preparation\n\nProper planning is essential for any roofing project. Start by assessing your current roof's condition and determining your specific needs.",
-        "### Cost Considerations\n\nUnderstanding the costs involved helps you budget effectively. Prices vary based on materials, labor, and project complexity.",
-        "### Material Selection\n\nChoosing the right materials impacts both performance and longevity. Consider climate, aesthetics, and budget when making your selection.",
-        "### Professional vs. DIY\n\nWhile some maintenance tasks can be DIY, major roofing work requires professional expertise for safety and quality assurance."
-    ]
-
-    content = intro + "\n\n".join(sections)
-
-    # Add CTA
-    content += """\n\n## Get Expert Help from WeatherCraft Roofing
-
-Ready to tackle your roofing project with confidence? WeatherCraft Roofing provides:
-
-- ✅ Free professional inspections and estimates
-- ✅ AI-powered analysis for accurate assessments
-- ✅ Experienced, licensed contractors
-- ✅ Comprehensive warranties on all work
-- ✅ 24/7 emergency services
-
-**[Contact us today](https://weathercraftroofingco.com/contact)** for a free consultation or call (719) 389-7663 to speak with our experts.
-"""
-
-    return content
 
 @router.get("/posts")
 async def get_blog_posts(
@@ -256,7 +210,7 @@ async def create_blog_post(post: BlogPost):
 
 @router.post("/generate")
 async def generate_blog_post(request: BlogGenerationRequest):
-    """Generate a blog post using AI (Perplexity for research, Claude for writing)"""
+    """Generate a blog post using AI providers."""
     try:
         # Step 1: Research with Perplexity (using AI agents service)
         research_prompt = f"""
@@ -271,25 +225,14 @@ async def generate_blog_post(request: BlogGenerationRequest):
         4. Best practices and recommendations
         5. Recent innovations or changes
         """
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
 
-        # Simulate Perplexity research (replace with actual API call)
-        research_data = {
-            "statistics": [
-                "The roofing industry is valued at $51.9 billion in 2024",
-                "Average roof replacement costs $8,000-$15,000",
-                "Metal roofing demand increased 35% year-over-year"
-            ],
-            "trends": [
-                "AI-powered inspections growing 120% annually",
-                "Sustainable materials adoption up 45%",
-                "Smart roof technology integration increasing"
-            ],
-            "sources": [
-                "National Roofing Contractors Association 2024 Report",
-                "HomeAdvisor Cost Guide 2024",
-                "Industry Week Analysis"
-            ]
-        }
+        try:
+            research_data = await ai_service.generate_json(
+                research_prompt + "\n\nReturn JSON with keys: statistics (list), trends (list), sources (list)."
+            )
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         # Step 2: Generate content with Claude via AI agents service
         content_prompt = f"""
@@ -312,27 +255,16 @@ async def generate_blog_post(request: BlogGenerationRequest):
         3. Practical tips and recommendations
         4. Conclusion with CTA for WeatherCraft Roofing services
         """
-
-        # Call AI agents service for content generation
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{AI_AGENTS_URL}/ai/generate",
-                json={
-                    "prompt": content_prompt,
-                    "model": "claude-3-opus" if "claude" in request.get("model", "").lower() else "gpt-4",
-                    "temperature": 0.7,
-                    "max_tokens": 2000,
-                    "system_prompt": "You are an expert content writer for a roofing company blog. Write engaging, informative, and SEO-optimized content."
-                },
-                timeout=30.0
+        try:
+            content_result = await ai_service.generate_json(
+                content_prompt + "\n\nReturn JSON with key: content (markdown)."
             )
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-            if response.status_code != 200:
-                # Fallback to local generation
-                content = generate_fallback_content(request.topic, research_data)
-            else:
-                result = response.json()
-                content = result.get("result", generate_fallback_content(request.topic, research_data))
+        content = content_result.get("content")
+        if not content:
+            raise HTTPException(status_code=500, detail="AI content generation failed")
 
         # Generate excerpt
         excerpt = content[:200] + "..." if len(content) > 200 else content
@@ -379,41 +311,21 @@ async def generate_blog_post(request: BlogGenerationRequest):
 
 @router.post("/research")
 async def research_topic(topic: str, depth: str = "comprehensive"):
-    """Research a topic using Perplexity AI"""
+    """Research a topic using AI providers."""
     try:
-        # This would integrate with Perplexity API
-        # For now, return structured research data
-        research = {
-            "topic": topic,
-            "trending": True,
-            "search_volume": 5400,
-            "competition": "medium",
-            "keywords": [
-                topic.lower().replace(" ", "-"),
-                "roofing",
-                "contractors",
-                "cost",
-                "guide"
-            ],
-            "questions": [
-                f"What is the average cost of {topic.lower()}?",
-                f"How long does {topic.lower()} take?",
-                f"What are the benefits of {topic.lower()}?",
-                f"When should I consider {topic.lower()}?"
-            ],
-            "insights": [
-                "High search volume indicates strong interest",
-                "Competition is moderate - good opportunity",
-                "Related to seasonal trends",
-                "Growing interest in sustainable options"
-            ],
-            "recommended_angles": [
-                "Cost comparison guide",
-                "DIY vs professional analysis",
-                "Seasonal timing recommendations",
-                "Technology and innovation focus"
-            ]
-        }
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            f"Research the topic '{topic}' for a roofing industry blog.\n"
+            f"Depth: {depth}\n\n"
+            "Return JSON with keys: trending (bool), search_volume, competition, keywords (list), "
+            "questions (list), insights (list), recommended_angles (list), sources (list)."
+        )
+
+        try:
+            research = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         return {
             "success": True,

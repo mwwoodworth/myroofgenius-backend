@@ -1,14 +1,18 @@
 """
 LangGraph Workflow Execution
 
-Exposes workflow definitions stored in the database. Execution is intentionally
-disabled until integrated with real agent tooling (no simulated outputs).
+Exposes workflow definitions stored in the database and executes via the
+production LangGraph orchestrator (no simulated outputs).
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import uuid
 from typing import Any, Dict, Optional
+
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -126,12 +130,145 @@ def get_workflow(workflow_name: str, db: Session = Depends(get_db)):
 
 
 @router.post("/workflows/{workflow_name}/execute")
-async def execute_workflow(workflow_name: str, request: WorkflowExecutionRequest):
-    """Execute a LangGraph workflow (disabled without real agent integration)."""
-    raise HTTPException(
-        status_code=501,
-        detail="Workflow execution is not enabled on this server",
+async def execute_workflow(
+    workflow_name: str,
+    request: WorkflowExecutionRequest,
+    db: Session = Depends(get_db),
+):
+    """Execute a LangGraph workflow using the production AI agents service."""
+    ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL")
+    api_key = os.getenv("BRAINOPS_API_KEY")
+
+    if not ai_agents_url or not api_key:
+        raise HTTPException(status_code=503, detail="LangGraph execution requires BRAINOPS_AI_AGENTS_URL and BRAINOPS_API_KEY")
+
+    execution_id = str(uuid.uuid4())
+
+    workflow = db.execute(
+        text(
+            """
+            SELECT id, execution_count, success_rate
+            FROM langgraph_workflows
+            WHERE name = :name AND status = 'active'
+            """
+        ),
+        {"name": workflow_name},
+    ).first()
+
+    if not workflow:
+        raise HTTPException(status_code=404, detail=f"Workflow {workflow_name} not found")
+
+    db.execute(
+        text(
+            """
+            INSERT INTO langgraph_executions
+            (id, workflow_id, execution_id, status, context, started_at, created_at)
+            VALUES (:id, :workflow_id, :execution_id, 'running', :context, NOW(), NOW())
+            """
+        ),
+        {
+            "id": execution_id,
+            "workflow_id": workflow[0],
+            "execution_id": f"exec_{execution_id[:8]}",
+            "context": {
+                "workflow_name": workflow_name,
+                "input_data": request.input_data,
+                "context": request.context or {},
+            },
+        },
     )
+    db.commit()
+
+    payload = {
+        "prompt": (
+            f"Execute workflow '{workflow_name}' with input:\n"
+            f"{request.input_data}\n"
+            f"Context:\n{request.context}"
+        ),
+        "metadata": {
+            "workflow_name": workflow_name,
+            "input_data": request.input_data,
+            "context": request.context or {},
+            "execution_id": execution_id,
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                f"{ai_agents_url}/langgraph/workflow",
+                headers={"X-API-Key": api_key},
+                json=payload,
+            )
+    except Exception as exc:
+        db.execute(
+            text(
+                """
+                UPDATE langgraph_executions
+                SET status = 'failed', error = :error, completed_at = NOW()
+                WHERE id = :id
+                """
+            ),
+            {"id": execution_id, "error": str(exc)},
+        )
+        db.commit()
+        raise HTTPException(status_code=502, detail="LangGraph execution failed") from exc
+
+    if response.status_code != 200:
+        db.execute(
+            text(
+                """
+                UPDATE langgraph_executions
+                SET status = 'failed', error = :error, completed_at = NOW()
+                WHERE id = :id
+                """
+            ),
+            {"id": execution_id, "error": response.text[:500]},
+        )
+        db.commit()
+        raise HTTPException(status_code=502, detail="LangGraph execution failed")
+
+    result = response.json()
+    success = result.get("status") not in {"failed", "error"}
+
+    db.execute(
+        text(
+            """
+            UPDATE langgraph_executions
+            SET status = :status, result = :result, completed_at = NOW()
+            WHERE id = :id
+            """
+        ),
+        {
+            "id": execution_id,
+            "status": "completed" if success else "failed",
+            "result": result,
+        },
+    )
+
+    # Update workflow metrics
+    current_count = workflow[1] or 0
+    current_rate = workflow[2] or 0
+    new_total = current_count + 1
+    new_rate = ((current_rate * current_count) + (100 if success else 0)) / new_total
+    db.execute(
+        text(
+            """
+            UPDATE langgraph_workflows
+            SET execution_count = :count, success_rate = :rate
+            WHERE id = :id
+            """
+        ),
+        {"id": workflow[0], "count": new_total, "rate": new_rate},
+    )
+    db.commit()
+
+    return {
+        "execution_id": execution_id,
+        "workflow_name": workflow_name,
+        "status": "completed" if success else "failed",
+        "result": result,
+    }
 
 
 @router.get("/status")
@@ -167,4 +304,3 @@ def get_langgraph_status(db: Session = Depends(get_db)):
             "conditional_routing": LANGGRAPH_AVAILABLE,
         },
     }
-

@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -34,6 +35,8 @@ except Exception:
 
 
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+ALLOWED_TABLES = {value.strip().lower() for value in os.getenv("ANALYTICS_ALLOWED_TABLES", "").split(",") if value.strip()}
+ALLOWED_COLUMNS = {value.strip().lower() for value in os.getenv("ANALYTICS_ALLOWED_COLUMNS", "").split(",") if value.strip()}
 
 
 def _normalize_value(value: Any) -> Any:
@@ -57,6 +60,11 @@ def _validate_identifier(value: str, label: str) -> str:
     return value
 
 
+def _quote_identifier(value: str) -> str:
+    value = _validate_identifier(value, "identifier")
+    return f"\"{value}\""
+
+
 async def _table_exists(conn: asyncpg.Connection, table: str) -> bool:
     return bool(
         await conn.fetchval(
@@ -74,6 +82,8 @@ async def _table_exists(conn: asyncpg.Connection, table: str) -> bool:
 
 
 async def _get_table_columns(conn: asyncpg.Connection, table: str) -> Sequence[str]:
+    if ALLOWED_TABLES and table.lower() not in ALLOWED_TABLES:
+        raise HTTPException(status_code=403, detail="Dataset not allowed")
     if not await _table_exists(conn, table):
         raise HTTPException(status_code=404, detail=f"Unknown dataset: {table}")
     rows = await conn.fetch(
@@ -85,7 +95,15 @@ async def _get_table_columns(conn: asyncpg.Connection, table: str) -> Sequence[s
         """,
         table,
     )
-    return [row["column_name"] for row in rows]
+    columns = [row["column_name"] for row in rows]
+    if "tenant_id" not in columns:
+        raise HTTPException(status_code=403, detail="Dataset missing tenant_id")
+    if not ALLOWED_COLUMNS:
+        return columns
+    filtered = [col for col in columns if col.lower() in ALLOWED_COLUMNS or col.lower() == "tenant_id"]
+    if not filtered:
+        raise HTTPException(status_code=403, detail="No allowed columns for dataset")
+    return filtered
 
 
 def _metric_expression(metric: str, columns: Sequence[str]) -> Tuple[str, str]:
@@ -107,7 +125,7 @@ def _metric_expression(metric: str, columns: Sequence[str]) -> Tuple[str, str]:
     ):
         if metric.startswith(prefix):
             col = require_column(metric[len(prefix) :])
-            return f"{sql_func}({col})", f"{alias_prefix}_{col}"
+            return f"{sql_func}({_quote_identifier(col)})", f"{alias_prefix}_{col}"
 
     raise HTTPException(status_code=400, detail="Unsupported metric")
 
@@ -124,21 +142,22 @@ def _build_where_clause(
     # SECURITY: Always apply tenant isolation first if tenant_id column exists
     if tenant_id and "tenant_id" in columns:
         params.append(tenant_id)
-        clauses.append(f"tenant_id = ${len(params)}")
+        clauses.append(f"{_quote_identifier('tenant_id')} = ${len(params)}")
 
     for key, value in filters.items():
         column = _validate_identifier(key, "filter")
         if column not in columns:
             raise HTTPException(status_code=400, detail=f"Unknown filter column: {column}")
         params.append(value)
-        clauses.append(f"{column} = ${len(params)}")
+        clauses.append(f"{_quote_identifier(column)} = ${len(params)}")
 
     start = date_range.get("start") or date_range.get("from")
     end = date_range.get("end") or date_range.get("to")
     if start and end and "created_at" in columns:
         params.extend([start, end])
-        clauses.append(f"created_at >= ${len(params) - 1}::timestamptz")
-        clauses.append(f"created_at <= ${len(params)}::timestamptz")
+        created_at = _quote_identifier("created_at")
+        clauses.append(f"{created_at} >= ${len(params) - 1}::timestamptz")
+        clauses.append(f"{created_at} <= ${len(params)}::timestamptz")
 
     return (f" WHERE {' AND '.join(clauses)}" if clauses else ""), params
 
@@ -206,12 +225,23 @@ async def list_datasets(
 
     tables = await conn.fetch(
         """
-        SELECT tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
-        ORDER BY tablename
+        SELECT DISTINCT t.tablename
+        FROM pg_tables t
+        JOIN information_schema.columns c
+          ON c.table_schema = 'public'
+         AND c.table_name = t.tablename
+         AND c.column_name = 'tenant_id'
+        WHERE t.schemaname = 'public'
+        ORDER BY t.tablename
         """
     )
+
+    table_names = [row["tablename"] for row in tables]
+    if ALLOWED_TABLES:
+        table_names = [table for table in table_names if table.lower() in ALLOWED_TABLES]
+
+    if not table_names:
+        return {"datasets": [], "total": 0}
 
     column_counts = {
         row["table_name"]: int(row["column_count"])
@@ -220,8 +250,10 @@ async def list_datasets(
             SELECT table_name, COUNT(*) AS column_count
             FROM information_schema.columns
             WHERE table_schema = 'public'
+              AND table_name = ANY($1)
             GROUP BY table_name
-            """
+            """,
+            table_names,
         )
     }
 
@@ -238,13 +270,14 @@ async def list_datasets(
                 last_analyze,
                 last_autoanalyze
             FROM pg_stat_user_tables
-            """
+            WHERE relname = ANY($1)
+            """,
+            table_names,
         )
     }
 
     datasets = []
-    for table in tables:
-        table_name = table["tablename"]
+    for table_name in table_names:
         stats = table_stats.get(table_name, {})
         last_updated = stats.get("last_updated")
         datasets.append(
@@ -320,7 +353,9 @@ async def export_data(
         table = _validate_identifier(dataset, "dataset")
         columns = await _get_table_columns(conn, table)
         where_sql, params = _build_where_clause({}, columns, {}, tenant_id)
-        sql = f"SELECT {', '.join(columns)} FROM {table}{where_sql} LIMIT ${len(params) + 1}"
+        table_quoted = _quote_identifier(table)
+        select_columns = [_quote_identifier(col) for col in columns]
+        sql = f"SELECT {', '.join(select_columns)} FROM {table_quoted}{where_sql} LIMIT ${len(params) + 1}"
         params.append(10000)
         records = await conn.fetch(sql, *params)
         rows = [_normalize_row(row) for row in records]
@@ -471,10 +506,12 @@ async def execute_aggregate(request: QueryRequest, conn: asyncpg.Connection, ten
 
     # SECURITY: Pass tenant_id to _build_where_clause for tenant isolation
     where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
-    select_cols = group_by + metric_exprs
-    sql = f"SELECT {', '.join(select_cols)} FROM {table}{where_sql}"
+    table_quoted = _quote_identifier(table)
+    group_by_quoted = [_quote_identifier(col) for col in group_by]
+    select_cols = group_by_quoted + metric_exprs
+    sql = f"SELECT {', '.join(select_cols)} FROM {table_quoted}{where_sql}"
     if group_by:
-        sql += f" GROUP BY {', '.join(group_by)}"
+        sql += f" GROUP BY {', '.join(group_by_quoted)}"
     sql += f" LIMIT ${len(params) + 1}"
     params.append(int(request.limit or 1000))
 
@@ -493,10 +530,12 @@ async def execute_timeseries(request: QueryRequest, conn: asyncpg.Connection, te
 
     # SECURITY: Pass tenant_id to _build_where_clause for tenant isolation
     where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
+    table_quoted = _quote_identifier(table)
+    created_at = _quote_identifier("created_at")
     sql = (
         f"""
-        SELECT DATE_TRUNC('day', created_at) AS bucket, {expr} AS {alias}
-        FROM {table}{where_sql}
+        SELECT DATE_TRUNC('day', {created_at}) AS bucket, {expr} AS {alias}
+        FROM {table_quoted}{where_sql}
         GROUP BY bucket
         ORDER BY bucket
         LIMIT ${len(params) + 1}
@@ -528,12 +567,14 @@ async def execute_funnel(request: QueryRequest, conn: asyncpg.Connection, tenant
         raise HTTPException(status_code=400, detail=f"Unknown funnel stage column: {stage_column}")
 
     where_sql, params = _build_where_clause(request.filters or {}, columns, request.date_range or {}, tenant_id)
+    table_quoted = _quote_identifier(table)
+    stage_column_quoted = _quote_identifier(stage_column)
     sql = (
         f"""
-        SELECT {stage_column} AS stage, COUNT(*) AS count
-        FROM {table}{where_sql}
-        GROUP BY {stage_column}
-        ORDER BY {stage_column}
+        SELECT {stage_column_quoted} AS stage, COUNT(*) AS count
+        FROM {table_quoted}{where_sql}
+        GROUP BY {stage_column_quoted}
+        ORDER BY {stage_column_quoted}
         LIMIT ${len(params) + 1}
         """.strip()
     )

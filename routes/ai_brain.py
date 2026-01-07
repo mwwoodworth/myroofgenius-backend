@@ -12,12 +12,12 @@ import json
 
 # Import the AI Brain Core
 try:
-    from ai_brain_core_v2 import AIBrainCore
+    from ai_brain_production import AIBrainProduction
 except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from ai_brain_core_v2 import AIBrainCore
+    from ai_brain_production import AIBrainProduction
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def get_ai_brain():
     """Get or create AI Brain instance"""
     global ai_brain
     if ai_brain is None:
-        ai_brain = AIBrainCore()
+        ai_brain = AIBrainProduction()
         await ai_brain.initialize()
     return ai_brain
 
@@ -40,12 +40,22 @@ async def get_brain_status():
     """Get current AI Brain status and statistics"""
     try:
         brain = await get_ai_brain()
-        
+
+        short_term = getattr(brain, "short_term_memory", None)
+        if short_term is None:
+            short_term = brain.memory.get("short_term", []) if hasattr(brain, "memory") else []
+        long_term = getattr(brain, "long_term_memory", None)
+        if long_term is None:
+            long_term = brain.memory.get("long_term", []) if hasattr(brain, "memory") else []
+        patterns = brain.memory.get("patterns", []) if hasattr(brain, "memory") else []
+        if not patterns and long_term:
+            patterns = long_term
+
         return {
             "status": "operational",
             "agents": {
                 "total": len(brain.agents),
-                "active": sum(1 for a in brain.agents.values() if a.get("status") == "active"),
+                "active": sum(1 for a in brain.agents.values() if a.get("status") not in {"inactive", "offline"}),
                 "capabilities": list(set(
                     cap for a in brain.agents.values() 
                     for cap in a.get("capabilities", []) 
@@ -54,7 +64,7 @@ async def get_brain_status():
             },
             "neural_pathways": {
                 "total": len(brain.neural_pathways),
-                "active": sum(1 for p in brain.neural_pathways.values() if isinstance(p, dict) and p.get("active"))
+                "active": sum(1 for p in brain.neural_pathways.values() if isinstance(p, dict) and (p.get("strength") or 0) > 0)
             },
             "decision_engine": {
                 "running": brain.decision_engine_running,
@@ -62,13 +72,13 @@ async def get_brain_status():
                 "learning_rate": brain.learning_rate
             },
             "memory": {
-                "short_term": len(brain.memory.get("short_term", [])),
-                "long_term": len(brain.memory.get("long_term", [])),
-                "patterns": len(brain.memory.get("patterns", []))
+                "short_term": len(short_term),
+                "long_term": len(long_term),
+                "patterns": len(patterns)
             },
             "performance": {
                 "uptime_hours": (datetime.now() - brain.start_time).total_seconds() / 3600 if hasattr(brain, 'start_time') else 0,
-                "api_calls": brain.api_calls if hasattr(brain, 'api_calls') else 0,
+                "api_calls": getattr(brain, "api_calls", getattr(brain, "tasks_executed", 0)),
                 "success_rate": brain.success_rate if hasattr(brain, 'success_rate') else 100.0
             }
         }
@@ -241,26 +251,37 @@ async def learn_from_experience(request: Dict[str, Any]):
         outcome = request.get("outcome", {})
         
         # Store in long-term memory
-        brain.memory["long_term"].append({
-            "experience": experience,
-            "outcome": outcome,
-            "timestamp": datetime.now().isoformat()
-        })
-        
+        if hasattr(brain, "long_term_memory"):
+            brain.long_term_memory.append({
+                "experience": experience,
+                "outcome": outcome,
+                "timestamp": datetime.now().isoformat()
+            })
+            memory_store = brain.long_term_memory
+            patterns_store = getattr(brain, "long_term_memory", [])
+        else:
+            brain.memory["long_term"].append({
+                "experience": experience,
+                "outcome": outcome,
+                "timestamp": datetime.now().isoformat()
+            })
+            memory_store = brain.memory.get("long_term", [])
+            patterns_store = brain.memory.get("patterns", [])
+
         # Extract patterns
-        if len(brain.memory["long_term"]) % 10 == 0:  # Every 10 experiences
+        if len(memory_store) % 10 == 0:  # Every 10 experiences
             await brain.extract_patterns()
-        
+
         # Adjust learning rate based on outcome
         if outcome.get("success", False):
             brain.learning_rate = min(brain.learning_rate * 1.01, 1.0)
         else:
             brain.learning_rate = max(brain.learning_rate * 0.99, 0.1)
-        
+
         return {
             "status": "learned",
-            "memory_size": len(brain.memory["long_term"]),
-            "patterns_extracted": len(brain.memory.get("patterns", [])),
+            "memory_size": len(memory_store),
+            "patterns_extracted": len(patterns_store),
             "learning_rate": brain.learning_rate
         }
     except Exception as e:
@@ -294,25 +315,44 @@ async def get_brain_metrics():
     """Get detailed metrics about AI Brain performance"""
     try:
         brain = await get_ai_brain()
-        
+
+        short_term = getattr(brain, "short_term_memory", None)
+        if short_term is None:
+            short_term = brain.memory.get("short_term", []) if hasattr(brain, "memory") else []
+        long_term = getattr(brain, "long_term_memory", None)
+        if long_term is None:
+            long_term = brain.memory.get("long_term", []) if hasattr(brain, "memory") else []
+        patterns = brain.memory.get("patterns", []) if hasattr(brain, "memory") else []
+        if not patterns and long_term:
+            patterns = long_term
+
+        cpu_usage = None
+        memory_usage_mb = None
+        try:
+            import psutil
+            cpu_usage = psutil.cpu_percent(interval=0.1)
+            memory_usage_mb = psutil.virtual_memory().used / (1024 * 1024)
+        except Exception:
+            pass
+
         return {
             "operational_metrics": {
                 "decisions_per_hour": brain.decisions_made / max((datetime.now() - brain.start_time).total_seconds() / 3600, 1) if hasattr(brain, 'start_time') else 0,
-                "average_decision_time_ms": brain.avg_decision_time if hasattr(brain, 'avg_decision_time') else 50,
+                "average_decision_time_ms": getattr(brain, "working_memory", {}).get("last_decision_time") if hasattr(brain, "working_memory") else None,
                 "agent_utilization": sum(a.get("utilization", 0) for a in brain.agents.values()) / len(brain.agents) if brain.agents else 0,
-                "memory_efficiency": len(brain.memory.get("patterns", [])) / max(len(brain.memory.get("long_term", [])), 1) * 100
+                "memory_efficiency": len(patterns) / max(len(long_term), 1) * 100
             },
             "learning_metrics": {
-                "patterns_discovered": len(brain.memory.get("patterns", [])),
-                "improvement_rate": brain.improvement_rate if hasattr(brain, 'improvement_rate') else 0,
+                "patterns_discovered": len(patterns),
+                "improvement_rate": getattr(brain, "improvement_rate", None),
                 "adaptation_speed": brain.learning_rate,
-                "knowledge_base_size": len(brain.memory.get("long_term", []))
+                "knowledge_base_size": len(long_term)
             },
             "system_health": {
-                "cpu_usage": brain.cpu_usage if hasattr(brain, 'cpu_usage') else 15,
-                "memory_usage_mb": brain.memory_usage if hasattr(brain, 'memory_usage') else 256,
+                "cpu_usage": cpu_usage,
+                "memory_usage_mb": memory_usage_mb,
                 "active_connections": len(brain.neural_pathways),
-                "error_rate": brain.error_rate if hasattr(brain, 'error_rate') else 0.01
+                "error_rate": getattr(brain, "error_rate", None)
             }
         }
     except Exception as e:
@@ -331,16 +371,16 @@ async def optimize_brain():
         after_pathways = len(brain.neural_pathways)
         
         # Clean up memory
-        before_memory = len(brain.memory.get("short_term", []))
+        before_memory = len(getattr(brain, "short_term_memory", brain.memory.get("short_term", []) if hasattr(brain, "memory") else []))
         await brain.consolidate_memory()
-        after_memory = len(brain.memory.get("short_term", []))
+        after_memory = len(getattr(brain, "short_term_memory", brain.memory.get("short_term", []) if hasattr(brain, "memory") else []))
         
         return {
             "status": "optimized",
             "improvements": {
                 "pathways_optimized": after_pathways - before_pathways,
                 "memory_consolidated": before_memory - after_memory,
-                "performance_gain": "15%"  # Estimated
+                "performance_gain": None
             },
             "timestamp": datetime.now().isoformat()
         }

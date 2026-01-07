@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import os
 import logging
+import time
 from version import __version__
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -28,6 +29,7 @@ import asyncpg
 import uuid
 import json
 import random
+import httpx
 from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
@@ -38,8 +40,9 @@ from database import get_db  # Legacy import path used by many route modules
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+OPENAPI_EXPORT = os.getenv("OPENAPI_EXPORT", "").strip() == "1"
 # Database configuration
-DATABASE_URL = get_database_url()
+DATABASE_URL = None if OPENAPI_EXPORT else get_database_url()
 
 cors_origins = settings.cors_origins
 if isinstance(cors_origins, str):
@@ -56,7 +59,7 @@ elena_instance = None
 # Global offline mode flag.
 # We deliberately keep this false to avoid "zombie" states where the service
 # reports healthy while it cannot reach the database.
-FAST_TEST_MODE = os.getenv("FAST_TEST_MODE") == "1"
+FAST_TEST_MODE = os.getenv("FAST_TEST_MODE") == "1" or OPENAPI_EXPORT
 OFFLINE_MODE = False
 
 # Check if CNS is available
@@ -438,6 +441,13 @@ if not dynamic_routes_loaded:
         logger.error(f"⚠️ Failed to load relationships routes (fallback): {e}")
 
     try:
+        from routes.credits import router as credits_router
+        app.include_router(credits_router)
+        logger.info("✅ Credits routes loaded (fallback)")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load credits routes (fallback): {e}")
+
+    try:
         from routes.customers import router as customers_router
         app.include_router(customers_router)
         logger.info("✅ Customers routes loaded (fallback)")
@@ -640,6 +650,189 @@ async def health_check():
         # Database is completely unreachable - return 503
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=503, content=payload)
+
+
+async def _probe_database(timeout: float = 2.0) -> Dict[str, Any]:
+    """Dependency-aware database probe for readiness/diagnostics."""
+    if OFFLINE_MODE:
+        return {"ok": False, "status": "offline", "latency_ms": 0}
+
+    if FAST_TEST_MODE:
+        return {"ok": True, "status": "skipped", "latency_ms": 0}
+
+    start = time.monotonic()
+    if db_pool:
+        try:
+            async def _query():
+                async with db_pool.acquire(timeout=timeout) as conn:
+                    return await conn.fetchval("SELECT 1")
+
+            result = await asyncio.wait_for(_query(), timeout=timeout)
+            ok = result == 1
+            return {"ok": ok, "status": "connected" if ok else "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+        except asyncio.TimeoutError:
+            return {"ok": False, "status": "timeout", "latency_ms": int((time.monotonic() - start) * 1000)}
+        except Exception as exc:
+            logger.warning("Readiness DB probe failed: %s", exc)
+            return {"ok": False, "status": "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+
+    try:
+        import ssl as ssl_module
+        ssl_ctx = ssl_module.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl_module.CERT_NONE
+        conn = await asyncpg.connect(
+            DATABASE_URL,
+            timeout=timeout,
+            statement_cache_size=0,
+            ssl=ssl_ctx,
+        )
+        try:
+            result = await conn.fetchval("SELECT 1")
+            ok = result == 1
+            return {"ok": ok, "status": "connected" if ok else "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+        finally:
+            await conn.close()
+    except asyncio.TimeoutError:
+        return {"ok": False, "status": "timeout", "latency_ms": int((time.monotonic() - start) * 1000)}
+    except Exception as exc:
+        logger.warning("Readiness direct DB probe failed: %s", exc)
+        return {"ok": False, "status": "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+
+
+def _require_diagnostics_key(request: Request) -> None:
+    expected = os.getenv("BRAINOPS_DIAGNOSTICS_KEY") or os.getenv("DIAGNOSTICS_KEY")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Diagnostics key not configured")
+    provided = (
+        request.headers.get("X-Admin-Key")
+        or request.headers.get("x-admin-key")
+        or request.headers.get("Authorization")
+        or ""
+    )
+    if provided.startswith("Bearer "):
+        provided = provided.split(" ", 1)[1]
+    if provided != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.get("/ready")
+@app.get("/api/v1/ready")
+async def readiness_check():
+    """Dependency-aware readiness check."""
+    db_probe = await _probe_database()
+
+    missing_env: list[str] = []
+    if settings.enable_ai_agents and not FAST_TEST_MODE:
+        if not os.getenv("BRAINOPS_AI_AGENTS_URL"):
+            missing_env.append("BRAINOPS_AI_AGENTS_URL")
+        if not os.getenv("BRAINOPS_API_KEY"):
+            missing_env.append("BRAINOPS_API_KEY")
+
+    ai_agents_ok = True
+    ai_agents_status = "disabled"
+    if settings.enable_ai_agents:
+        ai_agents_status = "configured"
+        if FAST_TEST_MODE:
+            ai_agents_ok = True
+            ai_agents_status = "skipped"
+        elif missing_env:
+            ai_agents_ok = False
+            ai_agents_status = "missing_config"
+        else:
+            try:
+                ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL", "").rstrip("/")
+                api_key = os.getenv("BRAINOPS_API_KEY", "")
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(
+                        f"{ai_agents_url}/health",
+                        headers={"X-API-Key": api_key},
+                    )
+                ai_agents_ok = resp.status_code == 200
+                ai_agents_status = "healthy" if ai_agents_ok else f"unhealthy:{resp.status_code}"
+            except Exception as exc:
+                ai_agents_ok = False
+                ai_agents_status = f"error:{exc}"
+
+    checks = {
+        "database": db_probe,
+        "ai_agents": {
+            "enabled": settings.enable_ai_agents,
+            "ok": ai_agents_ok,
+            "status": ai_agents_status,
+        },
+        "offline_mode": OFFLINE_MODE,
+        "fast_test_mode": FAST_TEST_MODE,
+    }
+
+    if not db_probe.get("ok") or not ai_agents_ok or missing_env:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "checks": checks,
+                "missing_env": missing_env,
+            },
+        )
+
+    return {
+        "status": "ready",
+        "checks": checks,
+        "missing_env": missing_env,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/capabilities")
+async def capabilities():
+    """Enumerate service capabilities for self-awareness (authenticated)."""
+    routes = []
+    for route in app.routes:
+        methods = sorted(getattr(route, "methods", []) or [])
+        routes.append({"path": route.path, "methods": methods})
+
+    return {
+        "service": "myroofgenius-backend",
+        "version": app.version,
+        "routes": routes,
+        "integrations": {
+            "ai_agents_url": os.getenv("BRAINOPS_AI_AGENTS_URL"),
+            "mcp_bridge_url": os.getenv("BRAINOPS_MCP_BRIDGE_URL"),
+        },
+        "build": {
+            "commit": os.getenv("GIT_SHA"),
+            "environment": settings.environment,
+        },
+    }
+
+
+@app.get("/diagnostics")
+async def diagnostics(request: Request):
+    """Deep diagnostics endpoint (authenticated, admin key required)."""
+    _require_diagnostics_key(request)
+    db_probe = await _probe_database()
+
+    missing_env = [
+        key
+        for key in (
+            "DATABASE_URL",
+            "SUPABASE_JWT_SECRET",
+        )
+        if not os.getenv(key)
+    ]
+    if settings.enable_ai_agents:
+        for key in ("BRAINOPS_API_KEY", "BRAINOPS_AI_AGENTS_URL"):
+            if not os.getenv(key):
+                missing_env.append(key)
+
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "database": db_probe,
+        "missing_env": missing_env,
+        "offline_mode": OFFLINE_MODE,
+        "fast_test_mode": FAST_TEST_MODE,
+    }
 
 # Customer model
 class Customer(BaseModel):

@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from datetime import datetime
 from enum import Enum
 import hashlib
+import os
 
 from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain.memory import ConversationSummaryBufferMemory
@@ -26,12 +27,25 @@ import numpy as np
 
 # Database connection for persistent memory
 def get_db_connection():
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+
+    required_env = ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD")
+    missing = [key for key in required_env if not os.getenv(key)]
+    if missing:
+        raise RuntimeError(
+            f"Database configuration missing: {', '.join(missing)}. "
+            "Set DATABASE_URL or DB_HOST/DB_NAME/DB_USER/DB_PASSWORD."
+        )
+
     return psycopg2.connect(
-        host="localhost",
-        database="ai_orchestrator", 
-        user="postgres",
-        password="postgres",
-        cursor_factory=RealDictCursor
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        port=int(os.getenv("DB_PORT", "5432")),
+        cursor_factory=RealDictCursor,
     )
 
 # Redis for real-time coordination

@@ -13,13 +13,14 @@ from typing import Dict, List, Any, Optional, Tuple
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
-import random
 import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+from core.agent_execution_manager import AgentExecutionManager
 
 class AIBrainProduction:
     """Production AI Brain orchestrating 34 agents with full neural network"""
@@ -48,6 +49,7 @@ class AIBrainProduction:
         
         # Thread pool for parallel agent execution
         self.executor = ThreadPoolExecutor(max_workers=10)
+        self.agent_executor = AgentExecutionManager()
         
     def connect_db(self):
         """Get database connection"""
@@ -264,22 +266,130 @@ class AIBrainProduction:
     
     async def gather_agent_opinions(self, agent_ids: List[str], context: Dict, options: List) -> List[Dict]:
         """Gather opinions from multiple agents"""
-        opinions = []
-        
+        opinions: List[Dict] = []
+        tasks = []
+
         for agent_id in agent_ids:
-            agent = self.agents.get(agent_id)
-            if agent:
-                # Simulate agent analysis (in production, would call actual models)
-                opinion = {
-                    'agent_id': agent_id,
-                    'agent_name': agent['name'],
-                    'preferred_option': random.choice(options) if options else None,
-                    'confidence': 0.7 + random.random() * 0.3,  # 70-100%
-                    'reasoning': f"{agent['name']} analysis based on {agent['type']} perspective"
-                }
-                opinions.append(opinion)
-        
+            if agent_id in self.agents:
+                tasks.append(self._fetch_agent_opinion(agent_id, context, options))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Agent opinion error: {result}")
+                continue
+            if result:
+                opinions.append(result)
+
         return opinions
+
+    async def _fetch_agent_opinion(self, agent_id: str, context: Dict, options: List) -> Dict:
+        """Ask a specific agent for a decision opinion."""
+        agent = self.agents.get(agent_id)
+        if not agent:
+            raise RuntimeError(f"Agent {agent_id} not found")
+
+        task_prompt = (
+            "Review the decision context and options. "
+            "Return JSON with keys: preferred_option, confidence, reasoning."
+        )
+        execution = await self.agent_executor.execute_agent(
+            agent['name'],
+            task_prompt,
+            {
+                "context": context,
+                "options": options,
+                "agent_role": agent.get("type"),
+                "agent_capabilities": agent.get("capabilities", [])
+            },
+            retry_on_failure=False
+        )
+
+        output = execution.get("result") if execution else {}
+        return await self._normalize_opinion(agent, output, context, options)
+
+    async def _normalize_opinion(self, agent: Dict, output: Any, context: Dict, options: List) -> Dict:
+        """Normalize agent output into a structured opinion."""
+        preferred = None
+        confidence = None
+        reasoning = None
+
+        if isinstance(output, dict):
+            preferred = output.get("preferred_option") or output.get("decision") or output.get("chosen")
+            confidence = output.get("confidence") or output.get("probability")
+            reasoning = output.get("reasoning") or output.get("analysis") or output.get("summary")
+        else:
+            reasoning = str(output)
+
+        if preferred is None or confidence is None:
+            return await self._derive_opinion_with_ai(agent['name'], context, options, output)
+
+        try:
+            confidence_val = float(confidence)
+            if confidence_val > 1:
+                confidence_val = confidence_val / 100.0
+        except (TypeError, ValueError):
+            return await self._derive_opinion_with_ai(agent['name'], context, options, output)
+
+        return {
+            "agent_id": agent.get("id"),
+            "agent_name": agent.get("name"),
+            "preferred_option": self._match_option(preferred, options),
+            "confidence": max(0.0, min(confidence_val, 1.0)),
+            "reasoning": reasoning or "No reasoning provided"
+        }
+
+    async def _derive_opinion_with_ai(self, agent_name: str, context: Dict, options: List, output: Any) -> Dict:
+        """Use real AI to derive a structured opinion when agent output is incomplete."""
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            f"You are {agent_name}. Analyze the decision context and pick the best option.\n\n"
+            f"Context:\n{json.dumps(context, default=str)}\n\n"
+            f"Options:\n{json.dumps(options, default=str)}\n\n"
+            f"Raw agent output:\n{json.dumps(output, default=str)}\n\n"
+            "Return JSON with: preferred_option (must match one of the options), confidence (0-1), reasoning."
+        )
+
+        try:
+            result = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise RuntimeError(f"AI provider unavailable for opinion synthesis: {exc}") from exc
+
+        preferred = result.get("preferred_option")
+        confidence = result.get("confidence")
+        reasoning = result.get("reasoning")
+
+        try:
+            confidence_val = float(confidence)
+            if confidence_val > 1:
+                confidence_val = confidence_val / 100.0
+        except (TypeError, ValueError):
+            confidence_val = 0.5
+
+        return {
+            "agent_id": agent_name,
+            "agent_name": agent_name,
+            "preferred_option": self._match_option(preferred, options),
+            "confidence": max(0.0, min(confidence_val, 1.0)),
+            "reasoning": reasoning or "No reasoning provided"
+        }
+
+    def _match_option(self, preferred: Any, options: List) -> Any:
+        """Match preferred option to one of the provided options."""
+        if preferred is None or not options:
+            return preferred
+
+        for option in options:
+            if option == preferred:
+                return option
+
+        preferred_str = str(preferred).strip().lower()
+        for option in options:
+            if preferred_str == str(option).strip().lower():
+                return option
+
+        return preferred
     
     async def build_consensus(self, opinions: List[Dict], urgency: str) -> Dict:
         """Build consensus from agent opinions"""
@@ -363,16 +473,29 @@ class AIBrainProduction:
         
         # Log task start
         await self.log_task_start(task_id, task_type, best_agent, parameters)
-        
-        # Execute task (simulate for now)
-        result = await self.agent_execute(best_agent, task_type, parameters)
-        
+
+        try:
+            # Execute task with real agent
+            result = await self.agent_execute(best_agent, task_type, parameters)
+        except Exception as exc:
+            error_result = {
+                "success": False,
+                "task_id": task_id,
+                "agent": self.agents.get(best_agent, {}).get("name"),
+                "task_type": task_type,
+                "error": str(exc),
+                "data": {"parameters": parameters}
+            }
+            await self.log_task_completion(task_id, error_result)
+            await self.activate_pathways(best_agent, False)
+            raise
+
         # Log task completion
         await self.log_task_completion(task_id, result)
-        
+
         # Activate neural pathways
         await self.activate_pathways(best_agent, result['success'])
-        
+
         return result
     
     async def find_best_agent(self, task_type: str, parameters: Dict) -> Optional[str]:
@@ -410,33 +533,68 @@ class AIBrainProduction:
         # Mark agent as busy
         agent['status'] = 'executing'
         agent['current_task'] = task_type
-        
-        # Simulate execution (in production, would call actual model)
-        await asyncio.sleep(0.1)  # Simulate processing time
-        
-        # Generate result
-        success = random.random() > 0.1  # 90% success rate
-        
-        result = {
-            'success': success,
+        start_time = time.time()
+        result: Dict[str, Any] = {
+            'success': False,
             'task_id': f"task_{uuid.uuid4().hex[:8]}",
             'agent': agent['name'],
             'task_type': task_type,
-            'output': f"Task completed by {agent['name']}",
+            'output': {},
             'data': {
                 'parameters': parameters,
-                'execution_time': random.randint(50, 500),
-                'confidence': 0.85
+                'execution_time_ms': None,
+                'confidence': None,
+                'method': None
             }
         }
-        
-        # Update agent status
-        agent['status'] = 'ready'
-        agent['current_task'] = None
-        agent['tasks_completed'] += 1
-        if success:
-            agent['success_rate'] = (agent['success_rate'] * agent['tasks_completed'] + 100) / (agent['tasks_completed'] + 1)
-        
+
+        try:
+            task_prompt = (
+                parameters.get("task")
+                or parameters.get("command")
+                or parameters.get("prompt")
+                or task_type
+            )
+
+            execution = await self.agent_executor.execute_agent(
+                agent['name'],
+                task_prompt,
+                {
+                    "task_type": task_type,
+                    "parameters": parameters,
+                    "agent_metadata": agent.get("metadata", {})
+                },
+                retry_on_failure=True
+            )
+
+            success = execution.get("status") == "completed"
+            output = execution.get("result") if execution else {}
+
+            duration_ms = (time.time() - start_time) * 1000
+            result = {
+                'success': success,
+                'task_id': execution.get("execution_id") if execution else result["task_id"],
+                'agent': agent['name'],
+                'task_type': task_type,
+                'output': output,
+                'data': {
+                    'parameters': parameters,
+                    'execution_time_ms': duration_ms,
+                    'confidence': output.get("confidence") if isinstance(output, dict) else None,
+                    'method': output.get("method") if isinstance(output, dict) else None
+                }
+            }
+
+        finally:
+            # Update agent status
+            agent['status'] = 'ready'
+            agent['current_task'] = None
+            completed = agent.get('tasks_completed', 0)
+            agent['tasks_completed'] = completed + 1
+            if 'success_rate' in agent:
+                prior_rate = float(agent.get('success_rate') or 0)
+                agent['success_rate'] = ((prior_rate * completed) + (100 if result.get('success') else 0)) / max(completed + 1, 1)
+
         return result
     
     async def log_task_start(self, task_id: str, task_type: str, agent_id: str, parameters: Dict):
@@ -684,14 +842,62 @@ class AIBrainProduction:
             # Extract task from command
             return await self.execute_task('general', {'command': command})
         else:
-            # General command execution
+            return await self._interpret_aurea_command(command, context)
+
+    async def _interpret_aurea_command(self, command: str, context: Dict) -> Dict:
+        """Use real AI to interpret and route AUREA commands."""
+        from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+        prompt = (
+            "You are AUREA, the master controller of BrainOps AI OS. "
+            "Interpret the command and choose an action.\n\n"
+            f"Command: {command}\n"
+            f"Context: {json.dumps(context, default=str)}\n\n"
+            "Return JSON with keys: action (execute_task|make_decision|report_status|optimize_system|respond), "
+            "task_type, parameters, options, response."
+        )
+
+        try:
+            result = await ai_service.generate_json(prompt)
+        except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+            raise RuntimeError(f"AUREA AI provider unavailable: {exc}") from exc
+
+        action = (result.get("action") or "respond").lower()
+        if action == "execute_task":
+            task_type = result.get("task_type") or "general"
+            params = result.get("parameters") or {"command": command}
+            task_result = await self.execute_task(task_type, params)
             return {
-                'command': command,
-                'status': 'executed',
-                'agent': 'AUREA',
-                'result': f"AUREA processed: {command}",
-                'timestamp': datetime.now().isoformat()
+                "command": command,
+                "status": "executed",
+                "agent": "AUREA",
+                "result": task_result,
+                "timestamp": datetime.now().isoformat()
             }
+
+        if action == "make_decision":
+            options = result.get("options") or []
+            decision = await self.make_decision(context or {}, options, urgency=context.get("urgency", "normal") if isinstance(context, dict) else "normal")
+            return {
+                "command": command,
+                "status": "executed",
+                "agent": "AUREA",
+                "result": decision,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        if action == "optimize_system":
+            return await self.optimize_system()
+        if action == "report_status":
+            return await self.get_system_status()
+
+        return {
+            "command": command,
+            "status": "executed",
+            "agent": "AUREA",
+            "result": result.get("response") or "Command processed",
+            "timestamp": datetime.now().isoformat()
+        }
     
     async def optimize_system(self) -> Dict:
         """Optimize entire AI system"""

@@ -94,29 +94,28 @@ async def start_session(request: Dict[str, Any], db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Error starting AI Board session: {str(e)}")
-        session_id = str(uuid.uuid4())
-        return {
-            "session_id": session_id,
-            "session_type": request.get("session_type", "general"),
-            "status": "active",
-            "message": "AI Board session started (simulated)"
-        }
+        raise HTTPException(status_code=500, detail="AI Board session start failed") from e
 
 @router.post("/make-decision")
 async def make_decision(request: Dict[str, Any], db: Session = Depends(get_db)):
     """Make a strategic decision"""
     context = request.get("context", {})
-    
+    from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+    prompt = (
+        "You are the AI Board. Analyze the context and provide a strategic decision.\n\n"
+        f"Context: {json.dumps(context, default=str)}\n\n"
+        "Return JSON with keys: decision (object with action, confidence, reasoning), alternatives (list)."
+    )
+
+    try:
+        result = await ai_service.generate_json(prompt)
+    except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return {
-        "decision": {
-            "action": "optimize",
-            "confidence": 0.92,
-            "reasoning": "Based on current context, optimization is recommended"
-        },
-        "alternatives": [
-            {"action": "expand", "confidence": 0.78},
-            {"action": "maintain", "confidence": 0.65}
-        ],
+        "decision": result.get("decision", {}),
+        "alternatives": result.get("alternatives", []),
         "timestamp": datetime.utcnow().isoformat()
     }
 

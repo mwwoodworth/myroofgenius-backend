@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.1.0"
-__build__ = "2025-12-31T22:45:00Z"
+__version__ = "163.2.0"
+__build__ = "2026-01-07T16:10:00Z"
 __status__ = "production"
+# v163.2.0: Live readiness + credits + SiteSeer video analysis + SQL hardening
+# - Added /ready, /capabilities, /diagnostics endpoints
+# - Added credits balance/debit API with HMAC signing + nonce replay protection
+# - Added SiteSeer video analysis endpoint with frame sampling and aggregation
+# - Hardened analytics SQL query path with allowlists and parameterization
 # v163.1.0: SECURITY - Tenant isolation hardening (P0 fix from Codex audit)
 # - Created brainops_backend DB role WITHOUT rolbypassrls (RLS now enforced)
 # - Added tenant-aware database connection wrapper (sets app.current_tenant_id)

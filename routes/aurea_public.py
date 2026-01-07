@@ -18,26 +18,25 @@ class ChatResponse(BaseModel):
 async def public_chat(message: ChatMessage):
     """Public AUREA chat endpoint - NO AUTH REQUIRED"""
     import uuid
-    
-    # Simple response for now - can be enhanced with actual AI
-    responses = {
-        "hello": "Hello! I'm AUREA, your AI assistant for roofing solutions. How can I help you today?",
-        "price": "Our roofing products range from $19.99 to $2,999. Would you like to see our catalog?",
-        "service": "We offer complete roofing services including installation, repair, and inspection.",
-        "default": "I'm here to help with all your roofing needs. You can ask about products, services, or schedule a consultation."
-    }
-    
-    msg_lower = message.message.lower()
-    
-    if "hello" in msg_lower or "hi" in msg_lower:
-        response_text = responses["hello"]
-    elif "price" in msg_lower or "cost" in msg_lower:
-        response_text = responses["price"]
-    elif "service" in msg_lower or "install" in msg_lower:
-        response_text = responses["service"]
-    else:
-        response_text = responses["default"]
-    
+    from ai_services.real_ai_integration import ai_service, AIServiceNotConfiguredError, AIProviderCallError
+
+    prompt = (
+        "You are AUREA, a helpful roofing assistant for WeatherCraft. "
+        "Respond clearly, ask clarifying questions when needed, and avoid making up numbers.\n\n"
+        f"User message: {message.message}\n"
+        f"Context: {message.context or {}}\n\n"
+        "Return JSON with key: response."
+    )
+
+    try:
+        result = await ai_service.generate_json(prompt)
+    except (AIServiceNotConfiguredError, AIProviderCallError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    response_text = result.get("response")
+    if not response_text:
+        raise HTTPException(status_code=500, detail="AI response missing 'response' field")
+
     return ChatResponse(
         response=response_text,
         timestamp=datetime.now(),
@@ -47,8 +46,12 @@ async def public_chat(message: ChatMessage):
 @router.get("/status")
 async def aurea_status():
     """Check AUREA availability"""
+    from ai_services.real_ai_integration import ai_service
+    providers = ai_service._configured_providers() if ai_service else []
+
     return {
-        "status": "online",
+        "status": "online" if providers else "degraded",
         "version": "2.0",
-        "capabilities": ["chat", "product_info", "scheduling", "quotes"]
+        "capabilities": ["chat", "product_info", "scheduling", "quotes"],
+        "providers": providers
     }
