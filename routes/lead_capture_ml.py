@@ -15,6 +15,7 @@ from enum import Enum
 import hashlib
 import re
 import asyncio
+from psycopg2 import sql
 # ML imports - using simple scoring without sklearn for now
 # from sklearn.preprocessing import StandardScaler
 # from sklearn.ensemble import RandomForestClassifier
@@ -682,9 +683,10 @@ async def list_leads(
         where_clause = " AND ".join(where_conditions)
 
         # Get total count
-        cursor.execute(f"""
+        count_query = sql.SQL("""
             SELECT COUNT(*) as total FROM leads WHERE {where_clause}
-        """, params)
+        """).format(where_clause=sql.SQL(where_clause))
+        cursor.execute(count_query, params)
         total = cursor.fetchone()['total']
 
         # Get paginated results
@@ -697,16 +699,21 @@ async def list_leads(
         if sort_order.lower() not in ("asc", "desc"):
             sort_order = "desc"
 
-        cursor.execute(f"""
+        list_query = sql.SQL("""
             SELECT l.*,
                    MAX(la.created_at) as last_activity
             FROM leads l
             LEFT JOIN lead_activities la ON la.lead_id = l.id
             WHERE {where_clause}
             GROUP BY l.id
-            ORDER BY l.{sort_by} {sort_order.upper()}
+            ORDER BY {sort_column} {sort_order}
             LIMIT %s OFFSET %s
-        """, params + [per_page, offset])
+        """).format(
+            where_clause=sql.SQL(where_clause),
+            sort_column=sql.SQL("l.{}").format(sql.Identifier(sort_by)),
+            sort_order=sql.SQL(sort_order.upper()),
+        )
+        cursor.execute(list_query, params + [per_page, offset])
 
         leads = cursor.fetchall()
 
@@ -784,30 +791,31 @@ async def update_lead(
 
         for field, value in updates.dict(exclude_unset=True).items():
             if field == "tags":
-                update_fields.append(f"{field} = %s")
+                update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                 update_values.append(json.dumps(value))
             elif field == "custom_fields":
-                update_fields.append(f"{field} = %s")
+                update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                 update_values.append(json.dumps(value))
             elif field == "status" and value:
-                update_fields.append(f"{field} = %s")
+                update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                 update_values.append(value.value)
             else:
-                update_fields.append(f"{field} = %s")
+                update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                 update_values.append(value)
 
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
 
-        update_fields.append("updated_at = NOW()")
+        update_fields.append(sql.SQL("updated_at = NOW()"))
         update_values.append(str(lead_id))
 
-        cursor.execute(f"""
+        update_query = sql.SQL("""
             UPDATE leads
-            SET {', '.join(update_fields)}
+            SET {fields}
             WHERE id = %s
             RETURNING *
-        """, update_values)
+        """).format(fields=sql.SQL(", ").join(update_fields))
+        cursor.execute(update_query, update_values)
 
         updated_lead = cursor.fetchone()
         if not updated_lead:
@@ -918,7 +926,7 @@ async def get_lead_funnel(
         where_clause = " AND ".join(where_conditions)
 
         # Get funnel metrics
-        cursor.execute(f"""
+        funnel_query = sql.SQL("""
             SELECT
                 COUNT(*) as total_leads,
                 COUNT(*) FILTER (WHERE status = 'new') as new_leads,
@@ -930,7 +938,8 @@ async def get_lead_funnel(
                 COUNT(DISTINCT source) as sources_count
             FROM leads
             WHERE {where_clause}
-        """, params)
+        """).format(where_clause=sql.SQL(where_clause))
+        cursor.execute(funnel_query, params)
 
         metrics = cursor.fetchone()
 

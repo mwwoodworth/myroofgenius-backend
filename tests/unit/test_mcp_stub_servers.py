@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 import uuid
 from pathlib import Path
 
@@ -19,9 +20,10 @@ SERVER_FILES = [
 def load_app(path: Path):
     module_name = f"mcp_stub_{path.parent.name}_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, path)
-    module = importlib.util.module_from_spec(spec)
-    if spec.loader is None:
+    if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module.app
 

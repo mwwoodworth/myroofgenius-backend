@@ -30,3 +30,18 @@ def test_build_where_clause_quotes_identifiers():
     assert '"status"' in clause
     assert '"created_at"' in clause
     assert params == ["tenant-123", "open", "2024-01-01", "2024-01-02"]
+
+
+def test_require_allowlists_in_production_requires_both_lists():
+    with pytest.raises(HTTPException):
+        analytics_api._require_allowlists(set(), set(), environment="production")
+
+    with pytest.raises(HTTPException):
+        analytics_api._require_allowlists({"analytics_events"}, set(), environment="production")
+
+    with pytest.raises(HTTPException):
+        analytics_api._require_allowlists(set(), {"tenant_id"}, environment="production")
+
+
+def test_require_allowlists_allows_non_production():
+    analytics_api._require_allowlists(set(), set(), environment="development")

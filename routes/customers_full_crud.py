@@ -17,6 +17,7 @@ import hashlib
 from uuid import UUID, uuid4
 import asyncio
 from enum import Enum
+from psycopg2 import sql
 
 from core.supabase_auth import get_current_user  # SUPABASE AUTH
 from database import get_db
@@ -177,7 +178,7 @@ async def create_customer(
         customer_id = str(uuid4())
 
         # Insert customer
-        cursor.execute("""
+        query = sql.SQL("""
             INSERT INTO customers (
                 id, name, email, phone, company, address, city, state, zip_code,
                 status, credit_limit, payment_terms, tax_exempt, notes,
@@ -188,7 +189,8 @@ async def create_customer(
                 %s, %s, %s, NOW(), NOW()
             )
             RETURNING *
-        """, (
+        """)
+        cursor.execute(query, (
             customer_id, customer.name, customer.email, customer.phone, customer.company,
             customer.address, customer.city, customer.state, customer.zip_code,
             customer.status.value if customer.status else 'active',
@@ -200,29 +202,32 @@ async def create_customer(
 
         # Add contacts
         for contact in customer.contacts:
-            cursor.execute("""
+            contact_query = sql.SQL("""
                 INSERT INTO customer_contacts (
                     id, customer_id, contact_type, name, email, phone, title, is_primary
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
+            """)
+            cursor.execute(contact_query, (
                 str(uuid4()), customer_id, contact.contact_type.value,
                 contact.name, contact.email, contact.phone, contact.title, contact.is_primary
             ))
 
         # Add tags
         for tag in customer.tags:
-            cursor.execute("""
+            tag_query = sql.SQL("""
                 INSERT INTO customer_tags (id, customer_id, tag, created_at)
                 VALUES (%s, %s, %s, NOW())
-            """, (str(uuid4()), customer_id, tag))
+            """)
+            cursor.execute(tag_query, (str(uuid4()), customer_id, tag))
 
         # Add custom fields
         for field_name, field_value in customer.custom_fields.items():
-            cursor.execute("""
+            field_query = sql.SQL("""
                 INSERT INTO customer_custom_fields (
                     id, customer_id, field_name, field_value, field_type
                 ) VALUES (%s, %s, %s, %s, %s)
-            """, (
+            """)
+            cursor.execute(field_query, (
                 str(uuid4()), customer_id, field_name,
                 json.dumps(field_value) if not isinstance(field_value, str) else field_value,
                 type(field_value).__name__
@@ -251,7 +256,7 @@ async def get_customer(
         cursor = db.cursor()
 
         # Get customer
-        cursor.execute("""
+        query = sql.SQL("""
             SELECT c.*,
                    COALESCE(SUM(i.amount), 0) as total_spent,
                    COUNT(DISTINCT j.id) as job_count,
@@ -263,29 +268,29 @@ async def get_customer(
             LEFT JOIN customer_history ch ON ch.customer_id = c.id
             WHERE c.id = %s
             GROUP BY c.id
-        """, (str(customer_id),))
+        """)
+        cursor.execute(query, (str(customer_id),))
 
         customer = cursor.fetchone()
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
 
         # Get contacts
-        cursor.execute("""
-            SELECT * FROM customer_contacts WHERE customer_id = %s
-        """, (str(customer_id),))
+        contact_query = sql.SQL("SELECT * FROM customer_contacts WHERE customer_id = %s")
+        cursor.execute(contact_query, (str(customer_id),))
         contacts = cursor.fetchall()
 
         # Get tags
-        cursor.execute("""
-            SELECT tag FROM customer_tags WHERE customer_id = %s
-        """, (str(customer_id),))
+        tag_query = sql.SQL("SELECT tag FROM customer_tags WHERE customer_id = %s")
+        cursor.execute(tag_query, (str(customer_id),))
         tags = [row['tag'] for row in cursor.fetchall()]
 
         # Get custom fields
-        cursor.execute("""
+        field_query = sql.SQL("""
             SELECT field_name, field_value, field_type FROM customer_custom_fields
             WHERE customer_id = %s
-        """, (str(customer_id),))
+        """)
+        cursor.execute(field_query, (str(customer_id),))
         custom_fields = {}
         for row in cursor.fetchall():
             value = row['field_value']
@@ -332,7 +337,7 @@ async def update_customer(
             # Skip fields not in whitelist
             if field not in ALLOWED_UPDATE_FIELDS:
                 continue
-            update_fields.append(f"{field} = %s")
+            update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
             if field == "status" and value:
                 update_values.append(value.value)
             else:
@@ -341,15 +346,16 @@ async def update_customer(
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
 
-        update_fields.append("updated_at = NOW()")
+        update_fields.append(sql.SQL("updated_at = NOW()"))
         update_values.append(str(customer_id))
 
-        cursor.execute(f"""
+        update_query = sql.SQL("""
             UPDATE customers
-            SET {', '.join(update_fields)}
+            SET {fields}
             WHERE id = %s
             RETURNING *
-        """, update_values)
+        """).format(fields=sql.SQL(", ").join(update_fields))
+        cursor.execute(update_query, update_values)
 
         updated_customer = cursor.fetchone()
         if not updated_customer:
@@ -424,53 +430,56 @@ async def list_customers(
         cursor = db.cursor()
 
         # Build WHERE clause
-        where_conditions = ["1=1"]
+        where_conditions = [sql.SQL("1=1")]
         params = []
 
         if search:
-            where_conditions.append("""
+            where_conditions.append(sql.SQL("""
                 (LOWER(c.name) LIKE LOWER(%s) OR
                  LOWER(c.email) LIKE LOWER(%s) OR
                  LOWER(c.company) LIKE LOWER(%s) OR
                  c.phone LIKE %s)
-            """)
+            """))
             search_pattern = f"%{search}%"
             params.extend([search_pattern] * 4)
 
         if status:
-            where_conditions.append("c.status = %s")
+            where_conditions.append(sql.SQL("c.status = %s"))
             params.append(status.value)
 
         if city:
-            where_conditions.append("LOWER(c.city) = LOWER(%s)")
+            where_conditions.append(sql.SQL("LOWER(c.city) = LOWER(%s)"))
             params.append(city)
 
         if state:
-            where_conditions.append("UPPER(c.state) = UPPER(%s)")
+            where_conditions.append(sql.SQL("UPPER(c.state) = UPPER(%s)"))
             params.append(state)
 
-        where_clause = " AND ".join(where_conditions)
+        where_clause = sql.SQL(" AND ").join(where_conditions)
 
         # Build HAVING clause for aggregates
         having_conditions = []
         if min_spent is not None:
-            having_conditions.append("COALESCE(SUM(i.amount), 0) >= %s")
+            having_conditions.append(sql.SQL("COALESCE(SUM(i.amount), 0) >= %s"))
             params.append(min_spent)
         if max_spent is not None:
-            having_conditions.append("COALESCE(SUM(i.amount), 0) <= %s")
+            having_conditions.append(sql.SQL("COALESCE(SUM(i.amount), 0) <= %s"))
             params.append(max_spent)
 
-        having_clause = " AND ".join(having_conditions) if having_conditions else "1=1"
+        having_clause = sql.SQL(" AND ").join(having_conditions) if having_conditions else sql.SQL("1=1")
 
         # Get total count
-        count_query = f"""
+        count_query = sql.SQL("""
             SELECT COUNT(DISTINCT c.id) as total
             FROM customers c
             LEFT JOIN invoices i ON i.customer_id = c.id AND i.status = 'paid'
             WHERE {where_clause}
             GROUP BY c.id
             HAVING {having_clause}
-        """
+        """).format(
+            where_clause=where_clause,
+            having_clause=having_clause,
+        )
         cursor.execute(count_query, params)
         total = len(cursor.fetchall())
 
@@ -491,7 +500,13 @@ async def list_customers(
         safe_sort_column = sort_mapping.get(sort_by, 'c.created_at')
         safe_sort_order = "DESC" if sort_order.upper() == "DESC" else "ASC"
 
-        list_query = f"""
+        if "." in safe_sort_column:
+            alias, column = safe_sort_column.split(".", 1)
+            sort_sql = sql.SQL("{}.{}").format(sql.Identifier(alias), sql.Identifier(column))
+        else:
+            sort_sql = sql.Identifier(safe_sort_column)
+
+        list_query = sql.SQL("""
             SELECT c.*,
                    COALESCE(SUM(i.amount), 0) as total_spent,
                    COUNT(DISTINCT j.id) as job_count,
@@ -504,9 +519,14 @@ async def list_customers(
             WHERE {where_clause}
             GROUP BY c.id
             HAVING {having_clause}
-            ORDER BY {safe_sort_column} {safe_sort_order}
+            ORDER BY {sort_column} {sort_order}
             LIMIT %s OFFSET %s
-        """
+        """).format(
+            where_clause=where_clause,
+            having_clause=having_clause,
+            sort_column=sort_sql,
+            sort_order=sql.SQL(safe_sort_order),
+        )
         params.extend([per_page, offset])
 
         cursor.execute(list_query, params)
@@ -756,7 +776,7 @@ async def bulk_update_customers(
             # Skip fields not in whitelist
             if field not in ALLOWED_UPDATE_FIELDS:
                 continue
-            update_fields.append(f"{field} = %s")
+            update_fields.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
             if field == "status" and value:
                 update_values.append(value.value)
             else:
@@ -765,16 +785,17 @@ async def bulk_update_customers(
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
 
-        update_fields.append("updated_at = NOW()")
+        update_fields.append(sql.SQL("updated_at = NOW()"))
 
         # Update each customer
         updated_count = 0
         for customer_id in bulk_update.customer_ids:
-            cursor.execute(f"""
+            bulk_query = sql.SQL("""
                 UPDATE customers
-                SET {', '.join(update_fields)}
+                SET {fields}
                 WHERE id = %s
-            """, update_values + [str(customer_id)])
+            """).format(fields=sql.SQL(", ").join(update_fields))
+            cursor.execute(bulk_query, update_values + [str(customer_id)])
             updated_count += cursor.rowcount
 
         db.commit()

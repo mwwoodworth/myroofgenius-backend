@@ -173,7 +173,7 @@ def test_api_key_middleware_caches_valid_keys(monkeypatch):
         return {"api_key_id": getattr(request.state, "api_key_id", None)}
 
     client = TestClient(app)
-    headers = {"Authorization": "Bearer " + "x" * 32}
+    headers = {"Authorization": "ApiKey " + "x" * 32}
 
     first = client.get("/secure", headers=headers)
     second = client.get("/secure", headers=headers)

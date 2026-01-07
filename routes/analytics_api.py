@@ -34,9 +34,39 @@ except Exception:
     AIServiceNotConfiguredError = Exception  # type: ignore
 
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production").strip().lower()
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-ALLOWED_TABLES = {value.strip().lower() for value in os.getenv("ANALYTICS_ALLOWED_TABLES", "").split(",") if value.strip()}
-ALLOWED_COLUMNS = {value.strip().lower() for value in os.getenv("ANALYTICS_ALLOWED_COLUMNS", "").split(",") if value.strip()}
+
+
+def _parse_allowlist(raw: str) -> set[str]:
+    return {value.strip().lower() for value in (raw or "").split(",") if value.strip()}
+
+
+def _load_allowed_tables() -> set[str]:
+    return _parse_allowlist(os.getenv("ANALYTICS_ALLOWED_TABLES", ""))
+
+
+def _load_allowed_columns() -> set[str]:
+    return _parse_allowlist(os.getenv("ANALYTICS_ALLOWED_COLUMNS", ""))
+
+
+def _require_allowlists(
+    allowed_tables: set[str],
+    allowed_columns: set[str],
+    environment: Optional[str] = None,
+) -> None:
+    env = (environment or ENVIRONMENT).strip().lower()
+    if env not in {"production", "staging"}:
+        return
+    missing: List[str] = []
+    if not allowed_tables:
+        missing.append("ANALYTICS_ALLOWED_TABLES")
+    if not allowed_columns:
+        missing.append("ANALYTICS_ALLOWED_COLUMNS")
+    if missing:
+        detail = f"Analytics allowlist not configured: {', '.join(missing)}"
+        logger.error(detail)
+        raise HTTPException(status_code=503, detail=detail)
 
 
 def _normalize_value(value: Any) -> Any:
@@ -82,7 +112,10 @@ async def _table_exists(conn: asyncpg.Connection, table: str) -> bool:
 
 
 async def _get_table_columns(conn: asyncpg.Connection, table: str) -> Sequence[str]:
-    if ALLOWED_TABLES and table.lower() not in ALLOWED_TABLES:
+    allowed_tables = _load_allowed_tables()
+    allowed_columns = _load_allowed_columns()
+    _require_allowlists(allowed_tables, allowed_columns)
+    if allowed_tables and table.lower() not in allowed_tables:
         raise HTTPException(status_code=403, detail="Dataset not allowed")
     if not await _table_exists(conn, table):
         raise HTTPException(status_code=404, detail=f"Unknown dataset: {table}")
@@ -98,9 +131,9 @@ async def _get_table_columns(conn: asyncpg.Connection, table: str) -> Sequence[s
     columns = [row["column_name"] for row in rows]
     if "tenant_id" not in columns:
         raise HTTPException(status_code=403, detail="Dataset missing tenant_id")
-    if not ALLOWED_COLUMNS:
+    if not allowed_columns:
         return columns
-    filtered = [col for col in columns if col.lower() in ALLOWED_COLUMNS or col.lower() == "tenant_id"]
+    filtered = [col for col in columns if col.lower() in allowed_columns or col.lower() == "tenant_id"]
     if not filtered:
         raise HTTPException(status_code=403, detail="No allowed columns for dataset")
     return filtered
@@ -223,6 +256,10 @@ async def list_datasets(
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Tenant assignment required")
 
+    allowed_tables = _load_allowed_tables()
+    allowed_columns = _load_allowed_columns()
+    _require_allowlists(allowed_tables, allowed_columns)
+
     tables = await conn.fetch(
         """
         SELECT DISTINCT t.tablename
@@ -237,8 +274,8 @@ async def list_datasets(
     )
 
     table_names = [row["tablename"] for row in tables]
-    if ALLOWED_TABLES:
-        table_names = [table for table in table_names if table.lower() in ALLOWED_TABLES]
+    if allowed_tables:
+        table_names = [table for table in table_names if table.lower() in allowed_tables]
 
     if not table_names:
         return {"datasets": [], "total": 0}

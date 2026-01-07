@@ -241,8 +241,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if not api_key or len(api_key) < 16:
             return None
 
-        internal_key = os.getenv("BACKEND_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
         now = time.time()
+        internal_key = os.getenv("BACKEND_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
         if internal_key and hmac.compare_digest(api_key, internal_key):
             return _CachedAPIKey(
                 key_id="internal",
@@ -256,7 +256,6 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return None
 
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        now = time.time()
 
         cache_entry = self._cache.get(key_hash)
         if cache_entry:
