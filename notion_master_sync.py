@@ -6,6 +6,7 @@ Master Notion Sync - Modifies Notion to match Supabase DB structure
 import os
 import psycopg2
 import logging
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 import requests
 import json
@@ -350,7 +351,7 @@ class MasterNotionSync:
             tables = ['customers', 'jobs', 'invoices', 'estimates', 'inventory', 'ai_agents']
             for table in tables:
                 try:
-                    cursor.execute(f"SELECT COUNT(*) as count FROM {table}")
+                    cursor.execute(sql.SQL("SELECT COUNT(*) as count FROM {}").format(sql.Identifier(table)))
                     result = cursor.fetchone()
                     stats[table] = result['count'] if result else 0
                 except Exception as e:

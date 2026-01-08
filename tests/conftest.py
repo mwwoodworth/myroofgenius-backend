@@ -7,6 +7,7 @@ import pytest
 import asyncio
 from typing import Generator, AsyncGenerator
 import psycopg2
+from psycopg2 import sql
 from fastapi.testclient import TestClient
 import sys
 from pathlib import Path
@@ -181,7 +182,9 @@ def reset_test_data(request):
     ]
     for table in tables:
         try:
-            db_cursor.execute(f"DELETE FROM {table} WHERE email LIKE '%@test.com'")
+            db_cursor.execute(
+                sql.SQL("DELETE FROM {} WHERE email LIKE '%@test.com'").format(sql.Identifier(table))
+            )
         except Exception:
             pass  # Table may not exist
     yield

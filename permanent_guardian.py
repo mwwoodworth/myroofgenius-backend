@@ -7,6 +7,7 @@ Ensures system never degrades and maintains perfect memory
 import os
 import json
 import psycopg2
+from psycopg2 import sql
 from datetime import datetime
 import requests
 import logging
@@ -91,7 +92,7 @@ class BrainOpsGuardian:
             # Check critical tables
             tables = ["customers", "jobs", "invoices", "ai_agents", "memory_entries"]
             for table in tables:
-                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
                 count = cur.fetchone()[0]
                 health_report["database"][table] = count
             

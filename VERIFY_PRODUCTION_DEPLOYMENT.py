@@ -11,6 +11,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Tuple
 import psycopg2
+from psycopg2 import sql
 from termcolor import colored
 
 # Configuration
@@ -115,7 +116,7 @@ class ProductionVerifier:
                     
             # Check record counts
             for table in existing_tables:
-                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
                 count = cur.fetchone()[0]
                 print(f"    {table}: {count} records")
                 

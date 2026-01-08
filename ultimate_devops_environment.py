@@ -11,6 +11,7 @@ import json
 import time
 import subprocess
 import psycopg2
+from psycopg2 import sql
 import docker
 import asyncio
 import requests
@@ -448,7 +449,7 @@ def sync_tables():
                 print(f"Syncing {table_name}...")
 
                 # Copy data (simplified - in reality would handle incremental sync)
-                cur.execute(f"SELECT * FROM {table_name} LIMIT 100")
+                cur.execute(sql.SQL("SELECT * FROM {} LIMIT 100").format(sql.Identifier(table_name)))
                 data = cur.fetchall()
 
                 # Insert into local (would need proper upsert logic)
