@@ -307,7 +307,7 @@ class NotionWorkspaceBuilder:
             {
                 "Service": {"title": [{"text": {"content": "Stripe"}}]},
                 "Username": {"rich_text": [{"text": {"content": "Live Key"}}]},
-                "Password/Token": {"rich_text": [{"text": {"content": "rk_live_51RHXCu..."}}]},
+                "Password/Token": {"rich_text": [{"text": {"content": "<STRIPE_SECRET_KEY>..."}}]},
                 "URL": {"url": "https://dashboard.stripe.com"},
                 "Category": {"select": {"name": "Payment"}},
                 "Status": {"select": {"name": "Active"}}

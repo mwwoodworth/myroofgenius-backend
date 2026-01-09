@@ -57,7 +57,7 @@ Failure? → Self-Heal → Rollback → Alert
 
 Add to Render environment variables:
 ```
-RENDER_WEBHOOK_SECRET=whsec_REDACTED/bjOAhCFu2l/T0Y5nShOuAfOXdOqhaiR0xHtGFju/8yGo8ZZAQzYryX8q6SpRfg38LvCfVl7kRD5dA7w==
+RENDER_WEBHOOK_SECRET=<STRIPE_WEBHOOK_SECRET>/bjOAhCFu2l/T0Y5nShOuAfOXdOqhaiR0xHtGFju/8yGo8ZZAQzYryX8q6SpRfg38LvCfVl7kRD5dA7w==
 ```
 
 ## 🚀 THE SYSTEM IS NOW:

@@ -12,6 +12,7 @@ Purpose: Bridge the frontend-backend route mismatch
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -21,6 +22,26 @@ from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/complete-erp", tags=["Complete ERP Alias"])
+
+def _normalize_tenant_id(tenant_id: Optional[str]) -> Optional[str]:
+    if not tenant_id:
+        return None
+    try:
+        return str(UUID(str(tenant_id)))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid tenant_id") from exc
+
+
+def _with_tenant_context(current_user: Dict[str, Any], tenant_id: Optional[str]) -> Dict[str, Any]:
+    normalized = _normalize_tenant_id(tenant_id)
+    if not normalized:
+        return current_user
+
+    existing = current_user.get("tenant_id")
+    if existing and str(existing) != normalized:
+        raise HTTPException(status_code=403, detail="Tenant mismatch")
+
+    return {**current_user, "tenant_id": normalized}
 
 
 # ============================================================================
@@ -39,19 +60,29 @@ async def get_complete_erp_customers(
 ):
     """Get customers (alias for /api/v1/erp/customers)."""
     from routes.erp_complete import get_erp_customers
-    return await get_erp_customers(request, skip, limit, current_user)
+    scoped_user = _with_tenant_context(current_user, tenant_id)
+    return await get_erp_customers(
+        request=request,
+        skip=skip,
+        limit=limit,
+        status=status,
+        search=search,
+        current_user=scoped_user,
+    )
 
 
 @router.get("/customers/{customer_id}")
 async def get_complete_erp_customer(
     request: Request,
     customer_id: str,
+    tenant_id: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get single customer by ID."""
     try:
         from routes.customers import get_customer as get_customer_impl
-        return await get_customer_impl(request=request, customer_id=customer_id, current_user=current_user)
+        scoped_user = _with_tenant_context(current_user, tenant_id)
+        return await get_customer_impl(request=request, customer_id=customer_id, current_user=scoped_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -128,19 +159,29 @@ async def get_complete_erp_jobs(
 ):
     """Get jobs (alias for /api/v1/erp/jobs)."""
     from routes.erp_complete import get_erp_jobs
-    return await get_erp_jobs(request, skip, limit, current_user)
+    scoped_user = _with_tenant_context(current_user, tenant_id)
+    return await get_erp_jobs(
+        request=request,
+        skip=skip,
+        limit=limit,
+        status=status,
+        customer_id=customer_id,
+        current_user=scoped_user,
+    )
 
 
 @router.get("/jobs/{job_id}")
 async def get_complete_erp_job(
     request: Request,
     job_id: str,
+    tenant_id: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get single job by ID."""
     try:
         from routes.jobs import get_job as get_job_impl
-        return await get_job_impl(request=request, job_id=job_id, current_user=current_user)
+        scoped_user = _with_tenant_context(current_user, tenant_id)
+        return await get_job_impl(request=request, job_id=job_id, current_user=scoped_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -216,19 +257,29 @@ async def get_complete_erp_invoices(
 ):
     """Get invoices (alias for /api/v1/erp/invoices)."""
     from routes.erp_complete import get_erp_invoices
-    return await get_erp_invoices(request, skip, limit, current_user)
+    scoped_user = _with_tenant_context(current_user, tenant_id)
+    return await get_erp_invoices(
+        request=request,
+        skip=skip,
+        limit=limit,
+        status=status,
+        customer_id=customer_id,
+        current_user=scoped_user,
+    )
 
 
 @router.get("/invoices/{invoice_id}")
 async def get_complete_erp_invoice(
     request: Request,
     invoice_id: str,
+    tenant_id: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get single invoice by ID."""
     try:
         from routes.invoices import get_invoice as get_invoice_impl
-        return await get_invoice_impl(request=request, invoice_id=invoice_id, current_user=current_user)
+        scoped_user = _with_tenant_context(current_user, tenant_id)
+        return await get_invoice_impl(request=request, invoice_id=invoice_id, current_user=scoped_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -304,19 +355,29 @@ async def get_complete_erp_estimates(
 ):
     """Get estimates (alias for /api/v1/erp/estimates)."""
     from routes.erp_complete import get_erp_estimates
-    return await get_erp_estimates(request, skip, limit, current_user)
+    scoped_user = _with_tenant_context(current_user, tenant_id)
+    return await get_erp_estimates(
+        request=request,
+        skip=skip,
+        limit=limit,
+        status=status,
+        customer_id=customer_id,
+        current_user=scoped_user,
+    )
 
 
 @router.get("/estimates/{estimate_id}")
 async def get_complete_erp_estimate(
     request: Request,
     estimate_id: str,
+    tenant_id: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get single estimate by ID."""
     try:
         from routes.estimates import get_estimate as get_estimate_impl
-        return await get_estimate_impl(request=request, estimate_id=estimate_id, current_user=current_user)
+        scoped_user = _with_tenant_context(current_user, tenant_id)
+        return await get_estimate_impl(request=request, estimate_id=estimate_id, current_user=scoped_user)
     except HTTPException:
         raise
     except Exception as e:

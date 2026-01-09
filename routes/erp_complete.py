@@ -39,6 +39,8 @@ async def get_erp_customers(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get ERP customers (tenant-scoped)."""
@@ -49,8 +51,8 @@ async def get_erp_customers(
             request=request,
             limit=limit,
             offset=skip,
-            status=None,
-            search=None,
+            status=status,
+            search=search,
             current_user=current_user,
         )
         customers = resp.get("data") or []
@@ -69,6 +71,9 @@ async def get_erp_jobs(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    status: Optional[str] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    assigned_to: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get ERP jobs (tenant-scoped)."""
@@ -79,9 +84,9 @@ async def get_erp_jobs(
             request=request,
             limit=limit,
             offset=skip,
-            status=None,
-            customer_id=None,
-            assigned_to=None,
+            status=status,
+            customer_id=customer_id,
+            assigned_to=assigned_to,
             current_user=current_user,
         )
         data = resp.get("data") or []
@@ -117,6 +122,9 @@ async def get_erp_estimates(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    status: Optional[str] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    job_id: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get ERP estimates (tenant-scoped)."""
@@ -127,9 +135,9 @@ async def get_erp_estimates(
             request=request,
             limit=min(limit, 100),
             offset=skip,
-            status=None,
-            customer_id=None,
-            job_id=None,
+            status=status,
+            customer_id=customer_id,
+            job_id=job_id,
             current_user=current_user,
         )
 
@@ -165,6 +173,9 @@ async def get_erp_invoices(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    status: Optional[str] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    job_id: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get ERP invoices (tenant-scoped)."""
@@ -175,9 +186,9 @@ async def get_erp_invoices(
             request=request,
             limit=min(limit, 100),
             offset=skip,
-            status=None,
-            customer_id=None,
-            job_id=None,
+            status=status,
+            customer_id=customer_id,
+            job_id=job_id,
             current_user=current_user,
         )
         invoices = resp.get("data") or []
@@ -345,4 +356,3 @@ async def get_erp_schedule(
         )
 
     return {"schedule": schedule, "total": len(schedule), "status": "operational"}
-

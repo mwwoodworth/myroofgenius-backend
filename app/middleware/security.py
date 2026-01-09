@@ -52,6 +52,7 @@ class _CachedAPIKey:
     expires_at_ts: Optional[float]
     cache_expiry_ts: float
     last_touch_ts: float
+    tenant_id: Optional[str] = None
 
 
 # Keep aligned with middleware.authentication.DEFAULT_EXEMPT_PATHS.
@@ -206,10 +207,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 request.state.user = {
                     "id": f"api_key:{cache_entry.key_id}",
                     "role": "service",
-                    "tenant_id": None,
+                    "tenant_id": cache_entry.tenant_id,
                     "auth_type": "api_key",
                 }
                 request.state.user_id = cache_entry.key_id
+                if cache_entry.tenant_id:
+                    request.state.tenant_id = cache_entry.tenant_id
             else:
                 # Return JSONResponse directly - HTTPException from middleware may not
                 # reach app exception handlers, causing 500 instead of 401
@@ -244,11 +247,13 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         now = time.time()
         internal_key = os.getenv("BACKEND_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
         if internal_key and hmac.compare_digest(api_key, internal_key):
+            internal_tenant = os.getenv("BACKEND_INTERNAL_TENANT_ID") or os.getenv("OFFLINE_TENANT_ID")
             return _CachedAPIKey(
                 key_id="internal",
                 expires_at_ts=None,
                 cache_expiry_ts=now + self.cache_ttl,
                 last_touch_ts=now,
+                tenant_id=internal_tenant,
             )
 
         if not db_pool:
@@ -307,7 +312,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     WHERE id = $1
                       AND (is_active IS NULL OR is_active = TRUE)
                       AND (expires_at IS NULL OR expires_at > NOW())
-                    RETURNING expires_at
+                    RETURNING expires_at, tenant_id
                     """,
                     cache_entry.key_id,
                 )
@@ -324,6 +329,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         cache_entry.expires_at_ts = (
             expires_at.timestamp() if isinstance(expires_at, datetime) else None
         )
+        cache_entry.tenant_id = str(record.get("tenant_id")) if record.get("tenant_id") else None
         return True
 
     async def _fetch_and_cache_key(
@@ -343,7 +349,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     WHERE key_hash = $1
                       AND (is_active IS NULL OR is_active = TRUE)
                       AND (expires_at IS NULL OR expires_at > NOW())
-                    RETURNING id, expires_at
+                    RETURNING id, expires_at, tenant_id
                     """,
                     key_hash,
                 )
@@ -364,6 +370,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             expires_at_ts=expires_at_ts,
             cache_expiry_ts=now + self.cache_ttl,
             last_touch_ts=now,
+            tenant_id=str(record.get("tenant_id")) if record.get("tenant_id") else None,
         )
 
     def _prune_cache(self) -> None:
