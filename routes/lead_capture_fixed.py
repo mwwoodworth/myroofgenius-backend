@@ -112,6 +112,46 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                     datetime.utcnow()
                 )
 
+            # BRIDGE FIX: Dual-write to revenue_leads for AI Agent pickup
+            try:
+                # Map 0-100 score to 0.0-1.0
+                normalized_score = float(lead_score) / 100.0
+                
+                # Estimate value based on project type
+                est_value = 5000.0
+                if lead.project_type == "roof_replacement":
+                    est_value = 15000.0
+                elif lead.project_type == "commercial":
+                    est_value = 50000.0
+
+                await conn.execute("""
+                    INSERT INTO revenue_leads (
+                        company_name, contact_name, email, phone, location,
+                        stage, score, value_estimate, source, metadata,
+                        created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                """,
+                    lead.company or lead.name,
+                    lead.name,
+                    lead.email,
+                    lead.phone or "",
+                    "", # Location unknown from web form usually
+                    'new',
+                    normalized_score,
+                    est_value,
+                    lead.source or 'website',
+                    json.dumps({
+                        "lead_type": "web_capture",
+                        "project_type": lead.project_type,
+                        "message": lead.message,
+                        "original_lead_id": lead_id
+                    })
+                )
+                logger.info(f"Dual-wrote lead {lead_id} to revenue_leads for AI pickup")
+            except Exception as e:
+                logger.error(f"Failed to dual-write to revenue_leads: {e}")
+                # Do not raise, allow the main lead capture to succeed
+
             # Background task to process the lead
             background_tasks.add_task(
                 process_lead_async,
