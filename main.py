@@ -519,21 +519,29 @@ try:
 except Exception as e:
     logger.error(f"⚠️  Failed to load MCP Bridge routes: {e}")
 
-# Health check endpoint
+# Health check endpoints
 @app.get("/health")
-@app.get("/api/v1/health")
 async def health_check():
-    """Health check endpoint - RESILIENT VERSION.
+    """Shallow liveness probe (fast, no dependencies)."""
+    return {
+        "status": "ok",
+        "version": app.version,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
-    Returns 200 OK for Render health checks, with status indicating actual health.
-    This prevents Render from killing the service during transient DB slowdowns.
+
+@app.get("/api/v1/health")
+async def api_health_check():
+    """Dependency-aware health check.
+
+    This endpoint may return 503 when core dependencies (e.g., database) are unreachable.
+    Render uses `/health` for health checks; keep `/health` fast and dependency-free.
 
     Status values:
     - "healthy": All systems operational
     - "degraded": Service running but DB is slow/unavailable
     - "offline": Running in offline mode (intentional)
-
-    CRITICAL: Always returns 200 to keep Render happy. Check 'status' field for real health.
+    - "unhealthy": Database unreachable and not offline
     """
     if FAST_TEST_MODE:
         return {
