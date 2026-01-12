@@ -524,8 +524,10 @@ except Exception as e:
 async def health_check():
     """Shallow liveness probe (fast, no dependencies)."""
     return {
-        "status": "ok",
+        "status": "offline" if OFFLINE_MODE else "healthy",
         "version": app.version,
+        "database": "skipped",
+        "offline_mode": OFFLINE_MODE,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.2.2"
-__build__ = "2026-01-12T02:40:09Z"
+__version__ = "163.2.3"
+__build__ = "2026-01-12T02:52:59Z"
 __status__ = "production"
+# v163.2.3: /health remains shallow but reports "healthy" for compatibility
 # v163.2.2: Make /health a shallow liveness probe (Render stability)
 # v163.2.1: Accept X-Diagnostics-Key header for diagnostics auth
 # v163.2.0: Live readiness + credits + SiteSeer video analysis + SQL hardening
