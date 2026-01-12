@@ -29,18 +29,49 @@ class EncryptionService:
         self.field_key = self._derive_field_key()
         self.aesgcm = AESGCM(self.field_key)
 
+    def _is_production_environment(self) -> bool:
+        env = (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "").strip().lower()
+        return env in {"prod", "production"}
+
+    def _parse_master_key(self, key_string: str) -> bytes:
+        """
+        Accepts either:
+          - A Fernet key directly (urlsafe base64-encoded bytes), or
+          - A base64 wrapper around a Fernet key (legacy/compat behavior).
+        """
+        candidates: list[bytes] = []
+        try:
+            candidates.append(base64.b64decode(key_string, validate=True))
+        except Exception:
+            pass
+
+        candidates.append(key_string.encode())
+
+        for candidate in candidates:
+            try:
+                Fernet(candidate)  # validate
+                return candidate
+            except Exception:
+                continue
+
+        raise ValueError("Invalid ENCRYPTION_KEY format (expected Fernet key or base64-wrapped Fernet key).")
+
     def _get_or_create_master_key(self) -> bytes:
         """Get master encryption key from environment or create one"""
         key_string = os.getenv("ENCRYPTION_KEY")
 
         if key_string:
-            # Decode from base64
-            return base64.b64decode(key_string)
-        else:
-            # Generate new key (should be stored securely!)
-            key = Fernet.generate_key()
-            logger.warning(f"Generated new encryption key. Store this securely: {base64.b64encode(key).decode()}")
-            return key
+            return self._parse_master_key(key_string)
+
+        if self._is_production_environment():
+            raise RuntimeError("ENCRYPTION_KEY is required in production; refusing to generate an ephemeral key.")
+
+        key = Fernet.generate_key()
+        logger.warning(
+            "ENCRYPTION_KEY is not set; generated an ephemeral key for non-production. "
+            "Set ENCRYPTION_KEY to persist encrypted data across restarts."
+        )
+        return key
 
     def _derive_field_key(self) -> bytes:
         """Derive a key for field-level encryption"""
