@@ -91,7 +91,48 @@ async def score_lead(
     http_request: Request,
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
-    """Score lead using AI algorithms"""
+    """
+    Score lead using AI algorithms.
+    STRANGLER PATTERN: Proxies to BrainOps AI Agents service.
+    """
+    # 1. Attempt to proxy to AI Agents (The New Way)
+    agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL", "https://brainops-ai-agents.onrender.com").rstrip("/")
+    api_key = os.getenv("BRAINOPS_API_KEY") or os.getenv("AGENTS_API_KEY")
+
+    if agents_url and api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # The AI Agents endpoint expects specific payload structure
+                # We need to map our LeadScoringRequest to what AI Agents expects
+                # AI Agents: POST /api/v1/agents/lead-scorer/analyze
+                # It accepts: AgentAnalysisRequest(entity_id=..., entity_type="lead", ...)
+                
+                payload = {
+                    "entity_id": request.lead_id,
+                    "entity_type": "lead",
+                    "analysis_type": "score"
+                }
+                
+                response = await client.post(
+                    f"{agents_url}/api/v1/agents/lead-scorer/analyze",
+                    json=payload,
+                    headers={
+                        "X-API-Key": api_key,
+                        "X-Forwarded-For": "brainops-backend-prod",
+                        "X-Tenant-ID": current_user.get("tenant_id", "")
+                    }
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                
+                logger.warning(f"AI Agents proxy failed: {response.status_code} {response.text}")
+                # Fall through to legacy logic if proxy fails
+        except Exception as e:
+            logger.error(f"AI Agents proxy error: {e}")
+            # Fall through to legacy logic
+
+    # 2. Legacy Logic (Fallback)
     try:
         if ai_service is None:
             raise HTTPException(status_code=503, detail="AI service not available on this server")

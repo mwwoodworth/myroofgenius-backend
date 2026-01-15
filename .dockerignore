@@ -1,0 +1,29 @@
+# Ignore environment files - use Render env vars only
+.env
+.env.*
+*.env
+BrainOps.env
+
+# Ignore development and test files
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+tests/
+.git
+.gitignore
+*.md
+!README.md
+
+# Ignore IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Ignore logs and temp files
+logs/
+*.log
+.ai_persistent/
+memory/
+reports/
