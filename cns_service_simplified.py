@@ -23,6 +23,12 @@ class BrainOpsCNS:
         self.initialized = False
         self._openai_client = None
         self._openai_key = os.getenv("OPENAI_API_KEY")
+        # Log key status for debugging (masked)
+        if self._openai_key:
+            masked = f"{self._openai_key[:8]}...{self._openai_key[-4:]}" if len(self._openai_key) > 12 else "***"
+            logger.info(f"CNS: OPENAI_API_KEY loaded: {masked}")
+        else:
+            logger.warning("CNS: OPENAI_API_KEY not set - embeddings will fail")
 
     async def initialize(self):
         """Initialize CNS and verify database tables"""
@@ -261,6 +267,9 @@ class BrainOpsCNS:
                 WHERE created_at > NOW() - INTERVAL '24 hours'
             """)
 
+            # Determine actual AI provider status
+            ai_status = "openai (configured)" if self._openai_key else "fallback (no API keys)"
+
             return {
                 "status": "operational",
                 "initialized": self.initialized,
@@ -269,9 +278,9 @@ class BrainOpsCNS:
                 "project_count": project_count,
                 "recent_memories": recent_memories,
                 "database": "connected",
-                "ai_provider": "fallback (no API keys)",
+                "ai_provider": ai_status,
                 "vector_search": "enabled (pgvector)",
-                "version": "v135.0.0"
+                "version": "v135.1.0"
             }
 
     async def learn(self, pattern: Dict) -> bool:
