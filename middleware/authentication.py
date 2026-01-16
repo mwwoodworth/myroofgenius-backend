@@ -38,6 +38,9 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/mcp/health",   # MCP Bridge health check - monitoring
     "/api/v1/mcp/status",   # MCP Bridge status - monitoring
     "/api/v1/orchestrator/status",  # Orchestrator status - monitoring
+    "/api/v1/stripe-automation/config",  # Stripe publishable key - public for frontend
+    "/api/v1/stripe-automation/health",  # Stripe health check - monitoring
+    "/api/v1/stripe-automation/debug-env",  # TEMP: Debug env vars
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (

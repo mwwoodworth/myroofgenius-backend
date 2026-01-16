@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.3.0"
-__build__ = "2026-01-15T23:15:00Z"
+__version__ = "163.3.5"
+__build__ = "2026-01-16T01:00:00Z"
 __status__ = "production"
+# v163.3.5: Stripe webhook fallback - use BRAINOPS_STRIPE_WEBHOOK_SECRET if primary is placeholder
+# v163.3.4: Stripe config fallback - use NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY if primary is placeholder
+# v163.3.3: Add /stripe-automation/debug-env endpoint to trace env var mystery
+# v163.3.2: Make /stripe-automation/config and /health public (publishable key is client-facing)
+# v163.3.1: Clean Docker rebuild - ensure env vars from Render take precedence
 # v163.3.0: CNS fix - .dockerignore excludes .env, improved AI provider status logging
 # v163.2.4: SECURITY - Do not log generated ENCRYPTION_KEY; fail fast in prod
 # v163.2.3: /health remains shallow but reports "healthy" for compatibility

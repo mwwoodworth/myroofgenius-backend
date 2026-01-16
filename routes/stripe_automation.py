@@ -44,13 +44,37 @@ async def stripe_health():
 @router.get("/config")
 async def get_stripe_config():
     """Get Stripe configuration for frontend"""
+    # Primary key - try STRIPE_PUBLISHABLE_KEY first
     publishable_key = os.getenv("STRIPE_PUBLISHABLE_KEY")
+    # Valid Stripe publishable keys are 100+ chars - placeholder values are short
+    # If it's invalid/placeholder, use NEXT_PUBLIC_ version from env group
+    if not publishable_key or len(publishable_key) < 50 or "placeholder" in publishable_key.lower():
+        publishable_key = os.getenv("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY")
+    logger.info(f"Stripe publishable_key resolved: {publishable_key[:20] if publishable_key else 'None'}...")
     return {
         "publishable_key": publishable_key,
         "currency": "usd",
         "country": "US",
         "payment_methods": ["card"],
         "status": "active" if STRIPE_SECRET_KEY else "not_configured",
+    }
+
+@router.get("/debug-env")
+async def debug_stripe_env():
+    """Debug endpoint to trace Stripe env vars - TEMPORARY"""
+    stripe_vars = {}
+    for key, value in os.environ.items():
+        if "STRIPE" in key.upper():
+            # Mask the value for security
+            if value:
+                masked = f"{value[:12]}...{value[-4:]}" if len(value) > 16 else "***"
+            else:
+                masked = "NOT_SET"
+            stripe_vars[key] = masked
+    return {
+        "stripe_env_vars": stripe_vars,
+        "total_env_vars": len(os.environ),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 @router.get("/analytics/revenue")
@@ -147,7 +171,11 @@ async def get_automation_rules():
 
     return {"rules": [], "total": 0, "available": False}
 
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+# Try primary webhook secret, fallback to alternative name if placeholder
+_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+if not _webhook_secret or len(_webhook_secret) < 30 or "placeholder" in _webhook_secret.lower():
+    _webhook_secret = os.getenv("BRAINOPS_STRIPE_WEBHOOK_SECRET")
+STRIPE_WEBHOOK_SECRET = _webhook_secret
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):
