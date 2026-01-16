@@ -196,27 +196,32 @@ async def lifespan(app: FastAPI):
             app.include_router(cns_routes, prefix="/api/v1/cns", tags=["CNS"])
             print("✅ CNS routes registered at /api/v1/cns")
 
-            # Store a memory about initialization
-            await cns.remember({
-                'type': 'system',
-                'category': 'startup',
-                'title': 'BrainOps v158.0.0 LangGraph Workflow Fixes',
-                'content': {
-                    'version': 'v158.0.0',
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                    'status': status,
-                    'integrations': {
-                        'credential_manager': CREDENTIAL_MANAGER_AVAILABLE,
-                        'agent_orchestrator': ORCHESTRATOR_AVAILABLE,
-                        'cns': True,
-                        'langgraph_workflows': True
-                    }
-                },
-                'importance': 1.0,
-                'tags': ['startup', 'initialization', 'v157', 'langgraph_integration']
-            })
-            print("💾 Stored initialization memory in CNS")
+            # Set CNS on app state FIRST (before optional operations)
             app.state.cns = cns
+
+            # Try to store startup memory (non-blocking - AI provider issues shouldn't prevent CNS from working)
+            try:
+                await cns.remember({
+                    'type': 'system',
+                    'category': 'startup',
+                    'title': f'BrainOps v{app.version} Startup',
+                    'content': {
+                        'version': app.version,
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'status': status,
+                        'integrations': {
+                            'credential_manager': CREDENTIAL_MANAGER_AVAILABLE,
+                            'agent_orchestrator': ORCHESTRATOR_AVAILABLE,
+                            'cns': True,
+                            'langgraph_workflows': True
+                        }
+                    },
+                    'importance': 1.0,
+                    'tags': ['startup', 'initialization', 'v163']
+                })
+                print("💾 Stored initialization memory in CNS")
+            except Exception as mem_err:
+                print(f"⚠️  Could not store startup memory (non-critical): {mem_err}")
 
         except Exception as e:
             print(f"⚠️  CNS initialization failed: {e}")

@@ -2,9 +2,11 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.3.5"
-__build__ = "2026-01-16T01:00:00Z"
+__version__ = "163.4.1"
+__build__ = "2026-01-16T01:45:00Z"
 __status__ = "production"
+# v163.4.1: Fix CNS startup - set app.state.cns before optional memory storage to prevent init failure
+# v163.4.0: CNS Gemini fallback - when OpenAI quota exceeded, falls back to Gemini embeddings
 # v163.3.5: Stripe webhook fallback - use BRAINOPS_STRIPE_WEBHOOK_SECRET if primary is placeholder
 # v163.3.4: Stripe config fallback - use NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY if primary is placeholder
 # v163.3.3: Add /stripe-automation/debug-env endpoint to trace env var mystery

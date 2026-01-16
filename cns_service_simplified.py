@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 import logging
 import openai
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +23,29 @@ class BrainOpsCNS:
         self.db_pool = db_pool
         self.initialized = False
         self._openai_client = None
+        self._gemini_configured = False
+        self._active_provider = None
+
+        # Load API keys
         self._openai_key = os.getenv("OPENAI_API_KEY")
-        # Log key status for debugging (masked)
+        self._gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_AI_API_KEY")
+
+        # Configure providers
         if self._openai_key:
             masked = f"{self._openai_key[:8]}...{self._openai_key[-4:]}" if len(self._openai_key) > 12 else "***"
             logger.info(f"CNS: OPENAI_API_KEY loaded: {masked}")
-        else:
-            logger.warning("CNS: OPENAI_API_KEY not set - embeddings will fail")
+
+        if self._gemini_key:
+            try:
+                genai.configure(api_key=self._gemini_key)
+                self._gemini_configured = True
+                masked = f"{self._gemini_key[:8]}...{self._gemini_key[-4:]}" if len(self._gemini_key) > 12 else "***"
+                logger.info(f"CNS: GEMINI_API_KEY loaded: {masked}")
+            except Exception as e:
+                logger.warning(f"CNS: Failed to configure Gemini: {e}")
+
+        if not self._openai_key and not self._gemini_configured:
+            logger.warning("CNS: No AI provider configured - embeddings will fail")
 
     async def initialize(self):
         """Initialize CNS and verify database tables"""
@@ -57,30 +74,74 @@ class BrainOpsCNS:
 
     def _get_openai_client(self) -> openai.AsyncOpenAI:
         if not self._openai_key:
-            raise HTTPException(
-                status_code=503,
-                detail="OPENAI_API_KEY is required for CNS embeddings",
-            )
+            return None
         if self._openai_client is None:
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
         return self._openai_client
 
-    async def _generate_embedding(self, text: str) -> List[float]:
-        """Generate vector embedding using OpenAI."""
+    async def _generate_embedding_openai(self, text: str) -> Optional[List[float]]:
+        """Generate embedding using OpenAI."""
         client = self._get_openai_client()
-        truncated = text[:30000] if len(text) > 30000 else text
+        if not client:
+            return None
         try:
             response = await client.embeddings.create(
                 model="text-embedding-3-small",
-                input=truncated,
+                input=text[:30000],
             )
+            if response.data:
+                self._active_provider = "openai"
+                return response.data[0].embedding
         except Exception as exc:
-            logger.error("Embedding generation failed: %s", exc, exc_info=True)
-            raise HTTPException(status_code=502, detail="Embedding generation failed") from exc
+            error_str = str(exc).lower()
+            if "insufficient_quota" in error_str or "rate_limit" in error_str:
+                logger.warning(f"OpenAI quota/rate limit - falling back to Gemini: {exc}")
+            else:
+                logger.error(f"OpenAI embedding failed: {exc}")
+        return None
 
-        if not response.data:
-            raise HTTPException(status_code=502, detail="Embedding generation returned no data")
-        return response.data[0].embedding
+    async def _generate_embedding_gemini(self, text: str) -> Optional[List[float]]:
+        """Generate embedding using Gemini."""
+        if not self._gemini_configured:
+            return None
+        try:
+            # Gemini embeddings are synchronous, run in executor
+            import asyncio
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=text[:30000],
+                    task_type="retrieval_document"
+                )
+            )
+            if result and "embedding" in result:
+                self._active_provider = "gemini"
+                return result["embedding"]
+        except Exception as exc:
+            logger.error(f"Gemini embedding failed: {exc}")
+        return None
+
+    async def _generate_embedding(self, text: str) -> List[float]:
+        """Generate vector embedding - tries OpenAI first, falls back to Gemini."""
+        truncated = text[:30000] if len(text) > 30000 else text
+
+        # Try OpenAI first
+        embedding = await self._generate_embedding_openai(truncated)
+        if embedding:
+            return embedding
+
+        # Fall back to Gemini
+        embedding = await self._generate_embedding_gemini(truncated)
+        if embedding:
+            return embedding
+
+        # No provider available
+        raise HTTPException(
+            status_code=503,
+            detail="No AI provider available for embeddings (OpenAI quota exceeded, Gemini not configured)"
+        )
 
     async def remember(self, data: Dict) -> str:
         """Store anything in permanent memory"""
@@ -268,7 +329,16 @@ class BrainOpsCNS:
             """)
 
             # Determine actual AI provider status
-            ai_status = "openai (configured)" if self._openai_key else "fallback (no API keys)"
+            providers = []
+            if self._openai_key:
+                providers.append("openai")
+            if self._gemini_configured:
+                providers.append("gemini")
+
+            if providers:
+                ai_status = f"{', '.join(providers)} (active: {self._active_provider or providers[0]})"
+            else:
+                ai_status = "none configured"
 
             return {
                 "status": "operational",
@@ -279,8 +349,9 @@ class BrainOpsCNS:
                 "recent_memories": recent_memories,
                 "database": "connected",
                 "ai_provider": ai_status,
+                "ai_providers_available": providers,
                 "vector_search": "enabled (pgvector)",
-                "version": "v135.1.0"
+                "version": "v163.4.0"
             }
 
     async def learn(self, pattern: Dict) -> bool:
