@@ -7,12 +7,14 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from datetime import datetime
+import asyncio
 import json
 import uuid
 import logging
 import os
 
 from database.async_connection import get_pool
+from core.supabase_auth import get_supabase_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -66,22 +68,64 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
     except Exception as e:
         logger.warning(f"AI scoring failed: {e}")
 
-    # Database operations with proper async handling
-    try:
+    lead_payload = {
+        "id": lead_id,
+        "tenant_id": tenant_id,
+        "name": lead.name,
+        "email": lead.email,
+        "phone": lead.phone or "",
+        "company": lead.company or "",
+        "project_type": lead.project_type or "general",
+        "message": lead.message or "",
+        "source": lead.source or "website",
+        "score": lead_score,
+        "lead_score": lead_score,
+        "ai_enriched": ai_enriched,
+        "created_at": datetime.utcnow().isoformat(),
+        "metadata": lead.metadata or {},
+    }
+
+    normalized_score = float(lead_score) / 100.0
+    est_value = 5000.0
+    if lead.project_type == "roof_replacement":
+        est_value = 15000.0
+    elif lead.project_type == "commercial":
+        est_value = 50000.0
+
+    revenue_payload = {
+        "company_name": lead.company or lead.name,
+        "contact_name": lead.name,
+        "email": lead.email,
+        "phone": lead.phone or "",
+        "location": "",
+        "stage": "new",
+        "score": normalized_score,
+        "value_estimate": est_value,
+        "source": lead.source or "website",
+        "metadata": {
+            "lead_type": "web_capture",
+            "project_type": lead.project_type,
+            "message": lead.message,
+            "original_lead_id": lead_id,
+        },
+    }
+
+    async def _insert_via_asyncpg() -> None:
         pool = await get_pool()
         async with pool.acquire() as conn:
-            # First, check if the table has the required columns (caching this would be better)
+            try:
+                await conn.execute("SET ROLE service_role")
+            except Exception as role_error:
+                logger.warning("SET ROLE service_role failed: %s", role_error)
+
             columns = await conn.fetch("""
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'leads'
             """)
+            column_names = {col["column_name"] for col in columns}
 
-            column_names = [col['column_name'] for col in columns]
-
-            # Build insert query based on available columns
-            if 'project_type' in column_names and 'message' in column_names:
-                # New schema with all columns
+            if {"project_type", "message", "metadata", "ai_enriched"}.issubset(column_names):
                 await conn.execute("""
                     INSERT INTO leads (
                         id, tenant_id, name, email, phone, company,
@@ -98,15 +142,14 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                     lead.company or "",
                     lead.project_type or "general",
                     lead.message or "",
-                    lead.source,
-                    lead_score,  # score column
-                    lead_score,  # lead_score column (duplicate for compatibility)
+                    lead.source or "website",
+                    lead_score,
+                    lead_score,
                     ai_enriched,
                     datetime.utcnow(),
-                    json.dumps(lead.metadata)
+                    json.dumps(lead.metadata or {}),
                 )
             else:
-                # Fallback for old schema
                 await conn.execute("""
                     INSERT INTO leads (
                         id, tenant_id, name, email, phone, company,
@@ -120,24 +163,13 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                     lead.email,
                     lead.phone or "",
                     lead.company or "",
-                    lead.source,
+                    lead.source or "website",
                     lead_score,
                     lead_score,
-                    datetime.utcnow()
+                    datetime.utcnow(),
                 )
 
-            # BRIDGE FIX: Dual-write to revenue_leads for AI Agent pickup
             try:
-                # Map 0-100 score to 0.0-1.0
-                normalized_score = float(lead_score) / 100.0
-                
-                # Estimate value based on project type
-                est_value = 5000.0
-                if lead.project_type == "roof_replacement":
-                    est_value = 15000.0
-                elif lead.project_type == "commercial":
-                    est_value = 50000.0
-
                 await conn.execute("""
                     INSERT INTO revenue_leads (
                         company_name, contact_name, email, phone, location,
@@ -145,51 +177,74 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                         created_at, updated_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
                 """,
-                    lead.company or lead.name,
-                    lead.name,
-                    lead.email,
-                    lead.phone or "",
-                    "", # Location unknown from web form usually
-                    'new',
-                    normalized_score,
-                    est_value,
-                    lead.source or 'website',
-                    json.dumps({
-                        "lead_type": "web_capture",
-                        "project_type": lead.project_type,
-                        "message": lead.message,
-                        "original_lead_id": lead_id
-                    })
+                    revenue_payload["company_name"],
+                    revenue_payload["contact_name"],
+                    revenue_payload["email"],
+                    revenue_payload["phone"],
+                    revenue_payload["location"],
+                    revenue_payload["stage"],
+                    revenue_payload["score"],
+                    revenue_payload["value_estimate"],
+                    revenue_payload["source"],
+                    json.dumps(revenue_payload["metadata"]),
                 )
-                logger.info(f"Dual-wrote lead {lead_id} to revenue_leads for AI pickup")
+                logger.info("Dual-wrote lead %s to revenue_leads for AI pickup", lead_id)
             except Exception as e:
-                logger.error(f"Failed to dual-write to revenue_leads: {e}")
-                # Do not raise, allow the main lead capture to succeed
+                logger.error("Failed to dual-write to revenue_leads: %s", e)
 
-            # Background task to process the lead
-            background_tasks.add_task(
-                process_lead_async,
-                lead_id=lead_id,
-                lead_data=lead.dict()
+    async def _insert_via_supabase() -> None:
+        client = await get_supabase_client()
+
+        def _exec_insert(table: str, payload: dict):
+            return client.table(table).insert(payload).execute()
+
+        lead_resp = await asyncio.to_thread(_exec_insert, "leads", lead_payload)
+        lead_error = getattr(lead_resp, "error", None) or (
+            lead_resp.get("error") if isinstance(lead_resp, dict) else None
+        )
+        if lead_error:
+            raise RuntimeError(f"Supabase lead insert failed: {lead_error}")
+
+        try:
+            rev_resp = await asyncio.to_thread(_exec_insert, "revenue_leads", revenue_payload)
+            rev_error = getattr(rev_resp, "error", None) or (
+                rev_resp.get("error") if isinstance(rev_resp, dict) else None
             )
+            if rev_error:
+                logger.error("Supabase revenue_leads insert failed: %s", rev_error)
+        except Exception as e:
+            logger.error("Supabase revenue_leads insert failed: %s", e)
 
-            return {
-                "success": True,
-                "lead_id": lead_id,
-                "lead_score": lead_score,
-                "ai_enriched": ai_enriched,
-                "message": "Lead captured successfully",
-                "next_steps": [
-                    "Lead will be scored by AI",
-                    "Sales team will be notified",
-                    "Follow-up scheduled within 24 hours"
-                ]
-            }
-
+    # Database operations with proper async handling
+    try:
+        await _insert_via_asyncpg()
     except Exception as e:
-        logger.error(f"Database error in lead capture: {str(e)}")
-        # In production, we might want to return an error or queue locally
-        raise HTTPException(status_code=500, detail="Failed to capture lead")
+        logger.error("Database error in lead capture (asyncpg): %s", e)
+        try:
+            await _insert_via_supabase()
+        except Exception as supa_error:
+            logger.error("Database error in lead capture (supabase fallback): %s", supa_error)
+            raise HTTPException(status_code=500, detail="Failed to capture lead")
+
+    # Background task to process the lead
+    background_tasks.add_task(
+        process_lead_async,
+        lead_id=lead_id,
+        lead_data=lead.dict()
+    )
+
+    return {
+        "success": True,
+        "lead_id": lead_id,
+        "lead_score": lead_score,
+        "ai_enriched": ai_enriched,
+        "message": "Lead captured successfully",
+        "next_steps": [
+            "Lead will be scored by AI",
+            "Sales team will be notified",
+            "Follow-up scheduled within 24 hours"
+        ]
+    }
 
 async def process_lead_async(lead_id: str, lead_data: dict):
     """
