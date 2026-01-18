@@ -110,10 +110,12 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
         },
     }
 
-    async def _supabase_insert(table: str, payload: dict) -> None:
+    async def _supabase_write(table: str, payload: dict, on_conflict: str | None = None) -> None:
         client = await get_supabase_client()
 
         def _exec_insert():
+            if on_conflict:
+                return client.table(table).upsert(payload, on_conflict=on_conflict).execute()
             return client.table(table).insert(payload).execute()
 
         resp = await asyncio.to_thread(_exec_insert)
@@ -187,6 +189,17 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                         stage, score, value_estimate, source, metadata,
                         created_at, updated_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                    ON CONFLICT (email) DO UPDATE SET
+                        company_name = EXCLUDED.company_name,
+                        contact_name = EXCLUDED.contact_name,
+                        phone = EXCLUDED.phone,
+                        location = EXCLUDED.location,
+                        stage = EXCLUDED.stage,
+                        score = EXCLUDED.score,
+                        value_estimate = EXCLUDED.value_estimate,
+                        source = EXCLUDED.source,
+                        metadata = EXCLUDED.metadata,
+                        updated_at = NOW()
                 """,
                     revenue_payload["company_name"],
                     revenue_payload["contact_name"],
@@ -203,16 +216,16 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
             except Exception as e:
                 logger.error("Failed to dual-write to revenue_leads: %s", e)
                 try:
-                    await _supabase_insert("revenue_leads", revenue_payload)
+                    await _supabase_write("revenue_leads", revenue_payload, on_conflict="email")
                     logger.info("Fallback supabase insert to revenue_leads succeeded for %s", lead_id)
                 except Exception as fallback_error:
                     logger.error("Fallback supabase insert to revenue_leads failed: %s", fallback_error)
 
     async def _insert_via_supabase() -> None:
-        await _supabase_insert("leads", lead_payload)
+        await _supabase_write("leads", lead_payload)
 
         try:
-            await _supabase_insert("revenue_leads", revenue_payload)
+            await _supabase_write("revenue_leads", revenue_payload, on_conflict="email")
         except Exception as fallback_error:
             logger.error("Supabase revenue_leads insert failed: %s", fallback_error)
 
