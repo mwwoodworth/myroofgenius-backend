@@ -110,6 +110,17 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
         },
     }
 
+    async def _supabase_insert(table: str, payload: dict) -> None:
+        client = await get_supabase_client()
+
+        def _exec_insert():
+            return client.table(table).insert(payload).execute()
+
+        resp = await asyncio.to_thread(_exec_insert)
+        error = getattr(resp, "error", None) or (resp.get("error") if isinstance(resp, dict) else None)
+        if error:
+            raise RuntimeError(f"Supabase {table} insert failed: {error}")
+
     async def _insert_via_asyncpg() -> None:
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -191,29 +202,19 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                 logger.info("Dual-wrote lead %s to revenue_leads for AI pickup", lead_id)
             except Exception as e:
                 logger.error("Failed to dual-write to revenue_leads: %s", e)
+                try:
+                    await _supabase_insert("revenue_leads", revenue_payload)
+                    logger.info("Fallback supabase insert to revenue_leads succeeded for %s", lead_id)
+                except Exception as fallback_error:
+                    logger.error("Fallback supabase insert to revenue_leads failed: %s", fallback_error)
 
     async def _insert_via_supabase() -> None:
-        client = await get_supabase_client()
-
-        def _exec_insert(table: str, payload: dict):
-            return client.table(table).insert(payload).execute()
-
-        lead_resp = await asyncio.to_thread(_exec_insert, "leads", lead_payload)
-        lead_error = getattr(lead_resp, "error", None) or (
-            lead_resp.get("error") if isinstance(lead_resp, dict) else None
-        )
-        if lead_error:
-            raise RuntimeError(f"Supabase lead insert failed: {lead_error}")
+        await _supabase_insert("leads", lead_payload)
 
         try:
-            rev_resp = await asyncio.to_thread(_exec_insert, "revenue_leads", revenue_payload)
-            rev_error = getattr(rev_resp, "error", None) or (
-                rev_resp.get("error") if isinstance(rev_resp, dict) else None
-            )
-            if rev_error:
-                logger.error("Supabase revenue_leads insert failed: %s", rev_error)
-        except Exception as e:
-            logger.error("Supabase revenue_leads insert failed: %s", e)
+            await _supabase_insert("revenue_leads", revenue_payload)
+        except Exception as fallback_error:
+            logger.error("Supabase revenue_leads insert failed: %s", fallback_error)
 
     # Database operations with proper async handling
     try:
