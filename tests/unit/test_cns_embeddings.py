@@ -9,6 +9,8 @@ from cns_service_simplified import BrainOpsCNS
 @pytest.mark.asyncio
 async def test_cns_embedding_requires_openai_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_AI_API_KEY", raising=False)
 
     cns = BrainOpsCNS()
 
@@ -21,6 +23,8 @@ async def test_cns_embedding_requires_openai_key(monkeypatch):
 @pytest.mark.asyncio
 async def test_cns_embedding_returns_vector(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_AI_API_KEY", raising=False)
 
     cns = BrainOpsCNS()
 
