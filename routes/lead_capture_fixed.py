@@ -189,7 +189,7 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                         lead_id, company_name, contact_name, email, phone, location,
                         stage, score, value_estimate, source, metadata,
                         created_at, updated_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
                     ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
                         lead_id = EXCLUDED.lead_id,
                         company_name = EXCLUDED.company_name,

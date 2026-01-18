@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.4.1"
-__build__ = "2026-01-16T01:45:00Z"
+__version__ = "163.4.2"
+__build__ = "2026-01-18T20:18:38Z"
 __status__ = "production"
+# v163.4.2: Fix revenue_leads insert to include metadata in lead capture.
 # v163.4.1: Fix CNS startup - set app.state.cns before optional memory storage to prevent init failure
 # v163.4.0: CNS Gemini fallback - when OpenAI quota exceeded, falls back to Gemini embeddings
 # v163.3.5: Stripe webhook fallback - use BRAINOPS_STRIPE_WEBHOOK_SECRET if primary is placeholder
