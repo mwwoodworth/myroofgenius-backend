@@ -10,6 +10,7 @@ from datetime import datetime
 import json
 import uuid
 import logging
+import os
 
 from database.async_connection import get_pool
 
@@ -35,6 +36,17 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
     Fixed lead capture with proper async database handling
     """
     lead_id = str(uuid.uuid4())
+    tenant_id = (
+        (lead.metadata or {}).get("tenant_id")
+        or (lead.metadata or {}).get("tenantId")
+        or os.getenv("DEFAULT_TENANT_ID")
+        or os.getenv("TENANT_ID")
+        or os.getenv("OFFLINE_TENANT_ID")
+    )
+
+    if not tenant_id:
+        logger.error("Lead capture missing tenant_id; configure DEFAULT_TENANT_ID or pass metadata.tenant_id")
+        raise HTTPException(status_code=500, detail="Lead capture missing tenant_id")
 
     # Default lead score
     lead_score = 75
@@ -72,13 +84,14 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                 # New schema with all columns
                 await conn.execute("""
                     INSERT INTO leads (
-                        id, name, email, phone, company,
+                        id, tenant_id, name, email, phone, company,
                         project_type, message, source,
                         score, lead_score, ai_enriched,
                         created_at, metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
                     lead_id,
+                    tenant_id,
                     lead.name,
                     lead.email,
                     lead.phone or "",
@@ -96,12 +109,13 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                 # Fallback for old schema
                 await conn.execute("""
                     INSERT INTO leads (
-                        id, name, email, phone, company,
+                        id, tenant_id, name, email, phone, company,
                         source, score, lead_score,
                         created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                     lead_id,
+                    tenant_id,
                     lead.name,
                     lead.email,
                     lead.phone or "",
