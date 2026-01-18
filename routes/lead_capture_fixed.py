@@ -190,7 +190,8 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
                         stage, score, value_estimate, source, metadata,
                         created_at, updated_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-                    ON CONFLICT (lead_id) DO UPDATE SET
+                    ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                        lead_id = EXCLUDED.lead_id,
                         company_name = EXCLUDED.company_name,
                         contact_name = EXCLUDED.contact_name,
                         email = EXCLUDED.email,
@@ -219,7 +220,7 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
             except Exception as e:
                 logger.error("Failed to dual-write to revenue_leads: %s", e)
                 try:
-                    await _supabase_write("revenue_leads", revenue_payload, on_conflict="lead_id")
+                    await _supabase_write("revenue_leads", revenue_payload, on_conflict="email")
                     logger.info("Fallback supabase insert to revenue_leads succeeded for %s", lead_id)
                 except Exception as fallback_error:
                     logger.error("Fallback supabase insert to revenue_leads failed: %s", fallback_error)
@@ -228,7 +229,7 @@ async def capture_lead_fixed(lead: LeadCapture, background_tasks: BackgroundTask
         await _supabase_write("leads", lead_payload)
 
         try:
-            await _supabase_write("revenue_leads", revenue_payload, on_conflict="lead_id")
+            await _supabase_write("revenue_leads", revenue_payload, on_conflict="email")
         except Exception as fallback_error:
             logger.error("Supabase revenue_leads insert failed: %s", fallback_error)
 

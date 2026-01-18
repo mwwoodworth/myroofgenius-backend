@@ -79,6 +79,7 @@ class LeadCapture(BaseModel):
     phone: Optional[str] = Field(None, pattern=r"^\+?1?\d{9,15}$")
     company: Optional[str] = None
     title: Optional[str] = None
+    tenant_id: Optional[str] = None
 
     # Source tracking
     source: LeadSource
@@ -378,10 +379,20 @@ async def capture_lead(
     Capture a new lead from any source with automatic ML scoring
     """
     try:
-        cursor = db.cursor()
+        is_asyncpg = hasattr(db, "fetchrow")
 
         # Generate lead ID
         lead_id = str(uuid4())
+        tenant_id = (
+            lead.tenant_id
+            or (lead.source_details or {}).get("tenant_id")
+            or (lead.source_details or {}).get("tenantId")
+            or os.getenv("DEFAULT_TENANT_ID")
+            or os.getenv("TENANT_ID")
+            or os.getenv("OFFLINE_TENANT_ID")
+        )
+        if not tenant_id:
+            raise HTTPException(status_code=500, detail="Lead capture missing tenant_id")
 
         # Initial scoring factors (minimal for new lead)
         initial_factors = LeadScoringFactors(
@@ -393,63 +404,198 @@ async def capture_lead(
         # Get ML score
         ml_result = ml_engine.score_lead({"id": lead_id}, initial_factors)
 
-        # Insert lead
-        cursor.execute("""
-            INSERT INTO leads (
-                id, name, email, phone, company, title,
-                source, score, status, tags, custom_fields,
-                address, description, created_at, updated_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, NOW(), NOW()
+        custom_fields = json.dumps({
+            "source_details": lead.source_details,
+            "property_type": lead.property_type.value if lead.property_type else None,
+            "project_timeline": lead.project_timeline,
+            "estimated_budget": lead.estimated_budget,
+            "consent_marketing": lead.consent_marketing
+        })
+
+        revenue_payload = {
+            "lead_id": lead_id,
+            "company_name": lead.company or lead.name,
+            "contact_name": lead.name,
+            "email": lead.email,
+            "phone": lead.phone or "",
+            "location": lead.property_address or "",
+            "stage": "new",
+            "score": float(ml_result.score) / 100.0,
+            "value_estimate": lead.estimated_budget or 10000.0,
+            "source": lead.source.value,
+            "metadata": {
+                "lead_type": "ml_capture",
+                "project_type": lead.property_type.value if lead.property_type else None,
+                "message": lead.message,
+                "original_lead_id": lead_id,
+            },
+        }
+
+        if is_asyncpg:
+            new_lead = await db.fetchrow("""
+                INSERT INTO leads (
+                    id, tenant_id, name, email, phone, company, title,
+                    source, score, status, tags, custom_fields,
+                    address, description, created_at, updated_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7,
+                    $8, $9, $10, $11, $12,
+                    $13, $14, NOW(), NOW()
+                )
+                RETURNING *
+            """,
+                lead_id, tenant_id, lead.name, lead.email, lead.phone, lead.company, lead.title,
+                lead.source.value, ml_result.score, LeadStatus.NEW.value,
+                json.dumps([]),
+                custom_fields,
+                lead.property_address, lead.message
             )
-            RETURNING *
-        """, (
-            lead_id, lead.name, lead.email, lead.phone, lead.company, lead.title,
-            lead.source.value, ml_result.score, LeadStatus.NEW.value,
-            json.dumps([]),
-            json.dumps({
-                "source_details": lead.source_details,
-                "property_type": lead.property_type.value if lead.property_type else None,
-                "project_timeline": lead.project_timeline,
-                "estimated_budget": lead.estimated_budget,
-                "consent_marketing": lead.consent_marketing
-            }),
-            lead.property_address, lead.message
-        ))
 
-        new_lead = cursor.fetchone()
+            await db.execute("""
+                INSERT INTO lead_activities (
+                    id, lead_id, activity_type, subject, description, created_at
+                ) VALUES ($1, $2, $3, $4, $5, NOW())
+            """,
+                str(uuid4()), lead_id, "created",
+                f"Lead captured from {lead.source.value}",
+                lead.message or f"Lead captured from {lead.source.value}"
+            )
 
-        # Record lead activity
-        cursor.execute("""
-            INSERT INTO lead_activities (
-                id, lead_id, activity_type, description, created_at
-            ) VALUES (%s, %s, %s, %s, NOW())
-        """, (
-            str(uuid4()), lead_id, "created",
-            f"Lead captured from {lead.source.value}"
-        ))
+            await db.execute("""
+                INSERT INTO lead_scoring (
+                    id, name, description, status, data, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            """,
+                str(uuid4()),
+                f"Score for {lead.name}",
+                f"ML Score: {ml_result.score}, Category: {ml_result.score_category.value}",
+                "active",
+                json.dumps({
+                    "lead_id": lead_id,
+                    "score": ml_result.score,
+                    "probability": ml_result.conversion_probability,
+                    "factors": ml_result.key_factors
+                })
+            )
 
-        # Store ML scoring details
-        cursor.execute("""
-            INSERT INTO lead_scoring (
-                id, name, description, status, data, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-        """, (
-            str(uuid4()),
-            f"Score for {lead.name}",
-            f"ML Score: {ml_result.score}, Category: {ml_result.score_category.value}",
-            "active",
-            json.dumps({
-                "lead_id": lead_id,
-                "score": ml_result.score,
-                "probability": ml_result.conversion_probability,
-                "factors": ml_result.key_factors
-            })
-        ))
+            await db.execute("""
+                INSERT INTO revenue_leads (
+                    lead_id, company_name, contact_name, email, phone, location,
+                    stage, score, value_estimate, source, metadata,
+                    created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                    lead_id = EXCLUDED.lead_id,
+                    company_name = EXCLUDED.company_name,
+                    contact_name = EXCLUDED.contact_name,
+                    email = EXCLUDED.email,
+                    phone = EXCLUDED.phone,
+                    location = EXCLUDED.location,
+                    stage = EXCLUDED.stage,
+                    score = EXCLUDED.score,
+                    value_estimate = EXCLUDED.value_estimate,
+                    source = EXCLUDED.source,
+                    metadata = EXCLUDED.metadata,
+                    updated_at = NOW()
+            """,
+                revenue_payload["lead_id"],
+                revenue_payload["company_name"],
+                revenue_payload["contact_name"],
+                revenue_payload["email"],
+                revenue_payload["phone"],
+                revenue_payload["location"],
+                revenue_payload["stage"],
+                revenue_payload["score"],
+                revenue_payload["value_estimate"],
+                revenue_payload["source"],
+                json.dumps(revenue_payload["metadata"]),
+            )
+        else:
+            cursor = db.cursor()
+            cursor.execute("""
+                INSERT INTO leads (
+                    id, tenant_id, name, email, phone, company, title,
+                    source, score, status, tags, custom_fields,
+                    address, description, created_at, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, NOW(), NOW()
+                )
+                RETURNING *
+            """, (
+                lead_id, tenant_id, lead.name, lead.email, lead.phone, lead.company, lead.title,
+                lead.source.value, ml_result.score, LeadStatus.NEW.value,
+                json.dumps([]),
+                custom_fields,
+                lead.property_address, lead.message
+            ))
 
-        db.commit()
+            new_lead = cursor.fetchone()
+
+            # Record lead activity
+            cursor.execute("""
+                INSERT INTO lead_activities (
+                    id, lead_id, activity_type, subject, description, created_at
+                ) VALUES (%s, %s, %s, %s, %s, NOW())
+            """, (
+                str(uuid4()), lead_id, "created",
+                f"Lead captured from {lead.source.value}",
+                lead.message or f"Lead captured from {lead.source.value}"
+            ))
+
+            # Store ML scoring details
+            cursor.execute("""
+                INSERT INTO lead_scoring (
+                    id, name, description, status, data, created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+            """, (
+                str(uuid4()),
+                f"Score for {lead.name}",
+                f"ML Score: {ml_result.score}, Category: {ml_result.score_category.value}",
+                "active",
+                json.dumps({
+                    "lead_id": lead_id,
+                    "score": ml_result.score,
+                    "probability": ml_result.conversion_probability,
+                    "factors": ml_result.key_factors
+                })
+            ))
+
+            cursor.execute("""
+                INSERT INTO revenue_leads (
+                    lead_id, company_name, contact_name, email, phone, location,
+                    stage, score, value_estimate, source, metadata,
+                    created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                    lead_id = EXCLUDED.lead_id,
+                    company_name = EXCLUDED.company_name,
+                    contact_name = EXCLUDED.contact_name,
+                    email = EXCLUDED.email,
+                    phone = EXCLUDED.phone,
+                    location = EXCLUDED.location,
+                    stage = EXCLUDED.stage,
+                    score = EXCLUDED.score,
+                    value_estimate = EXCLUDED.value_estimate,
+                    source = EXCLUDED.source,
+                    metadata = EXCLUDED.metadata,
+                    updated_at = NOW()
+            """, (
+                revenue_payload["lead_id"],
+                revenue_payload["company_name"],
+                revenue_payload["contact_name"],
+                revenue_payload["email"],
+                revenue_payload["phone"],
+                revenue_payload["location"],
+                revenue_payload["stage"],
+                revenue_payload["score"],
+                revenue_payload["value_estimate"],
+                revenue_payload["source"],
+                json.dumps(revenue_payload["metadata"]),
+            ))
+
+            db.commit()
 
         # Trigger async nurturing if needed
         if ml_result.score < 60:
@@ -458,18 +604,22 @@ async def capture_lead(
                 lead_id, ml_result.score
             )
 
+        lead_row = dict(new_lead) if is_asyncpg else dict(new_lead)
+        raw_custom_fields = lead_row.pop("custom_fields", None)
+        lead_row.pop("tags", None)
         return LeadResponse(
-            **new_lead,
+            **lead_row,
             score_category=ml_result.score_category,
             tags=[],
-            custom_fields=json.loads(new_lead['custom_fields']) if new_lead['custom_fields'] else {},
-            last_activity=new_lead['created_at'],
+            custom_fields=json.loads(raw_custom_fields) if raw_custom_fields else {},
+            last_activity=lead_row.get("created_at"),
             conversion_probability=ml_result.conversion_probability,
             recommended_actions=ml_result.recommended_actions
         )
 
     except Exception as e:
-        db.rollback()
+        if hasattr(db, "rollback"):
+            db.rollback()
         logger.error(f"Error capturing lead: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -530,10 +680,11 @@ async def score_lead(
         # Log activity
         cursor.execute("""
             INSERT INTO lead_activities (
-                id, lead_id, activity_type, description, created_at
-            ) VALUES (%s, %s, %s, %s, NOW())
+                id, lead_id, activity_type, subject, description, created_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW())
         """, (
             str(uuid4()), str(lead_id), "scored",
+            "Lead re-scored",
             f"Lead re-scored: {ml_result.score} ({ml_result.score_category.value})"
         ))
 
@@ -824,11 +975,12 @@ async def update_lead(
         # Log activity
         cursor.execute("""
             INSERT INTO lead_activities (
-                id, lead_id, activity_type, description, created_at
-            ) VALUES (%s, %s, %s, %s, NOW())
+                id, lead_id, activity_type, subject, description, created_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW())
         """, (
             str(uuid4()), str(lead_id), "updated",
-            f"Lead information updated"
+            "Lead updated",
+            "Lead information updated"
         ))
 
         db.commit()
@@ -873,10 +1025,11 @@ async def convert_lead(
         # Log activity
         cursor.execute("""
             INSERT INTO lead_activities (
-                id, lead_id, activity_type, description, created_at
-            ) VALUES (%s, %s, %s, %s, NOW())
+                id, lead_id, activity_type, subject, description, created_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW())
         """, (
             str(uuid4()), str(lead_id), "converted",
+            "Lead converted",
             f"Lead converted to customer {customer_id}"
         ))
 
