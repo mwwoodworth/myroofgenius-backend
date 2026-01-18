@@ -527,12 +527,32 @@ except Exception as e:
 # Health check endpoints
 @app.get("/health")
 async def health_check():
-    """Shallow liveness probe (fast, no dependencies)."""
+    """Fast liveness probe with lightweight DB signal (non-fatal)."""
+    if FAST_TEST_MODE:
+        return {
+            "status": "healthy",
+            "version": app.version,
+            "database": "skipped",
+            "offline_mode": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    if OFFLINE_MODE:
+        return {
+            "status": "offline",
+            "version": app.version,
+            "database": "offline",
+            "offline_mode": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    probe = await _probe_database(timeout=1.0)
     return {
-        "status": "offline" if OFFLINE_MODE else "healthy",
+        "status": "healthy" if probe["ok"] else "degraded",
         "version": app.version,
-        "database": "skipped",
-        "offline_mode": OFFLINE_MODE,
+        "database": probe["status"],
+        "database_latency_ms": probe["latency_ms"],
+        "offline_mode": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
