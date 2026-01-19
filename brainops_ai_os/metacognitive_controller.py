@@ -30,10 +30,14 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
+# Database configuration - deferred to initialization time
+# DATABASE_URL is obtained lazily to allow module import without env vars set
+def get_database_url():
+    """Get DATABASE_URL with validation at call time, not import time"""
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL environment variable is required")
+    return url
 
 
 class ConsciousnessState(str, Enum):
@@ -168,7 +172,7 @@ class MetacognitiveController:
                 self.db_pool = db_pool
             else:
                 self.db_pool = await asyncpg.create_pool(
-                    DATABASE_URL,
+                    get_database_url(),
                     min_size=5,
                     max_size=20,
                     command_timeout=60,
