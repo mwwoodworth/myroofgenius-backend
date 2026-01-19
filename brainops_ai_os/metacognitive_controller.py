@@ -324,6 +324,7 @@ class MetacognitiveController:
     async def _initialize_subsystems(self):
         """Initialize all BrainOps AI OS subsystems"""
         # Import here to avoid circular dependencies
+        logger.info("🧠 Importing BrainOps AI OS subsystem modules...")
         from .awareness_system import AwarenessSystem
         from .unified_memory import UnifiedMemorySubstrate
         from .neural_dynamics import DynamicNeuralNetwork
@@ -332,33 +333,54 @@ class MetacognitiveController:
         from .proactive_engine import ProactiveIntelligenceEngine
         from .reasoning_engine import ReasoningEngine
         from .self_optimization import SelfOptimizationSystem
+        logger.info("✅ All subsystem modules imported")
 
         # Initialize each subsystem with reference to this controller
-        self.awareness_system = AwarenessSystem(self)
-        await self.awareness_system.initialize(self.db_pool)
+        try:
+            logger.info("  → Initializing Awareness System...")
+            self.awareness_system = AwarenessSystem(self)
+            await self.awareness_system.initialize(self.db_pool)
+            logger.info("  ✅ Awareness System ready")
 
-        self.unified_memory = UnifiedMemorySubstrate(self)
-        await self.unified_memory.initialize(self.db_pool)
+            logger.info("  → Initializing Unified Memory...")
+            self.unified_memory = UnifiedMemorySubstrate(self)
+            await self.unified_memory.initialize(self.db_pool)
+            logger.info("  ✅ Unified Memory ready")
 
-        self.neural_network = DynamicNeuralNetwork(self)
-        await self.neural_network.initialize(self.db_pool)
+            logger.info("  → Initializing Neural Network...")
+            self.neural_network = DynamicNeuralNetwork(self)
+            await self.neural_network.initialize(self.db_pool)
+            logger.info("  ✅ Neural Network ready")
 
-        self.goal_architecture = GoalArchitecture(self)
-        await self.goal_architecture.initialize(self.db_pool)
+            logger.info("  → Initializing Goal Architecture...")
+            self.goal_architecture = GoalArchitecture(self)
+            await self.goal_architecture.initialize(self.db_pool)
+            logger.info("  ✅ Goal Architecture ready")
 
-        self.learning_pipeline = LearningPipeline(self)
-        await self.learning_pipeline.initialize(self.db_pool)
+            logger.info("  → Initializing Learning Pipeline...")
+            self.learning_pipeline = LearningPipeline(self)
+            await self.learning_pipeline.initialize(self.db_pool)
+            logger.info("  ✅ Learning Pipeline ready")
 
-        self.proactive_engine = ProactiveIntelligenceEngine(self)
-        await self.proactive_engine.initialize(self.db_pool)
+            logger.info("  → Initializing Proactive Engine...")
+            self.proactive_engine = ProactiveIntelligenceEngine(self)
+            await self.proactive_engine.initialize(self.db_pool)
+            logger.info("  ✅ Proactive Engine ready")
 
-        self.reasoning_engine = ReasoningEngine(self)
-        await self.reasoning_engine.initialize(self.db_pool)
+            logger.info("  → Initializing Reasoning Engine...")
+            self.reasoning_engine = ReasoningEngine(self)
+            await self.reasoning_engine.initialize(self.db_pool)
+            logger.info("  ✅ Reasoning Engine ready")
 
-        self.self_optimization = SelfOptimizationSystem(self)
-        await self.self_optimization.initialize(self.db_pool)
+            logger.info("  → Initializing Self-Optimization...")
+            self.self_optimization = SelfOptimizationSystem(self)
+            await self.self_optimization.initialize(self.db_pool)
+            logger.info("  ✅ Self-Optimization ready")
+        except Exception as e:
+            logger.error(f"❌ Subsystem initialization failed: {e}")
+            raise
 
-        logger.info("All BrainOps AI OS subsystems initialized")
+        logger.info("✅ All BrainOps AI OS subsystems initialized")
 
     async def _load_state(self):
         """Load existing state from database"""

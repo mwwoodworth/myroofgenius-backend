@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.4.3"
-__build__ = "2026-01-19T18:50:00Z"
+__version__ = "163.4.4"
+__build__ = "2026-01-19T18:55:00Z"
 __status__ = "production"
+# v163.4.4: Add detailed logging to AI OS subsystem initialization for debugging
 # v163.4.3: Fix BrainOps AI OS initialization - defer DATABASE_URL check to init time, not import
 # v163.4.2: Fix revenue_leads insert to include metadata in lead capture.
 # v163.4.1: Fix CNS startup - set app.state.cns before optional memory storage to prevent init failure
