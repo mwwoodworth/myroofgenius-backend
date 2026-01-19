@@ -914,6 +914,11 @@ async def diagnostics(request: Request):
         "missing_env": missing_env,
         "offline_mode": OFFLINE_MODE,
         "fast_test_mode": FAST_TEST_MODE,
+        "brainops_ai_os": {
+            "module_available": BRAINOPS_AI_OS_AVAILABLE,
+            "controller_initialized": brainops_controller is not None,
+            "controller_state": brainops_controller.state.value if brainops_controller else None,
+        },
     }
 
 # Customer model
