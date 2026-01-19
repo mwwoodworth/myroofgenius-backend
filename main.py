@@ -964,6 +964,10 @@ async def root():
         "version": app.version,
         "status": "operational",
         "cns": "enabled" if CNS_AVAILABLE else "disabled",
+        "brainops_ai_os": {
+            "module_available": BRAINOPS_AI_OS_AVAILABLE,
+            "initialized": brainops_controller is not None,
+        },
         "documentation": "/docs",
         "health": "/health"
     }
