@@ -104,13 +104,16 @@ except ImportError as e:
 # Check if BrainOps AI OS is available
 BRAINOPS_AI_OS_AVAILABLE = False
 brainops_controller = None
+brainops_init_error = None  # Capture initialization errors for diagnostics
 try:
     from brainops_ai_os import MetacognitiveController, initialize_brainops
     BRAINOPS_AI_OS_AVAILABLE = True
     logger.info("✅ BrainOps AI OS module is available")
 except ImportError as e:
+    brainops_init_error = f"Import error: {e}"
     logger.warning(f"BrainOps AI OS not available: {e}")
 except Exception as e:
+    brainops_init_error = f"Module error: {e}"
     logger.error(f"Error checking BrainOps AI OS availability: {e}")
 
 async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asyncpg.Pool:
@@ -323,6 +326,8 @@ async def lifespan(app: FastAPI):
             print("🧠 BrainOps AI OS is AWAKE, AWARE, and OPERATIONAL!")
             app.state.brainops_controller = brainops_controller
         except Exception as e:
+            global brainops_init_error
+            brainops_init_error = f"Initialization error: {e}"
             print(f"⚠️  BrainOps AI OS initialization failed: {e}")
             logger.exception("BrainOps AI OS initialization error")
 
@@ -967,6 +972,7 @@ async def root():
         "brainops_ai_os": {
             "module_available": BRAINOPS_AI_OS_AVAILABLE,
             "initialized": brainops_controller is not None,
+            "error": brainops_init_error,
         },
         "documentation": "/docs",
         "health": "/health"
