@@ -160,13 +160,15 @@ class SelfOptimizationSystem:
     async def _load_baselines(self):
         """Load performance baselines"""
         async with self.db_pool.acquire() as conn:
+            # Check if table has new schema (baseline_mean) or old schema (baseline_value)
+            # The existing table uses baseline_mean, baseline_std columns
             rows = await conn.fetch('''
-                SELECT metric_name, baseline_value, threshold_low, threshold_high
+                SELECT metric_name, baseline_mean
                 FROM brainops_baselines
             ''')
 
             for row in rows:
-                self.baselines[row['metric_name']] = row['baseline_value']
+                self.baselines[row['metric_name']] = row['baseline_mean']
 
         # Set default baselines if empty
         if not self.baselines:
