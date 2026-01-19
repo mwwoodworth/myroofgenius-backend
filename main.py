@@ -101,6 +101,18 @@ try:
 except ImportError as e:
     logger.warning(f"Elena Roofing AI not available: {e}")
 
+# Check if BrainOps AI OS is available
+BRAINOPS_AI_OS_AVAILABLE = False
+brainops_controller = None
+try:
+    from brainops_ai_os import MetacognitiveController, initialize_brainops
+    BRAINOPS_AI_OS_AVAILABLE = True
+    logger.info("✅ BrainOps AI OS module is available")
+except ImportError as e:
+    logger.warning(f"BrainOps AI OS not available: {e}")
+except Exception as e:
+    logger.error(f"Error checking BrainOps AI OS availability: {e}")
+
 async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asyncpg.Pool:
     """Initialize the asyncpg pool with retry, backoff, and connection recycling. Raises on failure."""
     import ssl as ssl_module
@@ -145,7 +157,7 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
-    global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness
+    global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness, brainops_controller
 
     print(f"🚀 Starting BrainOps Backend v{__version__} - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
     print("=" * 80)
@@ -292,6 +304,28 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️  Elena initialization failed: {e}")
 
+    # Initialize BrainOps AI OS - The Unified AI Operating System
+    if BRAINOPS_AI_OS_AVAILABLE:
+        try:
+            print("\n🧠 Initializing BrainOps AI OS - The Unified AI Operating System...")
+            brainops_controller = await initialize_brainops(db_pool)
+            brainops_health = await brainops_controller.get_health()
+            print(f"✅ BrainOps AI OS initialized!")
+            print(f"  🧬 Metacognitive Controller: ACTIVE")
+            print(f"  👁️  Continuous Awareness: {brainops_health.get('subsystems', {}).get('awareness', {}).get('status', 'unknown')}")
+            print(f"  🧠 Unified Memory: {brainops_health.get('subsystems', {}).get('memory', {}).get('status', 'unknown')}")
+            print(f"  ⚡ Neural Dynamics: {brainops_health.get('subsystems', {}).get('neural', {}).get('status', 'unknown')}")
+            print(f"  🎯 Goal Architecture: {brainops_health.get('subsystems', {}).get('goals', {}).get('status', 'unknown')}")
+            print(f"  📚 Learning Pipeline: {brainops_health.get('subsystems', {}).get('learning', {}).get('status', 'unknown')}")
+            print(f"  🔮 Proactive Engine: {brainops_health.get('subsystems', {}).get('proactive', {}).get('status', 'unknown')}")
+            print(f"  💭 Reasoning Engine: {brainops_health.get('subsystems', {}).get('reasoning', {}).get('status', 'unknown')}")
+            print(f"  🔧 Self-Optimization: {brainops_health.get('subsystems', {}).get('optimization', {}).get('status', 'unknown')}")
+            print("🧠 BrainOps AI OS is AWAKE, AWARE, and OPERATIONAL!")
+            app.state.brainops_controller = brainops_controller
+        except Exception as e:
+            print(f"⚠️  BrainOps AI OS initialization failed: {e}")
+            logger.exception("BrainOps AI OS initialization error")
+
     # Initialize MCP Bridge Client for active tool usage
     try:
         print("\n🔌 Initializing MCP Bridge Client...")
@@ -306,6 +340,7 @@ async def lifespan(app: FastAPI):
     print("✅ BrainOps Backend v163.0.29 FULLY OPERATIONAL")
     print("  🤖 23 AI agent endpoints active")
     print("  🔗 Complete relationship awareness")
+    print("  🧠 BrainOps AI OS: " + ("ACTIVE" if BRAINOPS_AI_OS_AVAILABLE and brainops_controller else "INACTIVE"))
     print("  ✅ All frontend linkages verified")
     print("=" * 80 + "\n")
 
@@ -314,6 +349,16 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     print(f"👋 Shutting down BrainOps Backend v{__version__}")
+
+    # Shutdown BrainOps AI OS
+    if brainops_controller:
+        try:
+            print("🧠 Shutting down BrainOps AI OS...")
+            await brainops_controller.shutdown()
+            print("✅ BrainOps AI OS shutdown complete")
+        except Exception as e:
+            logger.error(f"Error shutting down BrainOps AI OS: {e}")
+
     if db_pool:
         await db_pool.close()
     print("✅ Shutdown complete")
