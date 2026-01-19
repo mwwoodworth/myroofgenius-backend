@@ -30,6 +30,16 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder for datetime objects"""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, Enum):
+            return obj.value
+        return super().default(obj)
+
 # Database configuration - deferred to initialization time
 # DATABASE_URL is obtained lazily to allow module import without env vars set
 def get_database_url():
@@ -983,8 +993,8 @@ class MetacognitiveController:
                 self.id,
                 self.state.value,
                 self.attention_focus,
-                json.dumps(system_state.__dict__ if hasattr(system_state, '__dict__') else system_state),
-                json.dumps(self.metrics)
+                json.dumps(system_state.__dict__ if hasattr(system_state, '__dict__') else system_state, cls=DateTimeEncoder),
+                json.dumps(self.metrics, cls=DateTimeEncoder)
             )
 
     # =========================================================================
@@ -1212,11 +1222,11 @@ class MetacognitiveController:
             ''',
                 thought.id,
                 self.id,
-                json.dumps(thought.content),
+                json.dumps(thought.content, cls=DateTimeEncoder),
                 thought.source,
                 thought.priority.value,
                 thought.processed,
-                json.dumps(thought.outcome) if thought.outcome else None,
+                json.dumps(thought.outcome, cls=DateTimeEncoder) if thought.outcome else None,
                 datetime.now() if thought.processed else None
             )
 
@@ -1459,8 +1469,8 @@ class MetacognitiveController:
                 VALUES ($1, $2, $3, NOW())
             ''',
                 reflection.get("topic"),
-                json.dumps(reflection),
-                json.dumps(reflection.get("insights", []))
+                json.dumps(reflection, cls=DateTimeEncoder),
+                json.dumps(reflection.get("insights", []), cls=DateTimeEncoder)
             )
 
     async def reset(self):

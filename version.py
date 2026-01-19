@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.4.8"
-__build__ = "2026-01-19T19:15:00Z"
+__version__ = "163.4.9"
+__build__ = "2026-01-19T19:45:00Z"
 __status__ = "production"
+# v163.4.9: Fix datetime JSON serialization errors in AI OS metacognitive_controller
 # v163.4.8: Fix AI OS self_optimization to use correct brainops_baselines schema (baseline_mean not baseline_value)
 # v163.4.7: Capture and expose AI OS initialization errors for debugging
 # v163.4.6: Add AI OS status to root endpoint for debugging
