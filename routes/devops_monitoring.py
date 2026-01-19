@@ -10,6 +10,7 @@ import os
 import json
 import httpx
 import logging
+from starlette.requests import ClientDisconnect
 
 router = APIRouter(
     prefix="/api/v1",
@@ -299,46 +300,19 @@ async def vercel_log_drain(request: Request):
     This endpoint silently accepts all log data without storing it.
     """
     try:
-        # Vercel sends logs as newline-delimited JSON
         body = await request.body()
-
-        # Handle empty body gracefully
         if not body:
-            return {
-                "success": True,
-                "processed": 0,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            return {"success": True, "processed": 0, "timestamp": datetime.utcnow().isoformat()}
 
-        body_str = body.decode('utf-8').strip()
+        # Count NDJSON entries without parsing JSON (avoid CPU spikes under heavy drain volume).
+        processed_count = body.count(b"\n")
+        if not body.endswith(b"\n"):
+            processed_count += 1
 
-        # Handle empty string after stripping
-        if not body_str:
-            return {
-                "success": True,
-                "processed": 0,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-
-        logs = body_str.split('\n')
-
-        processed_count = 0
-        for log_line in logs:
-            log_line = log_line.strip()
-            if log_line:
-                try:
-                    # Just validate it's valid JSON - we don't store but accept
-                    json.loads(log_line)
-                    processed_count += 1
-                except json.JSONDecodeError:
-                    # Silently skip malformed log lines - don't flood error logs
-                    pass
-
-        return {
-            "success": True,
-            "processed": processed_count,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return {"success": True, "processed": processed_count, "timestamp": datetime.utcnow().isoformat()}
+    except ClientDisconnect:
+        # Vercel may close the connection early; accept silently so the drain doesn't get disabled.
+        return {"success": True, "processed": 0, "note": "client_disconnect", "timestamp": datetime.utcnow().isoformat()}
     except UnicodeDecodeError:
         # Body wasn't valid UTF-8 - accept anyway to prevent drain disablement
         return {
