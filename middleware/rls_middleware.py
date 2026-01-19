@@ -9,7 +9,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 import logging
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 import os
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class RLSMiddleware(BaseHTTPMiddleware):
                     except Exception as e:
                         logger.warning(f"Failed to set RLS context: {e}")
 
-        except (JWTError, Exception) as e:
+        except (PyJWTError, Exception) as e:
             logger.debug(f"No valid auth token in request: {e}")
 
         # Store user info in request state

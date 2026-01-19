@@ -12,7 +12,6 @@ asyncpg>=0.29.0
 
 # Authentication & Security
 supabase>=2.0.0  # CORRECT AUTH - Supabase replaces custom JWT
-python-jose[cryptography]>=3.3.0  # DEPRECATED - Remove after migration
 passlib[bcrypt]>=1.7.4  # DEPRECATED - Remove after migration
 python-decouple>=3.8
 # Explicitly pin pydantic and pydantic-core to a known-good, compatible pair
@@ -55,5 +54,5 @@ pyyaml>=6.0.1
 Pillow>=10.0.0
 numpy>=1.24.0
 psutil==5.9.8
-scikit-learn==1.3.0
+scikit-learn==1.5.0
 joblib==1.3.2
