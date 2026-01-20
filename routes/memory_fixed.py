@@ -129,3 +129,65 @@ async def memory_status(db: Session = Depends(get_db)):
             "total_memories": 0,
             "error": str(e)
         }
+
+
+@router.get("/dashboard/overview")
+async def memory_dashboard_overview(db: Session = Depends(get_db)):
+    """Return memory dashboard aggregates."""
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM memory_entries")).scalar() or 0
+        active_users = db.execute(
+            text("SELECT COUNT(DISTINCT owner_id) FROM memory_entries WHERE owner_id IS NOT NULL")
+        ).scalar() or 0
+        last_24h = db.execute(
+            text("SELECT COUNT(*) FROM memory_entries WHERE created_at >= NOW() - INTERVAL '24 hours'")
+        ).scalar() or 0
+
+        type_rows = db.execute(
+            text("SELECT memory_type, COUNT(*) FROM memory_entries GROUP BY memory_type")
+        ).fetchall()
+        category_rows = db.execute(
+            text("SELECT category, COUNT(*) FROM memory_entries GROUP BY category")
+        ).fetchall()
+        recent_rows = db.execute(
+            text(
+                """
+                SELECT memory_id, id, title, memory_type, category, created_at
+                FROM memory_entries
+                ORDER BY created_at DESC NULLS LAST
+                LIMIT 10
+                """
+            )
+        ).fetchall()
+
+        return {
+            "status": "operational",
+            "total_memories": int(total),
+            "active_users": int(active_users),
+            "memories_last_24h": int(last_24h),
+            "by_type": {row[0] or "unknown": int(row[1]) for row in type_rows},
+            "by_category": {row[0] or "uncategorized": int(row[1]) for row in category_rows},
+            "recent_entries": [
+                {
+                    "memory_id": str(row[0] or row[1]),
+                    "title": row[2],
+                    "memory_type": row[3],
+                    "category": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                }
+                for row in recent_rows
+            ],
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Memory dashboard error: {e}")
+        return {
+            "status": "degraded",
+            "total_memories": 0,
+            "active_users": 0,
+            "memories_last_24h": 0,
+            "by_type": {},
+            "by_category": {},
+            "recent_entries": [],
+            "error": str(e),
+        }
