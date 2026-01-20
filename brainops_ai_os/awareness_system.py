@@ -450,7 +450,7 @@ class AwarenessSystem:
                             MAX(response_time) as max_response_time,
                             SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as error_count
                         FROM api_metrics
-                        WHERE created_at > NOW() - INTERVAL '5 minutes'
+                        WHERE recorded_at > NOW() - INTERVAL '5 minutes'
                     ''')
 
                 if metrics:
