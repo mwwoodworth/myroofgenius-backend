@@ -90,8 +90,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             if auth_header and auth_header.lower().startswith("bearer "):
                 api_key = auth_header.split(" ", 1)[1]
 
-        # MASTER PASSWORD OVERRIDE
-        if api_key == "Mww00dw0rth@2O1S$":
+        # MASTER KEY OVERRIDE (from environment variable)
+        master_key = os.getenv("MASTER_API_KEY")
+        if master_key and api_key == master_key:
             # Allow access as system admin
             request.state.user = {"id": "system", "role": "admin", "tenant_id": "system"}
             return await call_next(request)

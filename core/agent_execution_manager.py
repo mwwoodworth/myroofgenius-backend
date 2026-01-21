@@ -200,10 +200,9 @@ class AgentExecutionManager:
         """
         Call the actual AI agent API with timeout. No simulated fallbacks.
         """
-        api_key = os.getenv("BRAINOPS_API_KEY") or self.api_key or "Mww00dw0rth@2O1S$"
+        api_key = os.getenv("BRAINOPS_API_KEY") or os.getenv("MASTER_API_KEY") or self.api_key
         if not api_key:
-            # Should not happen with default, but good for safety
-            raise RuntimeError("BRAINOPS_API_KEY environment variable is required for agent execution")
+            raise RuntimeError("BRAINOPS_API_KEY or MASTER_API_KEY environment variable is required for agent execution")
 
         ai_agents_url = os.getenv("BRAINOPS_AI_AGENTS_URL", self.ai_agents_url)
         backend_url = os.getenv("BACKEND_URL", self.backend_url)
