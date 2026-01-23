@@ -7,12 +7,19 @@ import json
 import logging
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from database import get_db
+from database import SessionLocal
 from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["revenue"])
+
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 class LeadCapture(BaseModel):
     email: str
@@ -22,7 +29,7 @@ class LeadCapture(BaseModel):
 @router.post("/capture-lead")
 def capture_lead(
     lead: LeadCapture,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Capture a new lead"""
@@ -56,7 +63,7 @@ def capture_lead(
 
 @router.get("/dashboard")
 def get_revenue_dashboard(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get revenue dashboard data"""
@@ -207,7 +214,7 @@ def get_revenue_dashboard(
 
 @router.get("/metrics")
 def get_metrics(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get revenue metrics"""
@@ -270,7 +277,7 @@ def get_metrics(
 
 @router.get("/stats")
 def get_revenue_stats(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     """Get comprehensive revenue statistics"""

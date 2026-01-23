@@ -12,10 +12,27 @@ from sqlalchemy.orm import Session
 import json
 import uuid
 
-from database import get_db
+from database import SessionLocal
 from core.supabase_auth import get_current_user
 
 router = APIRouter(tags=["Revenue Dashboard"])
+
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def _parse_tenant_uuid(tenant_id: Optional[Any]) -> Optional[uuid.UUID]:
+    if not tenant_id:
+        return None
+    if isinstance(tenant_id, uuid.UUID):
+        return tenant_id
+    try:
+        return uuid.UUID(str(tenant_id))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 def _get_table_columns(db: Session, table: str) -> Set[str]:
     try:
@@ -42,7 +59,7 @@ def _tenant_filter(has_tenant: bool, tenant_id: Optional[uuid.UUID], alias: Opti
 
 @router.get("/dashboard-metrics")
 def get_dashboard_metrics(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -52,9 +69,8 @@ def get_dashboard_metrics(
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Tenant assignment required")
     
-    try:
-        tenant_uuid = uuid.UUID(tenant_id)
-    except ValueError:
+    tenant_uuid = _parse_tenant_uuid(tenant_id)
+    if tenant_uuid is None:
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
     rt_cols = _get_table_columns(db, "revenue_tracking")
@@ -420,14 +436,14 @@ def generate_revenue_recommendations(current_revenue, target, lead_metrics):
 
 @router.get("/live-feed")
 def get_live_revenue_feed(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Real-time feed of revenue events
     """
     tenant_id = current_user.get("tenant_id")
-    tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
+    tenant_uuid = _parse_tenant_uuid(tenant_id)
 
     rt_cols = _get_table_columns(db, "revenue_tracking")
     leads_cols = _get_table_columns(db, "leads")
@@ -509,14 +525,14 @@ def format_time_ago(timestamp):
 
 @router.get("/hourly-performance")
 def get_hourly_performance(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Hourly revenue performance for today
     """
     tenant_id = current_user.get("tenant_id")
-    tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
+    tenant_uuid = _parse_tenant_uuid(tenant_id)
 
     rt_cols = _get_table_columns(db, "revenue_tracking")
     rt_tenant_clause = _tenant_filter("tenant_id" in rt_cols, tenant_uuid)
@@ -569,14 +585,14 @@ def get_hourly_performance(
 
 @router.get("/campaign-roi")
 def get_campaign_roi(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
     ROI analysis by marketing campaign
     """
     tenant_id = current_user.get("tenant_id")
-    tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
+    tenant_uuid = _parse_tenant_uuid(tenant_id)
 
     campaign_cols = _get_table_columns(db, "ad_campaigns")
     perf_cols = _get_table_columns(db, "ad_performance")
@@ -635,14 +651,14 @@ def get_campaign_roi(
 
 @router.get("/customer-ltv")
 def get_customer_ltv_analysis(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Customer lifetime value analysis
     """
     tenant_id = current_user.get("tenant_id")
-    tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
+    tenant_uuid = _parse_tenant_uuid(tenant_id)
 
     ltv_cols = _get_table_columns(db, "customer_ltv")
     ltv_tenant_clause = _tenant_filter("tenant_id" in ltv_cols, tenant_uuid)

@@ -17,11 +17,18 @@ from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.dialects.postgresql import UUID
 import httpx
 
-from database import get_db, engine
+from database import SessionLocal, engine
 from core.supabase_auth import get_current_user
 
 router = APIRouter(tags=["Stripe Revenue"])
 logger = logging.getLogger(__name__)
+
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Stripe configuration
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -144,7 +151,7 @@ async def send_email(to_email: str, subject: str, html_content: str):
 @router.post("/create-checkout-session")
 async def create_checkout_session(
     request: CheckoutRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -206,7 +213,7 @@ async def create_checkout_session(
 async def create_subscription(
     request: SubscriptionRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -290,7 +297,7 @@ async def create_subscription(
 async def stripe_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     """
     Handle Stripe webhooks for payment events
@@ -378,7 +385,7 @@ async def stripe_webhook(
 
 @router.get("/dashboard-metrics")
 async def get_revenue_metrics(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -446,7 +453,7 @@ async def get_revenue_metrics(
 async def cancel_subscription(
     subscription_id: str,
     reason: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: dict = Depends(get_current_user)
 ):
     """
