@@ -5,7 +5,7 @@ Track every dollar, optimize every metric
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timedelta, date
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,6 +16,29 @@ from database import get_db
 from core.supabase_auth import get_current_user
 
 router = APIRouter(tags=["Revenue Dashboard"])
+
+def _get_table_columns(db: Session, table: str) -> Set[str]:
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = :table
+                """
+            ),
+            {"table": table},
+        ).fetchall()
+        return {row[0] for row in rows}
+    except Exception:
+        return set()
+
+
+def _tenant_filter(has_tenant: bool, tenant_id: Optional[uuid.UUID], alias: Optional[str] = None) -> str:
+    if not has_tenant or not tenant_id:
+        return ""
+    column = f\"{alias}.tenant_id\" if alias else \"tenant_id\"
+    return f\" AND {column} = :tenant_id\"
 
 @router.get("/dashboard-metrics")
 def get_dashboard_metrics(
@@ -34,16 +57,41 @@ def get_dashboard_metrics(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
+    rt_cols = _get_table_columns(db, "revenue_tracking")
+    leads_cols = _get_table_columns(db, "leads")
+    subs_cols = _get_table_columns(db, "subscriptions")
+    goals_cols = _get_table_columns(db, "revenue_goals")
+
+    rt_has_tenant = "tenant_id" in rt_cols
+    leads_has_tenant = "tenant_id" in leads_cols
+    subs_has_tenant = "tenant_id" in subs_cols
+    goals_has_tenant = "tenant_id" in goals_cols
+
+    amount_expr = "amount_cents / 100.0" if "amount_cents" in rt_cols else "revenue"
+    customer_expr = (
+        "customer_email"
+        if "customer_email" in rt_cols
+        else "customer_id"
+        if "customer_id" in rt_cols
+        else "NULL"
+    )
+    source_expr = "source" if "source" in rt_cols else "channel" if "channel" in rt_cols else None
+
+    rt_tenant_clause = _tenant_filter(rt_has_tenant, tenant_uuid)
+    leads_tenant_clause = _tenant_filter(leads_has_tenant, tenant_uuid)
+    subs_tenant_clause = _tenant_filter(subs_has_tenant, tenant_uuid)
+    goals_tenant_clause = _tenant_filter(goals_has_tenant, tenant_uuid)
+
     # Today's revenue
     today_revenue = db.execute(
         text(
-            """
+            f"""
             SELECT
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers,
+                COALESCE(SUM({amount_expr}), 0) as revenue,
+                COUNT(DISTINCT {customer_expr}) as customers,
                 COUNT(*) as transactions
             FROM revenue_tracking
-            WHERE DATE(created_at) = CURRENT_DATE AND tenant_id = :tenant_id
+            WHERE DATE(created_at) = CURRENT_DATE {rt_tenant_clause}
             """
         ),
         {"tenant_id": tenant_uuid}
@@ -52,12 +100,12 @@ def get_dashboard_metrics(
     # Week to date
     week_revenue = db.execute(
         text(
-            """
+            f"""
             SELECT
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers
+                COALESCE(SUM({amount_expr}), 0) as revenue,
+                COUNT(DISTINCT {customer_expr}) as customers
             FROM revenue_tracking
-            WHERE created_at >= DATE_TRUNC('week', CURRENT_DATE) AND tenant_id = :tenant_id
+            WHERE created_at >= DATE_TRUNC('week', CURRENT_DATE) {rt_tenant_clause}
             """
         ),
         {"tenant_id": tenant_uuid}
@@ -66,12 +114,12 @@ def get_dashboard_metrics(
     # Month to date
     month_revenue = db.execute(
         text(
-            """
+            f"""
             SELECT
-                COALESCE(SUM(amount_cents) / 100.0, 0) as revenue,
-                COUNT(DISTINCT customer_email) as customers
+                COALESCE(SUM({amount_expr}), 0) as revenue,
+                COUNT(DISTINCT {customer_expr}) as customers
             FROM revenue_tracking
-            WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE) AND tenant_id = :tenant_id
+            WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE) {rt_tenant_clause}
             """
         ),
         {"tenant_id": tenant_uuid}
@@ -80,7 +128,7 @@ def get_dashboard_metrics(
     # MRR calculation
     mrr = None
     for mrr_query in (
-        """
+        f"""
         SELECT COALESCE(SUM(
             CASE
                 WHEN billing_cycle ILIKE 'year%%' THEN amount / 12.0
@@ -89,17 +137,17 @@ def get_dashboard_metrics(
             END
         ), 0) as mrr
         FROM subscriptions
-        WHERE status = 'active' AND tenant_id = :tenant_id
+        WHERE status = 'active' {subs_tenant_clause}
         """,
-        """
+        f"""
         SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as mrr
         FROM subscriptions
-        WHERE status = 'active' AND tenant_id = :tenant_id
+        WHERE status = 'active' {subs_tenant_clause}
         """,
-        """
+        f"""
         SELECT COALESCE(SUM(amount) , 0) as mrr
         FROM subscriptions
-        WHERE status = 'active' AND tenant_id = :tenant_id
+        WHERE status = 'active' {subs_tenant_clause}
         """,
     ):
         try:
@@ -108,18 +156,36 @@ def get_dashboard_metrics(
         except Exception:
             mrr = None
 
-    # Lead metrics
+    # Lead metrics (schema-aware)
     try:
+        if "segment" in leads_cols:
+            hot_expr = "COUNT(CASE WHEN segment = 'hot' THEN 1 END)"
+        elif "status" in leads_cols:
+            hot_expr = "COUNT(CASE WHEN status = 'hot' THEN 1 END)"
+        elif "score" in leads_cols:
+            hot_expr = "COUNT(CASE WHEN score >= 80 THEN 1 END)"
+        else:
+            hot_expr = "0"
+
+        if "converted" in leads_cols:
+            converted_expr = "COUNT(CASE WHEN converted = true THEN 1 END)"
+        elif "converted_date" in leads_cols:
+            converted_expr = "COUNT(CASE WHEN converted_date IS NOT NULL THEN 1 END)"
+        else:
+            converted_expr = "0"
+
+        avg_score_expr = "AVG(score)" if "score" in leads_cols else "0"
+
         lead_metrics = db.execute(
             text(
-                """
+                f"""
                 SELECT
                     COUNT(*) as total_leads,
-                    COUNT(CASE WHEN segment = 'hot' THEN 1 END) as hot_leads,
-                    COUNT(CASE WHEN converted = true THEN 1 END) as converted,
-                    AVG(score) as avg_score
+                    {hot_expr} as hot_leads,
+                    {converted_expr} as converted,
+                    {avg_score_expr} as avg_score
                 FROM leads
-                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' AND tenant_id = :tenant_id
+                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' {leads_tenant_clause}
                 """
             ),
             {"tenant_id": tenant_uuid}
@@ -127,44 +193,98 @@ def get_dashboard_metrics(
     except Exception:
         lead_metrics = {"total_leads": 0, "hot_leads": 0, "converted": 0, "avg_score": 0}
 
-    # Conversion funnel
+    # Conversion funnel (schema-aware)
     try:
-        funnel = db.execute(
+        qualified_expr = None
+        if "score" in leads_cols:
+            qualified_expr = "COUNT(DISTINCT CASE WHEN score >= 60 THEN email END)"
+        elif "status" in leads_cols:
+            qualified_expr = "COUNT(DISTINCT CASE WHEN status ILIKE 'qualified' THEN email END)"
+        else:
+            qualified_expr = "0"
+
+        leads_count = db.execute(
             text(
-                """
-                SELECT
-                    COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN email END) as leads,
-                    COUNT(DISTINCT CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' AND score >= 60 THEN email END) as qualified,
-                    COUNT(DISTINCT CASE WHEN status = 'trialing' THEN customer_email END) as trials,
-                    COUNT(DISTINCT CASE WHEN status = 'active' THEN customer_email END) as paid
-                FROM (
-                    SELECT email, score, NULL as customer_email, NULL as status, created_at FROM leads WHERE tenant_id = :tenant_id
-                    UNION ALL
-                    SELECT NULL, NULL, customer_email, status, created_at FROM subscriptions WHERE tenant_id = :tenant_id
-                ) combined
+                f"""
+                SELECT COUNT(DISTINCT email) as leads
+                FROM leads
+                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' {leads_tenant_clause}
                 """
             ),
             {"tenant_id": tenant_uuid}
-        ).mappings().first()
+        ).scalar() or 0
+
+        qualified_count = db.execute(
+            text(
+                f"""
+                SELECT {qualified_expr} as qualified
+                FROM leads
+                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' {leads_tenant_clause}
+                """
+            ),
+            {"tenant_id": tenant_uuid}
+        ).scalar() or 0
+
+        subs_customer_expr = (
+            "customer_email"
+            if "customer_email" in subs_cols
+            else "customer_id"
+            if "customer_id" in subs_cols
+            else "user_id"
+            if "user_id" in subs_cols
+            else "id"
+        )
+
+        trials_count = db.execute(
+            text(
+                f"""
+                SELECT COUNT(DISTINCT {subs_customer_expr}) as trials
+                FROM subscriptions
+                WHERE status = 'trialing' {subs_tenant_clause}
+                """
+            ),
+            {"tenant_id": tenant_uuid}
+        ).scalar() or 0
+
+        paid_count = db.execute(
+            text(
+                f"""
+                SELECT COUNT(DISTINCT {subs_customer_expr}) as paid
+                FROM subscriptions
+                WHERE status = 'active' {subs_tenant_clause}
+                """
+            ),
+            {"tenant_id": tenant_uuid}
+        ).scalar() or 0
+
+        funnel = {
+            "leads": int(leads_count or 0),
+            "qualified": int(qualified_count or 0),
+            "trials": int(trials_count or 0),
+            "paid": int(paid_count or 0),
+        }
     except Exception:
         funnel = {"leads": 0, "qualified": 0, "trials": 0, "paid": 0}
 
     # Revenue by source
-    revenue_sources = db.execute(
-        text(
-            """
-            SELECT
-                source,
-                COUNT(*) as transactions,
-                SUM(amount_cents) / 100.0 as revenue
-            FROM revenue_tracking
-            WHERE created_at >= CURRENT_DATE - INTERVAL '30 days' AND tenant_id = :tenant_id
-            GROUP BY source
-            ORDER BY revenue DESC
-            """
-        ),
-        {"tenant_id": tenant_uuid}
-    ).mappings().all()
+    if source_expr:
+        revenue_sources = db.execute(
+            text(
+                f"""
+                SELECT
+                    {source_expr} as source,
+                    COUNT(*) as transactions,
+                    COALESCE(SUM({amount_expr}), 0) as revenue
+                FROM revenue_tracking
+                WHERE created_at >= CURRENT_DATE - INTERVAL '30 days' {rt_tenant_clause}
+                GROUP BY {source_expr}
+                ORDER BY revenue DESC
+                """
+            ),
+            {"tenant_id": tenant_uuid}
+        ).mappings().all()
+    else:
+        revenue_sources = []
 
     # Targets
     target_amount = None
@@ -174,38 +294,59 @@ def get_dashboard_metrics(
     days_remaining = None
 
     try:
-        goal = db.execute(
-            text(
-                """
-                SELECT period_start, period_end, target_cents
-                FROM revenue_goals
-                WHERE period_start <= CURRENT_DATE
-                  AND period_end >= CURRENT_DATE
-                  AND tenant_id = :tenant_id
-                ORDER BY period_start DESC
-                LIMIT 1
-                """
-            ),
-            {"tenant_id": tenant_uuid}
-        ).mappings().first()
-        if goal:
-            period_start = goal["period_start"]
-            period_end = goal["period_end"]
-            target_amount = (goal["target_cents"] or 0) / 100.0 if goal.get("target_cents") is not None else None
+        goal = None
+        if "period_start" in goals_cols and "period_end" in goals_cols:
+            goal = db.execute(
+                text(
+                    f"""
+                    SELECT period_start, period_end, target_cents
+                    FROM revenue_goals
+                    WHERE period_start <= CURRENT_DATE
+                      AND period_end >= CURRENT_DATE
+                      {goals_tenant_clause}
+                    ORDER BY period_start DESC
+                    LIMIT 1
+                    """
+                ),
+                {"tenant_id": tenant_uuid}
+            ).mappings().first()
+            if goal:
+                period_start = goal.get("period_start")
+                period_end = goal.get("period_end")
+                target_amount = (goal.get("target_cents") or 0) / 100.0 if goal.get("target_cents") is not None else None
+        elif "goal_date" in goals_cols:
+            goal = db.execute(
+                text(
+                    f"""
+                    SELECT goal_date, target_revenue
+                    FROM revenue_goals
+                    WHERE goal_date <= CURRENT_DATE
+                    {goals_tenant_clause}
+                    ORDER BY goal_date DESC
+                    LIMIT 1
+                    """
+                ),
+                {"tenant_id": tenant_uuid}
+            ).mappings().first()
+            if goal:
+                period_start = goal.get("goal_date")
+                period_end = goal.get("goal_date")
+                target_amount = float(goal.get("target_revenue") or 0)
+
+        if period_start and period_end:
             current_amount = db.execute(
                 text(
-                    """
-                    SELECT COALESCE(SUM(amount_cents) / 100.0, 0) as revenue
+                    f"""
+                    SELECT COALESCE(SUM({amount_expr}), 0) as revenue
                     FROM revenue_tracking
                     WHERE created_at >= :start_date
                       AND created_at < (:end_date::date + INTERVAL '1 day')
-                      AND tenant_id = :tenant_id
+                      {rt_tenant_clause}
                     """
                 ),
                 {"start_date": period_start, "end_date": period_end, "tenant_id": tenant_uuid},
             ).scalar()
-            if period_end:
-                days_remaining = max(0, (period_end - date.today()).days)
+            days_remaining = max(0, (period_end - date.today()).days)
     except Exception:
         target_amount = None
         current_amount = None
@@ -287,34 +428,47 @@ def get_live_revenue_feed(
     """
     tenant_id = current_user.get("tenant_id")
     tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
-    
-    if not tenant_uuid:
-         raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    rt_cols = _get_table_columns(db, "revenue_tracking")
+    leads_cols = _get_table_columns(db, "leads")
+    rt_tenant_clause = _tenant_filter("tenant_id" in rt_cols, tenant_uuid)
+    leads_tenant_clause = _tenant_filter("tenant_id" in leads_cols, tenant_uuid)
+
+    amount_expr = "amount_cents / 100.0" if "amount_cents" in rt_cols else "revenue"
+    source_expr = "source" if "source" in rt_cols else "channel" if "channel" in rt_cols else "NULL"
+    lead_score_expr = "score" if "score" in leads_cols else "0"
+    lead_segment_expr = (
+        "segment"
+        if "segment" in leads_cols
+        else "status"
+        if "status" in leads_cols
+        else "NULL"
+    )
 
     events = db.execute(
         text(
-            """
+            f"""
             SELECT 
                 'revenue' as type,
                 customer_email,
-                amount_cents / 100.0 as amount,
-                source,
+                {amount_expr} as amount,
+                {source_expr} as source,
                 product_name,
                 created_at
             FROM revenue_tracking
-            WHERE created_at >= NOW() - INTERVAL '24 hours' AND tenant_id = :tenant_id
+            WHERE created_at >= NOW() - INTERVAL '24 hours' {rt_tenant_clause}
             
             UNION ALL
             
             SELECT 
                 'lead' as type,
                 email as customer_email,
-                score as amount,
+                {lead_score_expr} as amount,
                 source,
-                segment as product_name,
+                {lead_segment_expr} as product_name,
                 created_at
             FROM leads
-            WHERE created_at >= NOW() - INTERVAL '24 hours' AND tenant_id = :tenant_id
+            WHERE created_at >= NOW() - INTERVAL '24 hours' {leads_tenant_clause}
             
             ORDER BY created_at DESC
             LIMIT 50
@@ -363,20 +517,28 @@ def get_hourly_performance(
     """
     tenant_id = current_user.get("tenant_id")
     tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
-    
-    if not tenant_uuid:
-         raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    rt_cols = _get_table_columns(db, "revenue_tracking")
+    rt_tenant_clause = _tenant_filter("tenant_id" in rt_cols, tenant_uuid)
+    amount_expr = "amount_cents / 100.0" if "amount_cents" in rt_cols else "revenue"
+    customer_expr = (
+        "customer_email"
+        if "customer_email" in rt_cols
+        else "customer_id"
+        if "customer_id" in rt_cols
+        else "NULL"
+    )
 
     hourly = db.execute(
         text(
-            """
+            f"""
             SELECT 
                 EXTRACT(HOUR FROM created_at) as hour,
                 COUNT(*) as transactions,
-                SUM(amount_cents) / 100.0 as revenue,
-                COUNT(DISTINCT customer_email) as unique_customers
+                COALESCE(SUM({amount_expr}), 0) as revenue,
+                COUNT(DISTINCT {customer_expr}) as unique_customers
             FROM revenue_tracking
-            WHERE DATE(created_at) = CURRENT_DATE AND tenant_id = :tenant_id
+            WHERE DATE(created_at) = CURRENT_DATE {rt_tenant_clause}
             GROUP BY EXTRACT(HOUR FROM created_at)
             ORDER BY hour
             """
@@ -415,40 +577,50 @@ def get_campaign_roi(
     """
     tenant_id = current_user.get("tenant_id")
     tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
-    
-    if not tenant_uuid:
-         raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    campaign_cols = _get_table_columns(db, "ad_campaigns")
+    perf_cols = _get_table_columns(db, "ad_performance")
+    rt_cols = _get_table_columns(db, "revenue_tracking")
+
+    campaign_tenant_clause = _tenant_filter("tenant_id" in campaign_cols, tenant_uuid, "c")
+    perf_tenant_clause = _tenant_filter("tenant_id" in perf_cols, tenant_uuid, "p")
+    rt_tenant_clause = _tenant_filter("tenant_id" in rt_cols, tenant_uuid)
+
+    budget_expr = "c.budget_daily_cents / 100.0" if "budget_daily_cents" in campaign_cols else "c.budget"
+    spend_cents_expr = "SUM(p.spend_cents)" if "spend_cents" in perf_cols else "SUM(p.spend) * 100.0"
+    amount_expr = "amount_cents" if "amount_cents" in rt_cols else "revenue"
+    source_expr = "source" if "source" in rt_cols else "channel" if "channel" in rt_cols else "NULL"
 
     campaigns = db.execute(
         text(
-            """
+            f"""
             SELECT 
                 c.name as campaign,
-                c.budget_daily_cents / 100.0 as daily_budget,
-                COALESCE(SUM(p.spend_cents) / 100.0, 0) as total_spend,
+                {budget_expr} as daily_budget,
+                COALESCE({spend_cents_expr}, 0) / 100.0 as total_spend,
                 COALESCE(SUM(p.conversions), 0) as conversions,
                 COALESCE(SUM(r.revenue_cents) / 100.0, 0) as revenue,
                 CASE 
-                    WHEN SUM(p.spend_cents) > 0 
-                    THEN ((SUM(r.revenue_cents) - SUM(p.spend_cents))::float / SUM(p.spend_cents)) * 100
+                    WHEN COALESCE({spend_cents_expr}, 0) > 0
+                    THEN ((COALESCE(SUM(r.revenue_cents), 0) - COALESCE({spend_cents_expr}, 0))::float / COALESCE({spend_cents_expr}, 1)) * 100
                     ELSE 0 
                 END as roi_percentage
             FROM ad_campaigns c
-            LEFT JOIN ad_performance p ON c.campaign_id = p.campaign_id AND p.tenant_id = :tenant_id
+            LEFT JOIN ad_performance p ON c.id = p.campaign_id {perf_tenant_clause}
             LEFT JOIN (
                 SELECT 
                     CASE 
-                        WHEN source LIKE '%google%' THEN 'Google Ads'
-                        WHEN source LIKE '%facebook%' THEN 'Facebook'
-                        ELSE source 
+                        WHEN {source_expr} LIKE '%google%' THEN 'Google Ads'
+                        WHEN {source_expr} LIKE '%facebook%' THEN 'Facebook'
+                        ELSE {source_expr}
                     END as campaign_source,
-                    SUM(amount_cents) as revenue_cents
+                    SUM({amount_expr}) * 100.0 as revenue_cents
                 FROM revenue_tracking
-                WHERE created_at >= CURRENT_DATE - INTERVAL '30 days' AND tenant_id = :tenant_id
+                WHERE created_at >= CURRENT_DATE - INTERVAL '30 days' {rt_tenant_clause}
                 GROUP BY campaign_source
             ) r ON c.name LIKE '%' || r.campaign_source || '%'
-            WHERE c.created_at >= CURRENT_DATE - INTERVAL '30 days' AND c.tenant_id = :tenant_id
-            GROUP BY c.name, c.budget_daily_cents
+            WHERE c.created_at >= CURRENT_DATE - INTERVAL '30 days' {campaign_tenant_clause}
+            GROUP BY c.name, {budget_expr}
             ORDER BY roi_percentage DESC
             """
         ),
@@ -471,9 +643,9 @@ def get_customer_ltv_analysis(
     """
     tenant_id = current_user.get("tenant_id")
     tenant_uuid = uuid.UUID(tenant_id) if tenant_id else None
-    
-    if not tenant_uuid:
-         raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    ltv_cols = _get_table_columns(db, "customer_ltv")
+    ltv_tenant_clause = _tenant_filter("tenant_id" in ltv_cols, tenant_uuid)
 
     try:
         ltv_segments = db.execute(
@@ -491,7 +663,7 @@ def get_customer_ltv_analysis(
                     SUM(total_revenue_cents) / 100.0 as total_revenue,
                     AVG(order_count) as avg_orders
                 FROM customer_ltv
-                WHERE tenant_id = :tenant_id
+                WHERE 1=1 {ltv_tenant_clause}
                 GROUP BY segment
                 ORDER BY avg_ltv DESC
                 """
@@ -502,14 +674,13 @@ def get_customer_ltv_analysis(
         # Churn risk
         at_risk = db.execute(
             text(
-                """
+                f"""
                 SELECT 
                     COUNT(*) as at_risk_count,
                     AVG(total_revenue_cents) / 100.0 as avg_value
                 FROM customer_ltv
-                WHERE churn_risk_score > 0.7
-                AND last_purchase_at < NOW() - INTERVAL '30 days'
-                AND tenant_id = :tenant_id
+                WHERE last_purchase_at < NOW() - INTERVAL '30 days'
+                {ltv_tenant_clause}
                 """
             ),
             {"tenant_id": tenant_uuid}
