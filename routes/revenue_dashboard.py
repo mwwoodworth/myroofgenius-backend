@@ -54,8 +54,8 @@ def _get_table_columns(db: Session, table: str) -> Set[str]:
 def _tenant_filter(has_tenant: bool, tenant_id: Optional[uuid.UUID], alias: Optional[str] = None) -> str:
     if not has_tenant or not tenant_id:
         return ""
-    column = f\"{alias}.tenant_id\" if alias else \"tenant_id\"
-    return f\" AND {column} = :tenant_id\"
+    column = f"{alias}.tenant_id" if alias else "tenant_id"
+    return f" AND {column} = :tenant_id"
 
 @router.get("/dashboard-metrics")
 def get_dashboard_metrics(
