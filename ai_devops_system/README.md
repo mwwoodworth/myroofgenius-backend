@@ -103,6 +103,17 @@ docker run -d -p 3001:3001 --name anythingllm-container mintplexlabs/anythingllm
 ./start_ai_devops.sh test
 ```
 
+### Security (Required)
+
+This service is protected by an API key and should not be exposed without auth.
+
+- Set `AI_DEVOPS_API_KEY` (or reuse `BRAINOPS_API_KEY` / `ADMIN_API_KEY`).
+- Include `X-API-Key: <key>` or `Authorization: Bearer <key>` on requests.
+- To allow unauthenticated access for local-only usage, set `AI_DEVOPS_ALLOW_UNAUTH=true`
+  and ensure `ENVIRONMENT` is not `production`.
+- Restrict CORS with `AI_DEVOPS_ALLOWED_ORIGINS` (comma-separated). Defaults to localhost.
+- Limit ingestion scope with `AI_DEVOPS_RAG_ROOT` (defaults to current working directory).
+
 ### API Endpoints
 
 The system exposes a comprehensive REST API:

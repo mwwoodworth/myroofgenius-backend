@@ -16,7 +16,7 @@ from pathlib import Path
 import argparse
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -29,6 +29,70 @@ from rag.service import RagService, IngestionOptions, QueryOptions
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _get_env_name() -> str:
+    return os.getenv("AI_DEVOPS_ENV", os.getenv("ENVIRONMENT", "production")).lower()
+
+
+def _parse_allowed_origins() -> List[str]:
+    raw = os.getenv("AI_DEVOPS_ALLOWED_ORIGINS", "").strip()
+    if raw:
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+
+def _collect_api_keys() -> List[str]:
+    keys: List[str] = []
+    for name in ("AI_DEVOPS_API_KEY", "BRAINOPS_API_KEY", "ADMIN_API_KEY"):
+        value = os.getenv(name, "").strip()
+        if value:
+            keys.append(value)
+    extra_keys = os.getenv("API_KEYS", "")
+    if extra_keys:
+        keys.extend([k.strip() for k in extra_keys.split(",") if k.strip()])
+    return list(dict.fromkeys(keys))
+
+
+def _extract_api_key(request: Request) -> Optional[str]:
+    header_key = request.headers.get("x-api-key")
+    if header_key:
+        return header_key.strip()
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return None
+
+
+def require_api_key(request: Request) -> None:
+    allow_unauth = os.getenv("AI_DEVOPS_ALLOW_UNAUTH", "false").lower() in ("1", "true", "yes")
+    if allow_unauth and _get_env_name() != "production":
+        return
+
+    valid_keys = _collect_api_keys()
+    if not valid_keys:
+        raise HTTPException(status_code=503, detail="AI DevOps API key not configured")
+
+    token = _extract_api_key(request)
+    if not token or token not in valid_keys:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _resolve_rag_paths(paths: List[str]) -> List[str]:
+    base_root = Path(os.getenv("AI_DEVOPS_RAG_ROOT", str(Path.cwd()))).resolve()
+    resolved: List[str] = []
+    for raw_path in paths:
+        path_obj = Path(raw_path)
+        candidate = (base_root / path_obj).resolve() if not path_obj.is_absolute() else path_obj.resolve()
+        if candidate != base_root and base_root not in candidate.parents:
+            raise HTTPException(status_code=400, detail="RAG path outside allowed root")
+        resolved.append(str(candidate))
+    return resolved
 
 # Pydantic models for API
 class MemoryRequest(BaseModel):
@@ -87,16 +151,18 @@ class AIDevOpsOrchestrator:
         self.app = FastAPI(
             title="AI DevOps System",
             description="Ultimate AI-powered DevOps automation system",
-            version="1.0.0"
+            version="1.0.0",
+            dependencies=[Depends(require_api_key)],
         )
         
         # Setup CORS
+        allowed_origins = _parse_allowed_origins()
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=allowed_origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-API-Key"],
         )
         
         # Initialize components
@@ -299,7 +365,7 @@ class AIDevOpsOrchestrator:
             try:
                 service = self._ensure_rag_service()
                 options = IngestionOptions(
-                    paths=request.paths or [".."],
+                    paths=_resolve_rag_paths(request.paths or ["."]),
                     glob_patterns=request.glob_patterns,
                     chunk_size=request.chunk_size or 1000,
                     chunk_overlap=request.chunk_overlap or 200,
