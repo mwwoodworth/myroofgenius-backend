@@ -1,5 +1,6 @@
 """Request authentication middleware enforcing Supabase JWT validation."""
 
+import os
 from fastapi import HTTPException
 from typing import Iterable, Optional, Sequence, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -40,7 +41,6 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/orchestrator/status",  # Orchestrator status - monitoring
     "/api/v1/stripe-automation/config",  # Stripe publishable key - public for frontend
     "/api/v1/stripe-automation/health",  # Stripe health check - monitoring
-    "/api/v1/stripe-automation/debug-env",  # TEMP: Debug env vars
 )
 
 DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
@@ -99,7 +99,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         if api_key:
             # Validate against database (legacy logic)
-
+            pass  # API key validation handled by master key check above
 
         authorization = request.headers.get("Authorization") or request.headers.get("authorization")
 

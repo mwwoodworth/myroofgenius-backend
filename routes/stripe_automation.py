@@ -59,24 +59,6 @@ async def get_stripe_config():
         "status": "active" if STRIPE_SECRET_KEY else "not_configured",
     }
 
-@router.get("/debug-env")
-async def debug_stripe_env():
-    """Debug endpoint to trace Stripe env vars - TEMPORARY"""
-    stripe_vars = {}
-    for key, value in os.environ.items():
-        if "STRIPE" in key.upper():
-            # Mask the value for security
-            if value:
-                masked = f"{value[:12]}...{value[-4:]}" if len(value) > 16 else "***"
-            else:
-                masked = "NOT_SET"
-            stripe_vars[key] = masked
-    return {
-        "stripe_env_vars": stripe_vars,
-        "total_env_vars": len(os.environ),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
 @router.get("/analytics/revenue")
 async def get_revenue_analytics():
     """Get revenue analytics with error handling"""
@@ -260,4 +242,3 @@ async def create_checkout_session(price: int, success_url: str, cancel_url: str)
         return {"checkout_url": session.url, "session_id": session.id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-

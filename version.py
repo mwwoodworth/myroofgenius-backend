@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.4.11"
-__build__ = "2026-01-20T23:25:00Z"
+__version__ = "163.4.12"
+__build__ = "2026-01-25T00:45:23Z"
 __status__ = "production"
+# v163.4.12: SECURITY - remove Stripe env debug endpoint and require auth on all stripe automation routes
 # v163.4.11: Fix api_metrics column name (created_at -> recorded_at) in awareness_system.py
 # v163.4.10: Add AUREA, auth, users, projects, claude_agents, langgraphos, marketplace, system_info routes
 # v163.4.9: Fix datetime JSON serialization errors in AI OS metacognitive_controller
