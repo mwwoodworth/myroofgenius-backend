@@ -442,12 +442,15 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Validate API keys for machine-to-machine traffic with caching.
-# This must run before AuthenticationMiddleware so X-API-Key auth can set request.state.
-app.add_middleware(APIKeyMiddleware)
-
-# Enforce authentication on all non-exempt routes
+# Enforce authentication on all non-exempt routes.
+#
+# IMPORTANT: Starlette executes middleware in *reverse* order of registration.
+# We add AuthenticationMiddleware first, then APIKeyMiddleware, so API keys run
+# first and can satisfy auth by populating request.state.user.
 app.add_middleware(AuthenticationMiddleware)
+
+# Validate API keys for machine-to-machine traffic with caching.
+app.add_middleware(APIKeyMiddleware)
 
 # Apply rate limiting to protect public APIs
 app.add_middleware(

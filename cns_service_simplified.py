@@ -32,15 +32,15 @@ class BrainOpsCNS:
 
         # Configure providers
         if self._openai_key:
-            masked = f"{self._openai_key[:8]}...{self._openai_key[-4:]}" if len(self._openai_key) > 12 else "***"
-            logger.info(f"CNS: OPENAI_API_KEY loaded: {masked}")
+            # Never log key material (even partially).
+            logger.info("CNS: OPENAI_API_KEY loaded (redacted)")
 
         if self._gemini_key:
             try:
                 genai.configure(api_key=self._gemini_key)
                 self._gemini_configured = True
-                masked = f"{self._gemini_key[:8]}...{self._gemini_key[-4:]}" if len(self._gemini_key) > 12 else "***"
-                logger.info(f"CNS: GEMINI_API_KEY loaded: {masked}")
+                # Never log key material (even partially).
+                logger.info("CNS: GEMINI_API_KEY loaded (redacted)")
             except Exception as e:
                 logger.warning(f"CNS: Failed to configure Gemini: {e}")
 

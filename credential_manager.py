@@ -64,7 +64,9 @@ class CredentialManager:
                         sensitive_count += 1
                         logger.info(f"✅ Loaded sensitive credential: {key}")
                     else:
-                        logger.info(f"✅ Loaded credential: {key} = {value[:20]}...")
+                        # Never log credential values (even partially). Many "non-sensitive" creds
+                        # (e.g., SMTP_PASS) are still secrets in practice.
+                        logger.info(f"✅ Loaded credential: {key}")
 
                 self.initialized = True
                 logger.info(f"🔐 Credential Manager initialized: {loaded_count} credentials loaded ({sensitive_count} sensitive)")
