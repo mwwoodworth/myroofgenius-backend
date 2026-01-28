@@ -22,6 +22,8 @@ from collections import defaultdict
 import asyncpg
 import numpy as np
 
+from ._resilience import ResilientSubsystem
+
 if TYPE_CHECKING:
     from .metacognitive_controller import MetacognitiveController
 
@@ -74,7 +76,7 @@ class Pattern:
     created_at: datetime = field(default_factory=datetime.now)
 
 
-class LearningPipeline:
+class LearningPipeline(ResilientSubsystem):
     """
     Closed-Loop Learning Pipeline for BrainOps AI OS
 
@@ -127,113 +129,111 @@ class LearningPipeline:
 
     async def _initialize_database(self):
         """Create required database tables"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                -- Learning outcomes
-                CREATE TABLE IF NOT EXISTS brainops_learning_outcomes (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    outcome_id VARCHAR(50) UNIQUE NOT NULL,
-                    decision_id VARCHAR(50),
-                    action_type VARCHAR(100),
-                    expected_result JSONB,
-                    actual_result JSONB,
-                    success BOOLEAN,
-                    feedback_score FLOAT,
-                    context JSONB,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+        await self._db_execute_with_retry('''
+            -- Learning outcomes
+            CREATE TABLE IF NOT EXISTS brainops_learning_outcomes (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                outcome_id VARCHAR(50) UNIQUE NOT NULL,
+                decision_id VARCHAR(50),
+                action_type VARCHAR(100),
+                expected_result JSONB,
+                actual_result JSONB,
+                success BOOLEAN,
+                feedback_score FLOAT,
+                context JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_outcome_decision
-                    ON brainops_learning_outcomes(decision_id);
-                CREATE INDEX IF NOT EXISTS idx_outcome_success
-                    ON brainops_learning_outcomes(success);
-                CREATE INDEX IF NOT EXISTS idx_outcome_time
-                    ON brainops_learning_outcomes(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_outcome_decision
+                ON brainops_learning_outcomes(decision_id);
+            CREATE INDEX IF NOT EXISTS idx_outcome_success
+                ON brainops_learning_outcomes(success);
+            CREATE INDEX IF NOT EXISTS idx_outcome_time
+                ON brainops_learning_outcomes(created_at DESC);
 
-                -- Learned patterns
-                CREATE TABLE IF NOT EXISTS brainops_learned_patterns (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    pattern_id VARCHAR(50) UNIQUE NOT NULL,
-                    category VARCHAR(50) NOT NULL,
-                    description TEXT,
-                    conditions JSONB,
-                    outcomes JSONB,
-                    confidence FLOAT DEFAULT 0.5,
-                    occurrence_count INT DEFAULT 1,
-                    last_seen TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+            -- Learned patterns
+            CREATE TABLE IF NOT EXISTS brainops_learned_patterns (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                pattern_id VARCHAR(50) UNIQUE NOT NULL,
+                category VARCHAR(50) NOT NULL,
+                description TEXT,
+                conditions JSONB,
+                outcomes JSONB,
+                confidence FLOAT DEFAULT 0.5,
+                occurrence_count INT DEFAULT 1,
+                last_seen TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_pattern_category
-                    ON brainops_learned_patterns(category);
-                CREATE INDEX IF NOT EXISTS idx_pattern_confidence
-                    ON brainops_learned_patterns(confidence DESC);
+            CREATE INDEX IF NOT EXISTS idx_pattern_category
+                ON brainops_learned_patterns(category);
+            CREATE INDEX IF NOT EXISTS idx_pattern_confidence
+                ON brainops_learned_patterns(confidence DESC);
 
-                -- Learning suggestions
-                CREATE TABLE IF NOT EXISTS brainops_learning_suggestions (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    suggestion_type VARCHAR(50),
-                    description TEXT,
-                    evidence JSONB,
-                    priority FLOAT DEFAULT 0.5,
-                    implemented BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+            -- Learning suggestions
+            CREATE TABLE IF NOT EXISTS brainops_learning_suggestions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                suggestion_type VARCHAR(50),
+                description TEXT,
+                evidence JSONB,
+                priority FLOAT DEFAULT 0.5,
+                implemented BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                -- Experiments/A/B tests
-                CREATE TABLE IF NOT EXISTS brainops_experiments (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    experiment_id VARCHAR(50) UNIQUE NOT NULL,
-                    name VARCHAR(255),
-                    description TEXT,
-                    variants JSONB,
-                    metrics JSONB,
-                    status VARCHAR(20) DEFAULT 'running',
-                    winner VARCHAR(50),
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    completed_at TIMESTAMP
-                );
-            ''')
+            -- Experiments/A/B tests
+            CREATE TABLE IF NOT EXISTS brainops_experiments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                experiment_id VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                description TEXT,
+                variants JSONB,
+                metrics JSONB,
+                status VARCHAR(20) DEFAULT 'running',
+                winner VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                completed_at TIMESTAMP
+            );
+        ''')
 
     async def _load_patterns(self):
         """Load existing patterns from database"""
-        async with self.db_pool.acquire() as conn:
-            rows = await conn.fetch('''
-                SELECT pattern_id, category, description, conditions, outcomes,
-                       confidence, occurrence_count, last_seen, created_at
-                FROM brainops_learned_patterns
-                WHERE confidence > 0.3
-            ''')
+        rows = await self._db_fetch_with_retry('''
+            SELECT pattern_id, category, description, conditions, outcomes,
+                   confidence, occurrence_count, last_seen, created_at
+            FROM brainops_learned_patterns
+            WHERE confidence > 0.3
+        ''')
 
-            for row in rows:
-                pattern = Pattern(
-                    id=row['pattern_id'],
-                    category=PatternCategory(row['category']),
-                    description=row['description'] or "",
-                    conditions=row['conditions'] or [],
-                    outcomes=row['outcomes'] or [],
-                    confidence=row['confidence'],
-                    occurrence_count=row['occurrence_count'],
-                    last_seen=row['last_seen'],
-                    created_at=row['created_at'],
-                )
-                self.patterns[pattern.id] = pattern
+        for row in rows:
+            pattern = Pattern(
+                id=row['pattern_id'],
+                category=PatternCategory(row['category']),
+                description=row['description'] or "",
+                conditions=row['conditions'] or [],
+                outcomes=row['outcomes'] or [],
+                confidence=row['confidence'],
+                occurrence_count=row['occurrence_count'],
+                last_seen=row['last_seen'],
+                created_at=row['created_at'],
+            )
+            self.patterns[pattern.id] = pattern
 
     async def _start_background_processes(self):
         """Start background processes"""
         # Pattern detection
         self._tasks.append(
-            asyncio.create_task(self._pattern_detection_loop())
+            self._create_safe_task(self._pattern_detection_loop(), name="pattern_detection")
         )
 
         # Knowledge synthesis
         self._tasks.append(
-            asyncio.create_task(self._knowledge_synthesis_loop())
+            self._create_safe_task(self._knowledge_synthesis_loop(), name="knowledge_synthesis")
         )
 
         # Performance monitoring
         self._tasks.append(
-            asyncio.create_task(self._performance_monitoring_loop())
+            self._create_safe_task(self._performance_monitoring_loop(), name="performance_monitoring")
         )
 
         logger.info(f"Started {len(self._tasks)} learning background processes")
@@ -278,16 +278,15 @@ class LearningPipeline:
         self.metrics["outcomes_tracked"] += 1
 
         # Store in database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_learning_outcomes
-                (outcome_id, decision_id, action_type, expected_result,
-                 actual_result, success, feedback_score, context)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ''',
-                outcome_id, decision_id, action_type,
-                json.dumps(expected_result), json.dumps(actual_result),
-                success, feedback_score, json.dumps(context or {}))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_learning_outcomes
+            (outcome_id, decision_id, action_type, expected_result,
+             actual_result, success, feedback_score, context)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ''',
+            outcome_id, decision_id, action_type,
+            json.dumps(expected_result), json.dumps(actual_result),
+            success, feedback_score, json.dumps(context or {}))
 
         return outcome_id
 
@@ -477,20 +476,19 @@ class LearningPipeline:
 
     async def _store_pattern(self, pattern: Pattern):
         """Store pattern in database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_learned_patterns
-                (pattern_id, category, description, conditions, outcomes,
-                 confidence, occurrence_count, last_seen)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (pattern_id) DO UPDATE SET
-                    confidence = EXCLUDED.confidence,
-                    occurrence_count = EXCLUDED.occurrence_count,
-                    last_seen = EXCLUDED.last_seen
-            ''',
-                pattern.id, pattern.category.value, pattern.description,
-                json.dumps(pattern.conditions), json.dumps(pattern.outcomes),
-                pattern.confidence, pattern.occurrence_count, pattern.last_seen)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_learned_patterns
+            (pattern_id, category, description, conditions, outcomes,
+             confidence, occurrence_count, last_seen)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (pattern_id) DO UPDATE SET
+                confidence = EXCLUDED.confidence,
+                occurrence_count = EXCLUDED.occurrence_count,
+                last_seen = EXCLUDED.last_seen
+        ''',
+            pattern.id, pattern.category.value, pattern.description,
+            json.dumps(pattern.conditions), json.dumps(pattern.outcomes),
+            pattern.confidence, pattern.occurrence_count, pattern.last_seen)
 
     # =========================================================================
     # KNOWLEDGE SYNTHESIS
@@ -543,17 +541,16 @@ class LearningPipeline:
 
         # Store insights if significant
         if insights:
-            async with self.db_pool.acquire() as conn:
-                for insight in insights:
-                    await conn.execute('''
-                        INSERT INTO brainops_learning_suggestions
-                        (suggestion_type, description, evidence, priority)
-                        VALUES ($1, $2, $3, $4)
-                    ''',
-                        insight['type'],
-                        insight['description'],
-                        json.dumps(insight.get('conditions', [])),
-                        insight.get('confidence', 0.5))
+            for insight in insights:
+                await self._db_execute_with_retry('''
+                    INSERT INTO brainops_learning_suggestions
+                    (suggestion_type, description, evidence, priority)
+                    VALUES ($1, $2, $3, $4)
+                ''',
+                    insight['type'],
+                    insight['description'],
+                    json.dumps(insight.get('conditions', [])),
+                    insight.get('confidence', 0.5))
 
             self.metrics["improvements_suggested"] += len(insights)
 
@@ -577,46 +574,45 @@ class LearningPipeline:
 
     async def _check_performance(self):
         """Check for performance regression"""
-        async with self.db_pool.acquire() as conn:
-            # Get recent success rate
-            recent = await conn.fetchrow('''
+        # Get recent success rate
+        recent = await self._db_fetchrow_with_retry('''
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
+            FROM brainops_learning_outcomes
+            WHERE created_at > NOW() - INTERVAL '1 hour'
+        ''')
+
+        if recent and recent['total'] > 10:
+            recent_rate = recent['successes'] / recent['total']
+
+            # Get historical success rate
+            historical = await self._db_fetchrow_with_retry('''
                 SELECT
                     COUNT(*) as total,
                     SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
                 FROM brainops_learning_outcomes
-                WHERE created_at > NOW() - INTERVAL '1 hour'
+                WHERE created_at > NOW() - INTERVAL '24 hours'
+                AND created_at < NOW() - INTERVAL '1 hour'
             ''')
 
-            if recent and recent['total'] > 10:
-                recent_rate = recent['successes'] / recent['total']
+            if historical and historical['total'] > 10:
+                historical_rate = historical['successes'] / historical['total']
 
-                # Get historical success rate
-                historical = await conn.fetchrow('''
-                    SELECT
-                        COUNT(*) as total,
-                        SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
-                    FROM brainops_learning_outcomes
-                    WHERE created_at > NOW() - INTERVAL '24 hours'
-                    AND created_at < NOW() - INTERVAL '1 hour'
-                ''')
+                # Check for regression
+                if recent_rate < historical_rate - 0.1:  # 10% drop
+                    logger.warning(
+                        f"Performance regression detected: "
+                        f"{recent_rate:.1%} vs {historical_rate:.1%}"
+                    )
 
-                if historical and historical['total'] > 10:
-                    historical_rate = historical['successes'] / historical['total']
-
-                    # Check for regression
-                    if recent_rate < historical_rate - 0.1:  # 10% drop
-                        logger.warning(
-                            f"Performance regression detected: "
-                            f"{recent_rate:.1%} vs {historical_rate:.1%}"
-                        )
-
-                        if self.controller:
-                            from .metacognitive_controller import AttentionPriority
-                            await self.controller._record_thought({
-                                "type": "performance_regression",
-                                "recent_rate": recent_rate,
-                                "historical_rate": historical_rate,
-                            }, AttentionPriority.HIGH, "learning_pipeline")
+                    if self.controller:
+                        from .metacognitive_controller import AttentionPriority
+                        await self.controller._record_thought({
+                            "type": "performance_regression",
+                            "recent_rate": recent_rate,
+                            "historical_rate": historical_rate,
+                        }, AttentionPriority.HIGH, "learning_pipeline")
 
     # =========================================================================
     # PUBLIC API

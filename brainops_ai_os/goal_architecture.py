@@ -21,6 +21,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 import asyncpg
 
+from ._resilience import ResilientSubsystem
+
 if TYPE_CHECKING:
     from .metacognitive_controller import MetacognitiveController
 
@@ -75,7 +77,7 @@ class Goal:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class GoalArchitecture:
+class GoalArchitecture(ResilientSubsystem):
     """
     Hierarchical Goal Architecture for BrainOps AI OS
 
@@ -127,96 +129,94 @@ class GoalArchitecture:
 
     async def _initialize_database(self):
         """Create required database tables"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                -- Goals table
-                CREATE TABLE IF NOT EXISTS brainops_goals (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    goal_id VARCHAR(50) UNIQUE NOT NULL,
-                    title VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    level VARCHAR(20) NOT NULL,
-                    priority VARCHAR(20) NOT NULL,
-                    status VARCHAR(20) DEFAULT 'pending',
-                    parent_id VARCHAR(50),
-                    child_ids TEXT[],
-                    success_criteria JSONB,
-                    progress FLOAT DEFAULT 0,
-                    deadline TIMESTAMP,
-                    assigned_agents TEXT[],
-                    dependencies TEXT[],
-                    metadata JSONB,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    started_at TIMESTAMP,
-                    completed_at TIMESTAMP
-                );
+        await self._db_execute_with_retry('''
+            -- Goals table
+            CREATE TABLE IF NOT EXISTS brainops_goals (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                goal_id VARCHAR(50) UNIQUE NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                level VARCHAR(20) NOT NULL,
+                priority VARCHAR(20) NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                parent_id VARCHAR(50),
+                child_ids TEXT[],
+                success_criteria JSONB,
+                progress FLOAT DEFAULT 0,
+                deadline TIMESTAMP,
+                assigned_agents TEXT[],
+                dependencies TEXT[],
+                metadata JSONB,
+                created_at TIMESTAMP DEFAULT NOW(),
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_goal_level
-                    ON brainops_goals(level);
-                CREATE INDEX IF NOT EXISTS idx_goal_status
-                    ON brainops_goals(status);
-                CREATE INDEX IF NOT EXISTS idx_goal_priority
-                    ON brainops_goals(priority);
-                CREATE INDEX IF NOT EXISTS idx_goal_parent
-                    ON brainops_goals(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_goal_level
+                ON brainops_goals(level);
+            CREATE INDEX IF NOT EXISTS idx_goal_status
+                ON brainops_goals(status);
+            CREATE INDEX IF NOT EXISTS idx_goal_priority
+                ON brainops_goals(priority);
+            CREATE INDEX IF NOT EXISTS idx_goal_parent
+                ON brainops_goals(parent_id);
 
-                -- Goal progress history
-                CREATE TABLE IF NOT EXISTS brainops_goal_progress (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    goal_id VARCHAR(50) NOT NULL,
-                    progress FLOAT NOT NULL,
-                    notes TEXT,
-                    recorded_at TIMESTAMP DEFAULT NOW()
-                );
+            -- Goal progress history
+            CREATE TABLE IF NOT EXISTS brainops_goal_progress (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                goal_id VARCHAR(50) NOT NULL,
+                progress FLOAT NOT NULL,
+                notes TEXT,
+                recorded_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_progress_goal
-                    ON brainops_goal_progress(goal_id);
+            CREATE INDEX IF NOT EXISTS idx_progress_goal
+                ON brainops_goal_progress(goal_id);
 
-                -- Goal conflicts
-                CREATE TABLE IF NOT EXISTS brainops_goal_conflicts (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    goal_a VARCHAR(50) NOT NULL,
-                    goal_b VARCHAR(50) NOT NULL,
-                    conflict_type VARCHAR(50),
-                    resolution TEXT,
-                    resolved BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-            ''')
+            -- Goal conflicts
+            CREATE TABLE IF NOT EXISTS brainops_goal_conflicts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                goal_a VARCHAR(50) NOT NULL,
+                goal_b VARCHAR(50) NOT NULL,
+                conflict_type VARCHAR(50),
+                resolution TEXT,
+                resolved BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        ''')
 
     async def _load_goals(self):
         """Load existing goals from database"""
-        async with self.db_pool.acquire() as conn:
-            rows = await conn.fetch('''
-                SELECT goal_id, title, description, level, priority, status,
-                       parent_id, child_ids, success_criteria, progress,
-                       deadline, assigned_agents, dependencies, metadata,
-                       created_at, started_at, completed_at
-                FROM brainops_goals
-                WHERE status NOT IN ('completed', 'cancelled', 'failed')
-            ''')
+        rows = await self._db_fetch_with_retry('''
+            SELECT goal_id, title, description, level, priority, status,
+                   parent_id, child_ids, success_criteria, progress,
+                   deadline, assigned_agents, dependencies, metadata,
+                   created_at, started_at, completed_at
+            FROM brainops_goals
+            WHERE status NOT IN ('completed', 'cancelled', 'failed')
+        ''')
 
-            for row in rows:
-                goal = Goal(
-                    id=row['goal_id'],
-                    title=row['title'],
-                    description=row['description'] or "",
-                    level=GoalLevel(row['level']),
-                    priority=GoalPriority(row['priority']),
-                    status=GoalStatus(row['status']),
-                    parent_id=row['parent_id'],
-                    child_ids=row['child_ids'] or [],
-                    success_criteria=row['success_criteria'] or [],
-                    progress=row['progress'] or 0,
-                    deadline=row['deadline'],
-                    assigned_agents=row['assigned_agents'] or [],
-                    dependencies=row['dependencies'] or [],
-                    metadata=row['metadata'] or {},
-                    created_at=row['created_at'],
-                    started_at=row['started_at'],
-                    completed_at=row['completed_at'],
-                )
-                self.goals[goal.id] = goal
+        for row in rows:
+            goal = Goal(
+                id=row['goal_id'],
+                title=row['title'],
+                description=row['description'] or "",
+                level=GoalLevel(row['level']),
+                priority=GoalPriority(row['priority']),
+                status=GoalStatus(row['status']),
+                parent_id=row['parent_id'],
+                child_ids=row['child_ids'] or [],
+                success_criteria=row['success_criteria'] or [],
+                progress=row['progress'] or 0,
+                deadline=row['deadline'],
+                assigned_agents=row['assigned_agents'] or [],
+                dependencies=row['dependencies'] or [],
+                metadata=row['metadata'] or {},
+                created_at=row['created_at'],
+                started_at=row['started_at'],
+                completed_at=row['completed_at'],
+            )
+            self.goals[goal.id] = goal
 
         self.metrics["total_goals"] = len(self.goals)
         self.metrics["active_goals"] = sum(
@@ -231,17 +231,17 @@ class GoalArchitecture:
         """Start background processes"""
         # Progress monitoring
         self._tasks.append(
-            asyncio.create_task(self._progress_monitoring_loop())
+            self._create_safe_task(self._progress_monitoring_loop(), name="progress_monitoring")
         )
 
         # Deadline checking
         self._tasks.append(
-            asyncio.create_task(self._deadline_check_loop())
+            self._create_safe_task(self._deadline_check_loop(), name="deadline_check")
         )
 
         # Priority rebalancing
         self._tasks.append(
-            asyncio.create_task(self._priority_rebalance_loop())
+            self._create_safe_task(self._priority_rebalance_loop(), name="priority_rebalance")
         )
 
         logger.info(f"Started {len(self._tasks)} goal background processes")
@@ -289,16 +289,15 @@ class GoalArchitecture:
             await self._update_goal_in_db(self.goals[parent_id])
 
         # Store in database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_goals
-                (goal_id, title, description, level, priority, parent_id,
-                 success_criteria, deadline, assigned_agents, dependencies, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            ''',
-                goal_id, title, description, level.value, priority.value,
-                parent_id, json.dumps(success_criteria or []), deadline,
-                assigned_agents or [], dependencies or [], json.dumps(metadata or {}))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_goals
+            (goal_id, title, description, level, priority, parent_id,
+             success_criteria, deadline, assigned_agents, dependencies, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ''',
+            goal_id, title, description, level.value, priority.value,
+            parent_id, json.dumps(success_criteria or []), deadline,
+            assigned_agents or [], dependencies or [], json.dumps(metadata or {}))
 
         # Add to priority queue
         await self._add_to_priority_queue(goal_id)
@@ -340,11 +339,10 @@ class GoalArchitecture:
         await self._update_goal_in_db(goal)
 
         # Log progress
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_goal_progress (goal_id, progress, notes)
-                VALUES ($1, $2, $3)
-            ''', goal_id, goal.progress, f"Status changed: {old_status.value} -> {status.value}. {notes}")
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_goal_progress (goal_id, progress, notes)
+            VALUES ($1, $2, $3)
+        ''', goal_id, goal.progress, f"Status changed: {old_status.value} -> {status.value}. {notes}")
 
         return True
 
@@ -367,11 +365,10 @@ class GoalArchitecture:
         await self._update_goal_in_db(goal)
 
         # Log progress
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_goal_progress (goal_id, progress, notes)
-                VALUES ($1, $2, $3)
-            ''', goal_id, progress, notes)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_goal_progress (goal_id, progress, notes)
+            VALUES ($1, $2, $3)
+        ''', goal_id, progress, notes)
 
         # Update parent progress
         if goal.parent_id:
@@ -404,15 +401,14 @@ class GoalArchitecture:
 
     async def _update_goal_in_db(self, goal: Goal):
         """Update goal in database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                UPDATE brainops_goals
-                SET status = $2, progress = $3, child_ids = $4,
-                    started_at = $5, completed_at = $6
-                WHERE goal_id = $1
-            ''',
-                goal.id, goal.status.value, goal.progress, goal.child_ids,
-                goal.started_at, goal.completed_at)
+        await self._db_execute_with_retry('''
+            UPDATE brainops_goals
+            SET status = $2, progress = $3, child_ids = $4,
+                started_at = $5, completed_at = $6
+            WHERE goal_id = $1
+        ''',
+            goal.id, goal.status.value, goal.progress, goal.child_ids,
+            goal.started_at, goal.completed_at)
 
     # =========================================================================
     # GOAL DECOMPOSITION
@@ -565,17 +561,16 @@ class GoalArchitecture:
                 for goal in self.goals.values():
                     if goal.status == GoalStatus.IN_PROGRESS:
                         # Check if progress has stalled
-                        async with self.db_pool.acquire() as conn:
-                            recent_progress = await conn.fetchval('''
-                                SELECT progress FROM brainops_goal_progress
-                                WHERE goal_id = $1
-                                ORDER BY recorded_at DESC
-                                LIMIT 1
-                            ''', goal.id)
+                        recent_progress = await self._db_fetchval_with_retry('''
+                            SELECT progress FROM brainops_goal_progress
+                            WHERE goal_id = $1
+                            ORDER BY recorded_at DESC
+                            LIMIT 1
+                        ''', goal.id)
 
-                            if recent_progress is not None and abs(goal.progress - recent_progress) < 0.01:
-                                # Progress stalled - might need attention
-                                logger.info(f"Goal {goal.id} progress stalled at {goal.progress:.1%}")
+                        if recent_progress is not None and abs(goal.progress - recent_progress) < 0.01:
+                            # Progress stalled - might need attention
+                            logger.info(f"Goal {goal.id} progress stalled at {goal.progress:.1%}")
 
             except asyncio.CancelledError:
                 break

@@ -233,103 +233,102 @@ class MetacognitiveController:
 
     async def _initialize_database(self):
         """Create all required database tables for the metacognitive controller"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                -- Metacognitive state tracking
-                CREATE TABLE IF NOT EXISTS brainops_metacognitive_state (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    controller_id VARCHAR(50) NOT NULL,
-                    consciousness_state VARCHAR(50) NOT NULL,
-                    attention_focus TEXT,
-                    system_state JSONB NOT NULL,
-                    metrics JSONB NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_meta_state_controller
-                    ON brainops_metacognitive_state(controller_id);
-                CREATE INDEX IF NOT EXISTS idx_meta_state_time
-                    ON brainops_metacognitive_state(created_at DESC);
+        await self._db_execute_with_retry('''
+            -- Metacognitive state tracking
+            CREATE TABLE IF NOT EXISTS brainops_metacognitive_state (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                controller_id VARCHAR(50) NOT NULL,
+                consciousness_state VARCHAR(50) NOT NULL,
+                attention_focus TEXT,
+                system_state JSONB NOT NULL,
+                metrics JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_meta_state_controller
+                ON brainops_metacognitive_state(controller_id);
+            CREATE INDEX IF NOT EXISTS idx_meta_state_time
+                ON brainops_metacognitive_state(created_at DESC);
 
-                -- Thought stream persistence
-                CREATE TABLE IF NOT EXISTS brainops_thought_stream (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    thought_id VARCHAR(50) UNIQUE NOT NULL,
-                    controller_id VARCHAR(50) NOT NULL,
-                    content JSONB NOT NULL,
-                    source VARCHAR(100) NOT NULL,
-                    priority VARCHAR(20) NOT NULL,
-                    processed BOOLEAN DEFAULT FALSE,
-                    outcome JSONB,
-                    linked_thoughts TEXT[],
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    processed_at TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_thought_controller
-                    ON brainops_thought_stream(controller_id);
-                CREATE INDEX IF NOT EXISTS idx_thought_unprocessed
-                    ON brainops_thought_stream(processed) WHERE processed = FALSE;
-                CREATE INDEX IF NOT EXISTS idx_thought_priority
-                    ON brainops_thought_stream(priority);
+            -- Thought stream persistence
+            CREATE TABLE IF NOT EXISTS brainops_thought_stream (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                thought_id VARCHAR(50) UNIQUE NOT NULL,
+                controller_id VARCHAR(50) NOT NULL,
+                content JSONB NOT NULL,
+                source VARCHAR(100) NOT NULL,
+                priority VARCHAR(20) NOT NULL,
+                processed BOOLEAN DEFAULT FALSE,
+                outcome JSONB,
+                linked_thoughts TEXT[],
+                created_at TIMESTAMP DEFAULT NOW(),
+                processed_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_thought_controller
+                ON brainops_thought_stream(controller_id);
+            CREATE INDEX IF NOT EXISTS idx_thought_unprocessed
+                ON brainops_thought_stream(processed) WHERE processed = FALSE;
+            CREATE INDEX IF NOT EXISTS idx_thought_priority
+                ON brainops_thought_stream(priority);
 
-                -- Decision tracking
-                CREATE TABLE IF NOT EXISTS brainops_decisions (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    decision_id VARCHAR(50) UNIQUE NOT NULL,
-                    controller_id VARCHAR(50) NOT NULL,
-                    decision_type VARCHAR(100) NOT NULL,
-                    context JSONB NOT NULL,
-                    options JSONB NOT NULL,
-                    selected_option JSONB,
-                    reasoning TEXT,
-                    confidence FLOAT,
-                    agents_consulted TEXT[],
-                    outcome JSONB,
-                    success BOOLEAN,
-                    execution_time_ms INT,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    decided_at TIMESTAMP,
-                    outcome_recorded_at TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_decision_controller
-                    ON brainops_decisions(controller_id);
-                CREATE INDEX IF NOT EXISTS idx_decision_type
-                    ON brainops_decisions(decision_type);
-                CREATE INDEX IF NOT EXISTS idx_decision_success
-                    ON brainops_decisions(success) WHERE success IS NOT NULL;
+            -- Decision tracking
+            CREATE TABLE IF NOT EXISTS brainops_decisions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                decision_id VARCHAR(50) UNIQUE NOT NULL,
+                controller_id VARCHAR(50) NOT NULL,
+                decision_type VARCHAR(100) NOT NULL,
+                context JSONB NOT NULL,
+                options JSONB NOT NULL,
+                selected_option JSONB,
+                reasoning TEXT,
+                confidence FLOAT,
+                agents_consulted TEXT[],
+                outcome JSONB,
+                success BOOLEAN,
+                execution_time_ms INT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                decided_at TIMESTAMP,
+                outcome_recorded_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_decision_controller
+                ON brainops_decisions(controller_id);
+            CREATE INDEX IF NOT EXISTS idx_decision_type
+                ON brainops_decisions(decision_type);
+            CREATE INDEX IF NOT EXISTS idx_decision_success
+                ON brainops_decisions(success) WHERE success IS NOT NULL;
 
-                -- Attention tracking
-                CREATE TABLE IF NOT EXISTS brainops_attention_log (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    controller_id VARCHAR(50) NOT NULL,
-                    focus_target TEXT NOT NULL,
-                    priority VARCHAR(20) NOT NULL,
-                    duration_ms INT,
-                    reason TEXT,
-                    outcome JSONB,
-                    started_at TIMESTAMP DEFAULT NOW(),
-                    ended_at TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_attention_controller
-                    ON brainops_attention_log(controller_id);
+            -- Attention tracking
+            CREATE TABLE IF NOT EXISTS brainops_attention_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                controller_id VARCHAR(50) NOT NULL,
+                focus_target TEXT NOT NULL,
+                priority VARCHAR(20) NOT NULL,
+                duration_ms INT,
+                reason TEXT,
+                outcome JSONB,
+                started_at TIMESTAMP DEFAULT NOW(),
+                ended_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_attention_controller
+                ON brainops_attention_log(controller_id);
 
-                -- Self-reflection log
-                CREATE TABLE IF NOT EXISTS brainops_reflections (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    controller_id VARCHAR(50) NOT NULL,
-                    reflection_type VARCHAR(50) NOT NULL,
-                    trigger TEXT,
-                    observations JSONB NOT NULL,
-                    insights JSONB,
-                    actions_taken JSONB,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_reflection_controller
-                    ON brainops_reflections(controller_id);
-                CREATE INDEX IF NOT EXISTS idx_reflection_type
-                    ON brainops_reflections(reflection_type);
-            ''')
+            -- Self-reflection log
+            CREATE TABLE IF NOT EXISTS brainops_reflections (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                controller_id VARCHAR(50) NOT NULL,
+                reflection_type VARCHAR(50) NOT NULL,
+                trigger TEXT,
+                observations JSONB NOT NULL,
+                insights JSONB,
+                actions_taken JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_reflection_controller
+                ON brainops_reflections(controller_id);
+            CREATE INDEX IF NOT EXISTS idx_reflection_type
+                ON brainops_reflections(reflection_type);
+        ''')
 
-            logger.info("Database tables initialized for MetacognitiveController")
+        logger.info("Database tables initialized for MetacognitiveController")
 
     async def _initialize_subsystems(self):
         """Initialize all BrainOps AI OS subsystems"""
@@ -394,83 +393,162 @@ class MetacognitiveController:
 
     async def _load_state(self):
         """Load existing state from database"""
-        async with self.db_pool.acquire() as conn:
-            # Load most recent state
-            row = await conn.fetchrow('''
-                SELECT * FROM brainops_metacognitive_state
-                WHERE controller_id = $1
-                ORDER BY created_at DESC
-                LIMIT 1
-            ''', self.id)
+        row = await self._db_fetchrow_with_retry('''
+            SELECT * FROM brainops_metacognitive_state
+            WHERE controller_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', self.id)
 
-            if row:
-                self.metrics = row['metrics']
-                logger.info(f"Loaded existing state from database")
-            else:
-                logger.info("No existing state found, starting fresh")
+        if row:
+            self.metrics = row['metrics']
+            logger.info(f"Loaded existing state from database")
+        else:
+            logger.info("No existing state found, starting fresh")
 
     async def _load_agents(self):
         """Load all registered agents from database"""
-        async with self.db_pool.acquire() as conn:
-            rows = await conn.fetch('''
-                SELECT id, name, type, model, status, capabilities, config, metadata,
-                       total_executions, success_rate
-                FROM ai_agents
-                WHERE status = 'active'
-            ''')
+        rows = await self._db_fetch_with_retry('''
+            SELECT id, name, type, model, status, capabilities, config, metadata,
+                   total_executions, success_rate
+            FROM ai_agents
+            WHERE status = 'active'
+        ''')
 
-            for row in rows:
-                self.agents[str(row['id'])] = {
-                    'id': str(row['id']),
-                    'name': row['name'],
-                    'type': row['type'],
-                    'model': row['model'],
-                    'status': 'ready',
-                    'capabilities': row['capabilities'] or [],
-                    'config': row['config'] or {},
-                    'metadata': row['metadata'] or {},
-                    'total_executions': row['total_executions'] or 0,
-                    'success_rate': float(row['success_rate'] or 100),
-                }
+        for row in rows:
+            self.agents[str(row['id'])] = {
+                'id': str(row['id']),
+                'name': row['name'],
+                'type': row['type'],
+                'model': row['model'],
+                'status': 'ready',
+                'capabilities': row['capabilities'] or [],
+                'config': row['config'] or {},
+                'metadata': row['metadata'] or {},
+                'total_executions': row['total_executions'] or 0,
+                'success_rate': float(row['success_rate'] or 100),
+            }
 
-                self.agent_performance[str(row['id'])] = {
-                    'success_rate': float(row['success_rate'] or 100),
-                    'avg_response_time': 0,
-                    'total_executions': row['total_executions'] or 0,
-                }
+            self.agent_performance[str(row['id'])] = {
+                'success_rate': float(row['success_rate'] or 100),
+                'avg_response_time': 0,
+                'total_executions': row['total_executions'] or 0,
+            }
 
-            logger.info(f"Loaded {len(self.agents)} agents")
+        logger.info(f"Loaded {len(self.agents)} agents")
+
+    def _create_safe_task(self, coro, name: str = None) -> asyncio.Task:
+        """Create an asyncio task with exception logging to prevent 'Task exception was never retrieved'."""
+        task = asyncio.create_task(coro, name=name)
+
+        def _on_done(t: asyncio.Task):
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        return task
+
+    # -- DB retry helpers (PgBouncer connection-drop resilience) ---------------
+
+    async def _db_execute_with_retry(self, query: str, *args, max_retries: int = 2):
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.execute(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetch_with_retry(self, query: str, *args, max_retries: int = 2):
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetch(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetchrow_with_retry(self, query: str, *args, max_retries: int = 2):
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetchrow(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
 
     async def _start_background_processes(self):
         """Start all background processes for continuous operation"""
         # Main consciousness loop - always running
         self._background_tasks.append(
-            asyncio.create_task(self._consciousness_loop())
+            self._create_safe_task(self._consciousness_loop(), name="consciousness_loop")
         )
 
         # Attention management
         self._background_tasks.append(
-            asyncio.create_task(self._attention_management_loop())
+            self._create_safe_task(self._attention_management_loop(), name="attention_management")
         )
 
         # Decision processing
         self._background_tasks.append(
-            asyncio.create_task(self._decision_processing_loop())
+            self._create_safe_task(self._decision_processing_loop(), name="decision_processing")
         )
 
         # Self-reflection cycle
         self._background_tasks.append(
-            asyncio.create_task(self._reflection_loop())
+            self._create_safe_task(self._reflection_loop(), name="reflection")
         )
 
         # State persistence
         self._background_tasks.append(
-            asyncio.create_task(self._state_persistence_loop())
+            self._create_safe_task(self._state_persistence_loop(), name="state_persistence")
         )
 
         # Metrics collection
         self._background_tasks.append(
-            asyncio.create_task(self._metrics_collection_loop())
+            self._create_safe_task(self._metrics_collection_loop(), name="metrics_collection")
         )
 
         logger.info(f"Started {len(self._background_tasks)} background processes")
@@ -754,12 +832,11 @@ class MetacognitiveController:
 
     async def _log_attention_shift(self, focus: str, reason: str):
         """Log attention shift to database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_attention_log
-                (controller_id, focus_target, priority, reason)
-                VALUES ($1, $2, $3, $4)
-            ''', self.id, focus, "high", reason)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_attention_log
+            (controller_id, focus_target, priority, reason)
+            VALUES ($1, $2, $3, $4)
+        ''', self.id, focus, "high", reason)
 
     # =========================================================================
     # DECISION PROCESSING
@@ -839,23 +916,22 @@ class MetacognitiveController:
         execution_time: int
     ):
         """Store decision in database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_decisions
-                (decision_id, controller_id, decision_type, context, options,
-                 selected_option, reasoning, confidence, execution_time_ms, decided_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-            ''',
-                decision_id,
-                self.id,
-                decision.get("type", "general"),
-                json.dumps(decision.get("context", {})),
-                json.dumps(decision.get("options", [])),
-                json.dumps(result.get("selected_option", {})),
-                result.get("reasoning", ""),
-                result.get("confidence", 0),
-                execution_time
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_decisions
+            (decision_id, controller_id, decision_type, context, options,
+             selected_option, reasoning, confidence, execution_time_ms, decided_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        ''',
+            decision_id,
+            self.id,
+            decision.get("type", "general"),
+            json.dumps(decision.get("context", {})),
+            json.dumps(decision.get("options", [])),
+            json.dumps(result.get("selected_option", {})),
+            result.get("reasoning", ""),
+            result.get("confidence", 0),
+            execution_time
+        )
 
     # =========================================================================
     # SELF-REFLECTION
@@ -890,34 +966,33 @@ class MetacognitiveController:
         }
 
         # Analyze recent decisions
-        async with self.db_pool.acquire() as conn:
-            recent_decisions = await conn.fetch('''
-                SELECT decision_type, confidence, success
-                FROM brainops_decisions
-                WHERE controller_id = $1
-                AND created_at > NOW() - INTERVAL '1 hour'
-            ''', self.id)
+        recent_decisions = await self._db_fetch_with_retry('''
+            SELECT decision_type, confidence, success
+            FROM brainops_decisions
+            WHERE controller_id = $1
+            AND created_at > NOW() - INTERVAL '1 hour'
+        ''', self.id)
 
-            if recent_decisions:
-                success_rate = sum(
-                    1 for d in recent_decisions if d['success']
-                ) / len(recent_decisions)
+        if recent_decisions:
+            success_rate = sum(
+                1 for d in recent_decisions if d['success']
+            ) / len(recent_decisions)
 
-                avg_confidence = sum(
-                    d['confidence'] or 0 for d in recent_decisions
-                ) / len(recent_decisions)
+            avg_confidence = sum(
+                d['confidence'] or 0 for d in recent_decisions
+            ) / len(recent_decisions)
 
-                reflection["observations"]["decision_success_rate"] = success_rate
-                reflection["observations"]["average_confidence"] = avg_confidence
+            reflection["observations"]["decision_success_rate"] = success_rate
+            reflection["observations"]["average_confidence"] = avg_confidence
 
-                if success_rate < 0.7:
-                    reflection["insights"].append(
-                        "Decision success rate below threshold - need improvement"
-                    )
-                    reflection["actions"].append({
-                        "action": "trigger_learning",
-                        "focus": "decision_making",
-                    })
+            if success_rate < 0.7:
+                reflection["insights"].append(
+                    "Decision success rate below threshold - need improvement"
+                )
+                reflection["actions"].append({
+                    "action": "trigger_learning",
+                    "focus": "decision_making",
+                })
 
         # Analyze system performance
         reflection["observations"]["metrics"] = self.metrics.copy()
@@ -937,18 +1012,17 @@ class MetacognitiveController:
 
     async def _store_reflection(self, reflection: Dict[str, Any]):
         """Store reflection in database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_reflections
-                (controller_id, reflection_type, observations, insights, actions_taken)
-                VALUES ($1, $2, $3, $4, $5)
-            ''',
-                self.id,
-                "periodic",
-                json.dumps(reflection["observations"]),
-                json.dumps(reflection["insights"]),
-                json.dumps(reflection["actions"])
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_reflections
+            (controller_id, reflection_type, observations, insights, actions_taken)
+            VALUES ($1, $2, $3, $4, $5)
+        ''',
+            self.id,
+            "periodic",
+            json.dumps(reflection["observations"]),
+            json.dumps(reflection["insights"]),
+            json.dumps(reflection["actions"])
+        )
 
     async def _execute_reflection_action(self, action: Dict[str, Any]):
         """Execute an action from reflection"""
@@ -983,19 +1057,18 @@ class MetacognitiveController:
         """Persist current state to database"""
         system_state = await self.get_system_state()
 
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_metacognitive_state
-                (controller_id, consciousness_state, attention_focus,
-                 system_state, metrics)
-                VALUES ($1, $2, $3, $4, $5)
-            ''',
-                self.id,
-                self.state.value,
-                self.attention_focus,
-                json.dumps(system_state.__dict__ if hasattr(system_state, '__dict__') else system_state, cls=DateTimeEncoder),
-                json.dumps(self.metrics, cls=DateTimeEncoder)
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_metacognitive_state
+            (controller_id, consciousness_state, attention_focus,
+             system_state, metrics)
+            VALUES ($1, $2, $3, $4, $5)
+        ''',
+            self.id,
+            self.state.value,
+            self.attention_focus,
+            json.dumps(system_state.__dict__ if hasattr(system_state, '__dict__') else system_state, cls=DateTimeEncoder),
+            json.dumps(self.metrics, cls=DateTimeEncoder)
+        )
 
     # =========================================================================
     # METRICS COLLECTION
@@ -1209,26 +1282,25 @@ class MetacognitiveController:
 
     async def _persist_thought(self, thought: ThoughtUnit):
         """Persist thought to database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_thought_stream
-                (thought_id, controller_id, content, source, priority,
-                 processed, outcome, processed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (thought_id) DO UPDATE SET
-                    processed = EXCLUDED.processed,
-                    outcome = EXCLUDED.outcome,
-                    processed_at = EXCLUDED.processed_at
-            ''',
-                thought.id,
-                self.id,
-                json.dumps(thought.content, cls=DateTimeEncoder),
-                thought.source,
-                thought.priority.value,
-                thought.processed,
-                json.dumps(thought.outcome, cls=DateTimeEncoder) if thought.outcome else None,
-                datetime.now() if thought.processed else None
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_thought_stream
+            (thought_id, controller_id, content, source, priority,
+             processed, outcome, processed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (thought_id) DO UPDATE SET
+                processed = EXCLUDED.processed,
+                outcome = EXCLUDED.outcome,
+                processed_at = EXCLUDED.processed_at
+        ''',
+            thought.id,
+            self.id,
+            json.dumps(thought.content, cls=DateTimeEncoder),
+            thought.source,
+            thought.priority.value,
+            thought.processed,
+            json.dumps(thought.outcome, cls=DateTimeEncoder) if thought.outcome else None,
+            datetime.now() if thought.processed else None
+        )
 
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
         """Emit an event to registered handlers"""
@@ -1462,16 +1534,15 @@ class MetacognitiveController:
 
     async def _record_reflection(self, reflection: Dict[str, Any]):
         """Record a reflection to the database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_reflections
-                (topic, content, insights, created_at)
-                VALUES ($1, $2, $3, NOW())
-            ''',
-                reflection.get("topic"),
-                json.dumps(reflection, cls=DateTimeEncoder),
-                json.dumps(reflection.get("insights", []), cls=DateTimeEncoder)
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_reflections
+            (topic, content, insights, created_at)
+            VALUES ($1, $2, $3, NOW())
+        ''',
+            reflection.get("topic"),
+            json.dumps(reflection, cls=DateTimeEncoder),
+            json.dumps(reflection.get("insights", []), cls=DateTimeEncoder)
+        )
 
     async def reset(self):
         """Reset the entire system (use with caution)"""

@@ -21,6 +21,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 import asyncpg
 
+from ._resilience import ResilientSubsystem
+
 if TYPE_CHECKING:
     from .metacognitive_controller import MetacognitiveController
 
@@ -60,7 +62,7 @@ class ReasoningResult:
     created_at: datetime = field(default_factory=datetime.now)
 
 
-class ReasoningEngine:
+class ReasoningEngine(ResilientSubsystem):
     """
     Reasoning Engine for BrainOps AI OS
 
@@ -116,36 +118,35 @@ class ReasoningEngine:
 
     async def _initialize_database(self):
         """Create required database tables"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                -- Reasoning results
-                CREATE TABLE IF NOT EXISTS brainops_reasoning (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    reasoning_id VARCHAR(50) UNIQUE NOT NULL,
-                    query TEXT NOT NULL,
-                    reasoning_type VARCHAR(50),
-                    steps JSONB,
-                    final_conclusion TEXT,
-                    confidence FLOAT,
-                    alternatives JSONB,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+        await self._db_execute_with_retry('''
+            -- Reasoning results
+            CREATE TABLE IF NOT EXISTS brainops_reasoning (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                reasoning_id VARCHAR(50) UNIQUE NOT NULL,
+                query TEXT NOT NULL,
+                reasoning_type VARCHAR(50),
+                steps JSONB,
+                final_conclusion TEXT,
+                confidence FLOAT,
+                alternatives JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_reasoning_type
-                    ON brainops_reasoning(reasoning_type);
+            CREATE INDEX IF NOT EXISTS idx_reasoning_type
+                ON brainops_reasoning(reasoning_type);
 
-                -- Decision analysis
-                CREATE TABLE IF NOT EXISTS brainops_decision_analysis (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    decision_id VARCHAR(50) UNIQUE NOT NULL,
-                    context JSONB,
-                    options JSONB,
-                    analysis JSONB,
-                    recommendation JSONB,
-                    confidence FLOAT,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-            ''')
+            -- Decision analysis
+            CREATE TABLE IF NOT EXISTS brainops_decision_analysis (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                decision_id VARCHAR(50) UNIQUE NOT NULL,
+                context JSONB,
+                options JSONB,
+                analysis JSONB,
+                recommendation JSONB,
+                confidence FLOAT,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        ''')
 
     # =========================================================================
     # CHAIN OF THOUGHT REASONING
@@ -390,18 +391,17 @@ REASONING: [explanation]
 
         # Store decision
         decision_id = str(uuid.uuid4())
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_decision_analysis
-                (decision_id, context, options, analysis, recommendation, confidence)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            ''',
-                decision_id,
-                json.dumps(context),
-                json.dumps(options),
-                json.dumps(result.get('analysis', {})),
-                json.dumps(result.get('selected_option', {})),
-                result.get('confidence', 0.5))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_decision_analysis
+            (decision_id, context, options, analysis, recommendation, confidence)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        ''',
+            decision_id,
+            json.dumps(context),
+            json.dumps(options),
+            json.dumps(result.get('analysis', {})),
+            json.dumps(result.get('selected_option', {})),
+            result.get('confidence', 0.5))
 
         return result
 
@@ -607,25 +607,24 @@ REASONING: explanation
 
     async def _store_reasoning(self, result: ReasoningResult):
         """Store reasoning result in database"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_reasoning
-                (reasoning_id, query, reasoning_type, steps, final_conclusion,
-                 confidence, alternatives)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ''',
-                result.id,
-                result.query,
-                result.reasoning_type.value,
-                json.dumps([{
-                    'step_number': s.step_number,
-                    'description': s.description,
-                    'conclusion': s.conclusion,
-                    'confidence': s.confidence,
-                } for s in result.steps]),
-                result.final_conclusion,
-                result.confidence,
-                json.dumps(result.alternatives))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_reasoning
+            (reasoning_id, query, reasoning_type, steps, final_conclusion,
+             confidence, alternatives)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ''',
+            result.id,
+            result.query,
+            result.reasoning_type.value,
+            json.dumps([{
+                'step_number': s.step_number,
+                'description': s.description,
+                'conclusion': s.conclusion,
+                'confidence': s.confidence,
+            } for s in result.steps]),
+            result.final_conclusion,
+            result.confidence,
+            json.dumps(result.alternatives))
 
     # =========================================================================
     # PUBLIC API

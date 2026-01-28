@@ -159,16 +159,13 @@ class SelfOptimizationSystem:
 
     async def _load_baselines(self):
         """Load performance baselines"""
-        async with self.db_pool.acquire() as conn:
-            # Check if table has new schema (baseline_mean) or old schema (baseline_value)
-            # The existing table uses baseline_mean, baseline_std columns
-            rows = await conn.fetch('''
-                SELECT metric_name, baseline_mean
-                FROM brainops_baselines
-            ''')
+        rows = await self._db_fetch_with_retry('''
+            SELECT metric_name, baseline_mean
+            FROM brainops_baselines
+        ''')
 
-            for row in rows:
-                self.baselines[row['metric_name']] = row['baseline_mean']
+        for row in rows:
+            self.baselines[row['metric_name']] = row['baseline_mean']
 
         # Set default baselines if empty
         if not self.baselines:
@@ -180,31 +177,114 @@ class SelfOptimizationSystem:
                 "error_rate_percent": 1,
             }
 
+    def _create_safe_task(self, coro, name: str = None) -> asyncio.Task:
+        """Create an asyncio task with exception logging to prevent 'Task exception was never retrieved'."""
+        task = asyncio.create_task(coro, name=name)
+
+        def _on_done(t: asyncio.Task):
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        return task
+
+    async def _db_execute_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Execute a database query with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.execute(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetchrow_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Fetch single database row with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetchrow(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetch_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Fetch database rows with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetch(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
     async def _start_background_processes(self):
         """Start background optimization processes"""
         # Performance monitoring
         self._tasks.append(
-            asyncio.create_task(self._performance_monitoring_loop())
+            self._create_safe_task(self._performance_monitoring_loop(), name="perf_monitoring")
         )
 
         # Resource optimization
         self._tasks.append(
-            asyncio.create_task(self._resource_optimization_loop())
+            self._create_safe_task(self._resource_optimization_loop(), name="resource_optimization")
         )
 
         # Cache optimization
         self._tasks.append(
-            asyncio.create_task(self._cache_optimization_loop())
+            self._create_safe_task(self._cache_optimization_loop(), name="cache_optimization")
         )
 
         # Self-healing monitor
         self._tasks.append(
-            asyncio.create_task(self._self_healing_loop())
+            self._create_safe_task(self._self_healing_loop(), name="self_healing")
         )
 
         # Database optimization
         self._tasks.append(
-            asyncio.create_task(self._database_optimization_loop())
+            self._create_safe_task(self._database_optimization_loop(), name="db_optimization")
         )
 
         logger.info(f"Started {len(self._tasks)} optimization background processes")
@@ -252,10 +332,9 @@ class SelfOptimizationSystem:
         # Database metrics
         try:
             start = time.time()
-            async with self.db_pool.acquire() as conn:
-                await conn.execute("SELECT 1")
+            await self._db_execute_with_retry("SELECT 1")
             metrics["database_query_time_ms"] = (time.time() - start) * 1000
-        except:
+        except Exception:
             metrics["database_query_time_ms"] = 9999
 
         return metrics
@@ -322,25 +401,21 @@ class SelfOptimizationSystem:
         """Optimize disk usage"""
         logger.info("Triggering disk optimization...")
 
-        # Clean up old logs and temp files
-        async with self.db_pool.acquire() as conn:
-            # Delete old sensor readings
-            await conn.execute('''
-                DELETE FROM brainops_sensor_readings
-                WHERE created_at < NOW() - INTERVAL '7 days'
-            ''')
+        # Clean up old logs and temp files (with retry)
+        await self._db_execute_with_retry('''
+            DELETE FROM brainops_sensor_readings
+            WHERE created_at < NOW() - INTERVAL '7 days'
+        ''')
 
-            # Delete old activation history
-            await conn.execute('''
-                DELETE FROM brainops_activation_history
-                WHERE created_at < NOW() - INTERVAL '3 days'
-            ''')
+        await self._db_execute_with_retry('''
+            DELETE FROM brainops_activation_history
+            WHERE created_at < NOW() - INTERVAL '3 days'
+        ''')
 
-            # Delete old thought stream
-            await conn.execute('''
-                DELETE FROM brainops_thought_stream
-                WHERE created_at < NOW() - INTERVAL '7 days'
-            ''')
+        await self._db_execute_with_retry('''
+            DELETE FROM brainops_thought_stream
+            WHERE created_at < NOW() - INTERVAL '7 days'
+        ''')
 
     # =========================================================================
     # CACHE OPTIMIZATION
@@ -370,14 +445,10 @@ class SelfOptimizationSystem:
             try:
                 await asyncio.sleep(3600)  # Every hour
 
-                async with self.db_pool.acquire() as conn:
-                    # Analyze tables for optimization
-                    await conn.execute("ANALYZE brainops_unified_memory")
-                    await conn.execute("ANALYZE brainops_sensor_readings")
-                    await conn.execute("ANALYZE brainops_thought_stream")
-
-                    # Vacuum if needed (careful with this in production)
-                    # await conn.execute("VACUUM ANALYZE brainops_sensor_readings")
+                # Analyze tables for optimization (with retry)
+                await self._db_execute_with_retry("ANALYZE brainops_unified_memory")
+                await self._db_execute_with_retry("ANALYZE brainops_sensor_readings")
+                await self._db_execute_with_retry("ANALYZE brainops_thought_stream")
 
                 logger.info("Database optimization completed")
 
@@ -429,8 +500,7 @@ class SelfOptimizationSystem:
     async def _check_database_health(self):
         """Check database health and recover if needed"""
         try:
-            async with self.db_pool.acquire() as conn:
-                await conn.execute("SELECT 1")
+            await self._db_execute_with_retry("SELECT 1")
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
             await self._record_self_healing(
@@ -481,12 +551,11 @@ class SelfOptimizationSystem:
         details: Dict[str, Any]
     ):
         """Record self-healing event"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_self_healing
-                (event_type, trigger, action_taken, success, details)
-                VALUES ($1, $2, $3, $4, $5)
-            ''', event_type, trigger, action, success, json.dumps(details))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_self_healing
+            (event_type, trigger, action_taken, success, details)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', event_type, trigger, action, success, json.dumps(details))
 
     # =========================================================================
     # OPTIMIZATION RECORDING
@@ -542,16 +611,15 @@ class SelfOptimizationSystem:
         """Record a completed optimization"""
         opt_id = str(uuid.uuid4())
 
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_optimizations
-                (optimization_id, optimization_type, description, target,
-                 before_state, after_state, improvement, status, completed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-            ''',
-                opt_id, opt_type.value, description, target,
-                json.dumps(before_state), json.dumps(after_state),
-                improvement, OptimizationStatus.COMPLETED.value)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_optimizations
+            (optimization_id, optimization_type, description, target,
+             before_state, after_state, improvement, status, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        ''',
+            opt_id, opt_type.value, description, target,
+            json.dumps(before_state), json.dumps(after_state),
+            improvement, OptimizationStatus.COMPLETED.value)
 
         self.metrics["optimizations_applied"] += 1
         self.metrics["improvements_total"] += improvement
@@ -573,8 +641,7 @@ class SelfOptimizationSystem:
         if component == "memory":
             await self._optimize_memory()
         elif component == "database":
-            async with self.db_pool.acquire() as conn:
-                await conn.execute("ANALYZE")
+            await self._db_execute_with_retry("ANALYZE")
 
     async def get_health(self) -> Dict[str, Any]:
         """Get self-optimization system health"""

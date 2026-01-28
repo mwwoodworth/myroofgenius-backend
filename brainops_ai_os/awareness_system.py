@@ -188,56 +188,69 @@ class AwarenessSystem:
 
     async def _load_baselines(self):
         """Load existing baselines from database"""
-        async with self.db_pool.acquire() as conn:
-            rows = await conn.fetch('''
-                SELECT metric_name, baseline_mean, baseline_std, sample_count
-                FROM brainops_baselines
-            ''')
+        rows = await self._db_fetch_with_retry('''
+            SELECT metric_name, baseline_mean, baseline_std, sample_count
+            FROM brainops_baselines
+        ''')
 
-            for row in rows:
-                self.baselines[row['metric_name']] = {
-                    'mean': row['baseline_mean'],
-                    'std': row['baseline_std'],
-                    'count': row['sample_count'],
-                }
+        for row in rows:
+            self.baselines[row['metric_name']] = {
+                'mean': row['baseline_mean'],
+                'std': row['baseline_std'],
+                'count': row['sample_count'],
+            }
 
         logger.info(f"Loaded {len(self.baselines)} baselines")
+
+    def _create_safe_task(self, coro, name: str = None) -> asyncio.Task:
+        """Create an asyncio task with exception logging to prevent 'Task exception was never retrieved'."""
+        task = asyncio.create_task(coro, name=name)
+
+        def _on_done(t: asyncio.Task):
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        return task
 
     async def _start_sensors(self):
         """Start all sensor loops"""
         # System health sensor - every 5 seconds
         self._tasks.append(
-            asyncio.create_task(self._system_health_sensor())
+            self._create_safe_task(self._system_health_sensor(), name="system_health_sensor")
         )
 
         # Database sensor - every 10 seconds
         self._tasks.append(
-            asyncio.create_task(self._database_sensor())
+            self._create_safe_task(self._database_sensor(), name="database_sensor")
         )
 
         # Business metrics sensor - every 30 seconds
         self._tasks.append(
-            asyncio.create_task(self._business_metrics_sensor())
+            self._create_safe_task(self._business_metrics_sensor(), name="business_metrics_sensor")
         )
 
         # API performance sensor - every 15 seconds
         self._tasks.append(
-            asyncio.create_task(self._api_performance_sensor())
+            self._create_safe_task(self._api_performance_sensor(), name="api_performance_sensor")
         )
 
         # External services sensor - every 60 seconds
         self._tasks.append(
-            asyncio.create_task(self._external_services_sensor())
+            self._create_safe_task(self._external_services_sensor(), name="external_services_sensor")
         )
 
         # Weather sensor - every 5 minutes
         self._tasks.append(
-            asyncio.create_task(self._weather_sensor())
+            self._create_safe_task(self._weather_sensor(), name="weather_sensor")
         )
 
         # Anomaly detection processor - every 30 seconds
         self._tasks.append(
-            asyncio.create_task(self._anomaly_detection_loop())
+            self._create_safe_task(self._anomaly_detection_loop(), name="anomaly_detection")
         )
 
         logger.info(f"Started {len(self._tasks)} sensor loops")
@@ -314,23 +327,22 @@ class AwarenessSystem:
             try:
                 start_time = time.time()
 
-                async with self.db_pool.acquire() as conn:
-                    # Check connection health
-                    await conn.execute("SELECT 1")
-                    query_time = (time.time() - start_time) * 1000
+                # Check connection health with retry
+                await self._db_execute_with_retry("SELECT 1")
+                query_time = (time.time() - start_time) * 1000
 
-                    # Get pool stats
-                    pool_size = self.db_pool.get_size()
-                    pool_free = self.db_pool.get_idle_size()
+                # Get pool stats
+                pool_size = self.db_pool.get_size()
+                pool_free = self.db_pool.get_idle_size()
 
-                    # Get database stats
-                    stats = await conn.fetchrow('''
-                        SELECT
-                            (SELECT COUNT(*) FROM pg_stat_activity
-                             WHERE state = 'active') as active_connections,
-                            (SELECT COUNT(*) FROM pg_stat_activity
-                             WHERE state = 'idle') as idle_connections
-                    ''')
+                # Get database stats with retry
+                stats = await self._db_fetchrow_with_retry('''
+                    SELECT
+                        (SELECT COUNT(*) FROM pg_stat_activity
+                         WHERE state = 'active') as active_connections,
+                        (SELECT COUNT(*) FROM pg_stat_activity
+                         WHERE state = 'idle') as idle_connections
+                ''')
 
                 reading = SensorReading(
                     sensor_type=SensorType.DATABASE,
@@ -377,31 +389,30 @@ class AwarenessSystem:
         """Monitor business metrics"""
         while not self._shutdown.is_set():
             try:
-                async with self.db_pool.acquire() as conn:
-                    # Get recent lead count
-                    lead_count = await conn.fetchval('''
-                        SELECT COUNT(*) FROM leads
-                        WHERE created_at > NOW() - INTERVAL '24 hours'
-                    ''') or 0
+                # Get recent lead count with retry
+                lead_count = await self._db_fetchval_with_retry('''
+                    SELECT COUNT(*) FROM leads
+                    WHERE created_at > NOW() - INTERVAL '24 hours'
+                ''') or 0
 
-                    # Get recent revenue
-                    revenue = await conn.fetchval('''
-                        SELECT COALESCE(SUM(amount), 0) FROM transactions
-                        WHERE created_at > NOW() - INTERVAL '24 hours'
-                        AND status = 'completed'
-                    ''') or 0
+                # Get recent revenue with retry
+                revenue = await self._db_fetchval_with_retry('''
+                    SELECT COALESCE(SUM(amount), 0) FROM transactions
+                    WHERE created_at > NOW() - INTERVAL '24 hours'
+                    AND status = 'completed'
+                ''') or 0
 
-                    # Get active jobs
-                    active_jobs = await conn.fetchval('''
-                        SELECT COUNT(*) FROM jobs
-                        WHERE status IN ('pending', 'in_progress', 'scheduled')
-                    ''') or 0
+                # Get active jobs with retry
+                active_jobs = await self._db_fetchval_with_retry('''
+                    SELECT COUNT(*) FROM jobs
+                    WHERE status IN ('pending', 'in_progress', 'scheduled')
+                ''') or 0
 
-                    # Get customer count
-                    customer_count = await conn.fetchval('''
-                        SELECT COUNT(*) FROM customers
-                        WHERE status = 'active'
-                    ''') or 0
+                # Get customer count with retry
+                customer_count = await self._db_fetchval_with_retry('''
+                    SELECT COUNT(*) FROM customers
+                    WHERE status = 'active'
+                ''') or 0
 
                 reading = SensorReading(
                     sensor_type=SensorType.BUSINESS_METRICS,
@@ -441,17 +452,16 @@ class AwarenessSystem:
         """Monitor API performance metrics"""
         while not self._shutdown.is_set():
             try:
-                async with self.db_pool.acquire() as conn:
-                    # Get recent API metrics if available
-                    metrics = await conn.fetchrow('''
-                        SELECT
-                            COUNT(*) as request_count,
-                            AVG(response_time) as avg_response_time,
-                            MAX(response_time) as max_response_time,
-                            SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as error_count
-                        FROM api_metrics
-                        WHERE recorded_at > NOW() - INTERVAL '5 minutes'
-                    ''')
+                # Get recent API metrics with retry
+                metrics = await self._db_fetchrow_with_retry('''
+                    SELECT
+                        COUNT(*) as request_count,
+                        AVG(response_time) as avg_response_time,
+                        MAX(response_time) as max_response_time,
+                        SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as error_count
+                    FROM api_metrics
+                    WHERE recorded_at > NOW() - INTERVAL '5 minutes'
+                ''')
 
                 if metrics:
                     reading = SensorReading(
@@ -620,55 +630,54 @@ class AwarenessSystem:
 
     async def _update_baselines(self):
         """Update baselines with recent data"""
-        async with self.db_pool.acquire() as conn:
-            # Get recent readings for baseline calculation
-            rows = await conn.fetch('''
-                SELECT sensor_type, reading_value
-                FROM brainops_sensor_readings
-                WHERE created_at > NOW() - INTERVAL '24 hours'
-            ''')
+        # Get recent readings for baseline calculation (with retry)
+        rows = await self._db_fetch_with_retry('''
+            SELECT sensor_type, reading_value
+            FROM brainops_sensor_readings
+            WHERE created_at > NOW() - INTERVAL '24 hours'
+        ''')
 
-            # Aggregate values by metric
-            metric_values: Dict[str, List[float]] = {}
+        # Aggregate values by metric
+        metric_values: Dict[str, List[float]] = {}
 
-            for row in rows:
-                sensor_type = row['sensor_type']
-                values = row['reading_value']
+        for row in rows:
+            sensor_type = row['sensor_type']
+            values = row['reading_value']
 
-                if isinstance(values, dict):
-                    for key, value in values.items():
-                        if isinstance(value, (int, float)):
-                            metric_name = f"{sensor_type}_{key}"
-                            if metric_name not in metric_values:
-                                metric_values[metric_name] = []
-                            metric_values[metric_name].append(float(value))
+            if isinstance(values, dict):
+                for key, value in values.items():
+                    if isinstance(value, (int, float)):
+                        metric_name = f"{sensor_type}_{key}"
+                        if metric_name not in metric_values:
+                            metric_values[metric_name] = []
+                        metric_values[metric_name].append(float(value))
 
-            # Update baselines
-            for metric_name, values in metric_values.items():
-                if len(values) < 10:
-                    continue
+        # Update baselines
+        for metric_name, values in metric_values.items():
+            if len(values) < 10:
+                continue
 
-                import numpy as np
-                mean = np.mean(values)
-                std = np.std(values)
+            import numpy as np
+            mean = np.mean(values)
+            std = np.std(values)
 
-                self.baselines[metric_name] = {
-                    'mean': mean,
-                    'std': max(std, 0.001),  # Avoid division by zero
-                    'count': len(values),
-                }
+            self.baselines[metric_name] = {
+                'mean': mean,
+                'std': max(std, 0.001),  # Avoid division by zero
+                'count': len(values),
+            }
 
-                # Persist to database
-                await conn.execute('''
-                    INSERT INTO brainops_baselines
-                    (metric_name, baseline_mean, baseline_std, sample_count, last_updated)
-                    VALUES ($1, $2, $3, $4, NOW())
-                    ON CONFLICT (metric_name) DO UPDATE SET
-                        baseline_mean = EXCLUDED.baseline_mean,
-                        baseline_std = EXCLUDED.baseline_std,
-                        sample_count = EXCLUDED.sample_count,
-                        last_updated = NOW()
-                ''', metric_name, mean, std, len(values))
+            # Persist to database (with retry)
+            await self._db_execute_with_retry('''
+                INSERT INTO brainops_baselines
+                (metric_name, baseline_mean, baseline_std, sample_count, last_updated)
+                VALUES ($1, $2, $3, $4, NOW())
+                ON CONFLICT (metric_name) DO UPDATE SET
+                    baseline_mean = EXCLUDED.baseline_mean,
+                    baseline_std = EXCLUDED.baseline_std,
+                    sample_count = EXCLUDED.sample_count,
+                    last_updated = NOW()
+            ''', metric_name, mean, std, len(values))
 
     # =========================================================================
     # ALERT MANAGEMENT
@@ -703,13 +712,12 @@ class AwarenessSystem:
         self.alert_history.append(alert)
         self.metrics["alerts_generated"] += 1
 
-        # Store in database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_alerts
-                (alert_id, severity, alert_type, message, details)
-                VALUES ($1, $2, $3, $4, $5)
-            ''', alert_id, severity.value, alert_type, message, json.dumps(details))
+        # Store in database (with retry)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_alerts
+            (alert_id, severity, alert_type, message, details)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', alert_id, severity.value, alert_type, message, json.dumps(details))
 
         # Notify controller
         if self.controller and severity in [AlertSeverity.CRITICAL, AlertSeverity.WARNING]:
@@ -730,12 +738,11 @@ class AwarenessSystem:
         for key, alert in self.alerts.items():
             if alert.id == alert_id:
                 alert.acknowledged = True
-                async with self.db_pool.acquire() as conn:
-                    await conn.execute('''
-                        UPDATE brainops_alerts
-                        SET acknowledged = TRUE, acknowledged_at = NOW()
-                        WHERE alert_id = $1
-                    ''', alert_id)
+                await self._db_execute_with_retry('''
+                    UPDATE brainops_alerts
+                    SET acknowledged = TRUE, acknowledged_at = NOW()
+                    WHERE alert_id = $1
+                ''', alert_id)
                 return True
         return False
 
@@ -747,12 +754,11 @@ class AwarenessSystem:
                 alert.resolution = resolution
                 self.metrics["alerts_resolved"] += 1
 
-                async with self.db_pool.acquire() as conn:
-                    await conn.execute('''
-                        UPDATE brainops_alerts
-                        SET resolved = TRUE, resolution = $2, resolved_at = NOW()
-                        WHERE alert_id = $1
-                    ''', alert_id, resolution)
+                await self._db_execute_with_retry('''
+                    UPDATE brainops_alerts
+                    SET resolved = TRUE, resolution = $2, resolved_at = NOW()
+                    WHERE alert_id = $1
+                ''', alert_id, resolution)
                 return True
         return False
 
@@ -790,6 +796,98 @@ class AwarenessSystem:
     # STORAGE
     # =========================================================================
 
+    async def _db_execute_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Execute a database query with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.execute(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetch_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Fetch database rows with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetch(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetchrow_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Fetch single database row with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetchrow(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
+    async def _db_fetchval_with_retry(self, query: str, *args, max_retries: int = 2):
+        """Fetch single database value with retry on connection errors."""
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.db_pool.acquire() as conn:
+                    return await conn.fetchval(query, *args)
+            except (
+                asyncpg.ConnectionDoesNotExistError,
+                asyncpg.InterfaceError,
+                asyncpg.InternalClientError,
+                asyncpg.PostgresConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                else:
+                    raise
+            except asyncio.CancelledError:
+                raise
+        if last_error:
+            raise last_error
+
     async def _store_reading(self, reading: SensorReading):
         """Store a sensor reading"""
         self.readings[reading.sensor_type].append(reading)
@@ -798,17 +896,16 @@ class AwarenessSystem:
         if reading.anomaly_score > 0.5:
             self.metrics["anomalies_detected"] += 1
 
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_sensor_readings
-                (sensor_type, reading_value, anomaly_score, metadata)
-                VALUES ($1, $2, $3, $4)
-            ''',
-                reading.sensor_type.value,
-                json.dumps(reading.value),
-                reading.anomaly_score,
-                json.dumps(reading.metadata)
-            )
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_sensor_readings
+            (sensor_type, reading_value, anomaly_score, metadata)
+            VALUES ($1, $2, $3, $4)
+        ''',
+            reading.sensor_type.value,
+            json.dumps(reading.value),
+            reading.anomaly_score,
+            json.dumps(reading.metadata)
+        )
 
     # =========================================================================
     # PUBLIC API

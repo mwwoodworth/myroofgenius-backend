@@ -24,6 +24,8 @@ from collections import defaultdict, deque
 import asyncpg
 import numpy as np
 
+from ._resilience import ResilientSubsystem
+
 if TYPE_CHECKING:
     from .metacognitive_controller import MetacognitiveController
 
@@ -87,7 +89,7 @@ class NeuralCluster:
     created_at: datetime = field(default_factory=datetime.now)
 
 
-class DynamicNeuralNetwork:
+class DynamicNeuralNetwork(ResilientSubsystem):
     """
     Dynamic Neural Network for BrainOps AI OS
 
@@ -152,151 +154,149 @@ class DynamicNeuralNetwork:
 
     async def _initialize_database(self):
         """Create required database tables"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                -- Neurons table
-                CREATE TABLE IF NOT EXISTS brainops_neurons (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    neuron_id VARCHAR(50) UNIQUE NOT NULL,
-                    name VARCHAR(100) NOT NULL,
-                    neuron_type VARCHAR(20) NOT NULL,
-                    agent_id VARCHAR(50),
-                    threshold FLOAT DEFAULT 0.5,
-                    bias FLOAT DEFAULT 0.0,
-                    fire_count INT DEFAULT 0,
-                    last_fired TIMESTAMP,
-                    metadata JSONB,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+        await self._db_execute_with_retry('''
+            -- Neurons table
+            CREATE TABLE IF NOT EXISTS brainops_neurons (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                neuron_id VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                neuron_type VARCHAR(20) NOT NULL,
+                agent_id VARCHAR(50),
+                threshold FLOAT DEFAULT 0.5,
+                bias FLOAT DEFAULT 0.0,
+                fire_count INT DEFAULT 0,
+                last_fired TIMESTAMP,
+                metadata JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_neuron_type
-                    ON brainops_neurons(neuron_type);
-                CREATE INDEX IF NOT EXISTS idx_neuron_agent
-                    ON brainops_neurons(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_neuron_type
+                ON brainops_neurons(neuron_type);
+            CREATE INDEX IF NOT EXISTS idx_neuron_agent
+                ON brainops_neurons(agent_id);
 
-                -- Synapses table
-                CREATE TABLE IF NOT EXISTS brainops_synapses (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    synapse_id VARCHAR(50) UNIQUE NOT NULL,
-                    source_id VARCHAR(50) NOT NULL,
-                    target_id VARCHAR(50) NOT NULL,
-                    weight FLOAT DEFAULT 0.5,
-                    plasticity FLOAT DEFAULT 0.1,
-                    co_activation_count INT DEFAULT 0,
-                    state VARCHAR(20) DEFAULT 'active',
-                    last_active TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(source_id, target_id)
-                );
+            -- Synapses table
+            CREATE TABLE IF NOT EXISTS brainops_synapses (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                synapse_id VARCHAR(50) UNIQUE NOT NULL,
+                source_id VARCHAR(50) NOT NULL,
+                target_id VARCHAR(50) NOT NULL,
+                weight FLOAT DEFAULT 0.5,
+                plasticity FLOAT DEFAULT 0.1,
+                co_activation_count INT DEFAULT 0,
+                state VARCHAR(20) DEFAULT 'active',
+                last_active TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(source_id, target_id)
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_synapse_source
-                    ON brainops_synapses(source_id);
-                CREATE INDEX IF NOT EXISTS idx_synapse_target
-                    ON brainops_synapses(target_id);
-                CREATE INDEX IF NOT EXISTS idx_synapse_weight
-                    ON brainops_synapses(weight DESC);
+            CREATE INDEX IF NOT EXISTS idx_synapse_source
+                ON brainops_synapses(source_id);
+            CREATE INDEX IF NOT EXISTS idx_synapse_target
+                ON brainops_synapses(target_id);
+            CREATE INDEX IF NOT EXISTS idx_synapse_weight
+                ON brainops_synapses(weight DESC);
 
-                -- Neural clusters table
-                CREATE TABLE IF NOT EXISTS brainops_neural_clusters (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    cluster_id VARCHAR(50) UNIQUE NOT NULL,
-                    name VARCHAR(100) NOT NULL,
-                    neuron_ids TEXT[] NOT NULL,
-                    specialization VARCHAR(100),
-                    activation_pattern FLOAT[],
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+            -- Neural clusters table
+            CREATE TABLE IF NOT EXISTS brainops_neural_clusters (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                cluster_id VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                neuron_ids TEXT[] NOT NULL,
+                specialization VARCHAR(100),
+                activation_pattern FLOAT[],
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                -- Activation history
-                CREATE TABLE IF NOT EXISTS brainops_activation_history (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    neuron_id VARCHAR(50) NOT NULL,
-                    activation_level FLOAT NOT NULL,
-                    trigger_source VARCHAR(100),
-                    propagated_to TEXT[],
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+            -- Activation history
+            CREATE TABLE IF NOT EXISTS brainops_activation_history (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                neuron_id VARCHAR(50) NOT NULL,
+                activation_level FLOAT NOT NULL,
+                trigger_source VARCHAR(100),
+                propagated_to TEXT[],
+                created_at TIMESTAMP DEFAULT NOW()
+            );
 
-                CREATE INDEX IF NOT EXISTS idx_activation_neuron
-                    ON brainops_activation_history(neuron_id);
-                CREATE INDEX IF NOT EXISTS idx_activation_time
-                    ON brainops_activation_history(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_activation_neuron
+                ON brainops_activation_history(neuron_id);
+            CREATE INDEX IF NOT EXISTS idx_activation_time
+                ON brainops_activation_history(created_at DESC);
 
-                -- Co-activation tracking for Hebbian learning
-                CREATE TABLE IF NOT EXISTS brainops_co_activations (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    neuron_a VARCHAR(50) NOT NULL,
-                    neuron_b VARCHAR(50) NOT NULL,
-                    count INT DEFAULT 1,
-                    last_co_activation TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(neuron_a, neuron_b)
-                );
-            ''')
+            -- Co-activation tracking for Hebbian learning
+            CREATE TABLE IF NOT EXISTS brainops_co_activations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                neuron_a VARCHAR(50) NOT NULL,
+                neuron_b VARCHAR(50) NOT NULL,
+                count INT DEFAULT 1,
+                last_co_activation TIMESTAMP DEFAULT NOW(),
+                UNIQUE(neuron_a, neuron_b)
+            );
+        ''')
 
     async def _load_network(self):
         """Load existing network from database"""
-        async with self.db_pool.acquire() as conn:
-            # Load neurons
-            neurons = await conn.fetch('''
-                SELECT neuron_id, name, neuron_type, agent_id, threshold,
-                       bias, fire_count, last_fired, metadata
-                FROM brainops_neurons
-            ''')
+        # Load neurons
+        neurons = await self._db_fetch_with_retry('''
+            SELECT neuron_id, name, neuron_type, agent_id, threshold,
+                   bias, fire_count, last_fired, metadata
+            FROM brainops_neurons
+        ''')
 
-            for row in neurons:
-                neuron = Neuron(
-                    id=row['neuron_id'],
-                    name=row['name'],
-                    neuron_type=NeuronType(row['neuron_type']),
-                    agent_id=row['agent_id'],
-                    threshold=row['threshold'],
-                    bias=row['bias'],
-                    fire_count=row['fire_count'],
-                    last_fired=row['last_fired'],
-                    metadata=row['metadata'] or {},
-                )
-                self.neurons[neuron.id] = neuron
+        for row in neurons:
+            neuron = Neuron(
+                id=row['neuron_id'],
+                name=row['name'],
+                neuron_type=NeuronType(row['neuron_type']),
+                agent_id=row['agent_id'],
+                threshold=row['threshold'],
+                bias=row['bias'],
+                fire_count=row['fire_count'],
+                last_fired=row['last_fired'],
+                metadata=row['metadata'] or {},
+            )
+            self.neurons[neuron.id] = neuron
 
-            # Load synapses
-            synapses = await conn.fetch('''
-                SELECT synapse_id, source_id, target_id, weight,
-                       plasticity, co_activation_count, state, last_active
-                FROM brainops_synapses
-            ''')
+        # Load synapses
+        synapses = await self._db_fetch_with_retry('''
+            SELECT synapse_id, source_id, target_id, weight,
+                   plasticity, co_activation_count, state, last_active
+            FROM brainops_synapses
+        ''')
 
-            for row in synapses:
-                synapse = Synapse(
-                    id=row['synapse_id'],
-                    source_id=row['source_id'],
-                    target_id=row['target_id'],
-                    weight=row['weight'],
-                    plasticity=row['plasticity'],
-                    co_activation_count=row['co_activation_count'],
-                    state=PathwayState(row['state']),
-                    last_active=row['last_active'],
-                )
-                self.synapses[synapse.id] = synapse
+        for row in synapses:
+            synapse = Synapse(
+                id=row['synapse_id'],
+                source_id=row['source_id'],
+                target_id=row['target_id'],
+                weight=row['weight'],
+                plasticity=row['plasticity'],
+                co_activation_count=row['co_activation_count'],
+                state=PathwayState(row['state']),
+                last_active=row['last_active'],
+            )
+            self.synapses[synapse.id] = synapse
 
-                # Update neuron connections
-                if synapse.source_id in self.neurons:
-                    self.neurons[synapse.source_id].output_connections.add(synapse.target_id)
-                if synapse.target_id in self.neurons:
-                    self.neurons[synapse.target_id].input_weights[synapse.source_id] = synapse.weight
+            # Update neuron connections
+            if synapse.source_id in self.neurons:
+                self.neurons[synapse.source_id].output_connections.add(synapse.target_id)
+            if synapse.target_id in self.neurons:
+                self.neurons[synapse.target_id].input_weights[synapse.source_id] = synapse.weight
 
-            # Load clusters
-            clusters = await conn.fetch('''
-                SELECT cluster_id, name, neuron_ids, specialization
-                FROM brainops_neural_clusters
-            ''')
+        # Load clusters
+        clusters = await self._db_fetch_with_retry('''
+            SELECT cluster_id, name, neuron_ids, specialization
+            FROM brainops_neural_clusters
+        ''')
 
-            for row in clusters:
-                cluster = NeuralCluster(
-                    id=row['cluster_id'],
-                    name=row['name'],
-                    neuron_ids=set(row['neuron_ids'] or []),
-                    specialization=row['specialization'],
-                )
-                self.clusters[cluster.id] = cluster
+        for row in clusters:
+            cluster = NeuralCluster(
+                id=row['cluster_id'],
+                name=row['name'],
+                neuron_ids=set(row['neuron_ids'] or []),
+                specialization=row['specialization'],
+            )
+            self.clusters[cluster.id] = cluster
 
         self.metrics["total_neurons"] = len(self.neurons)
         self.metrics["total_synapses"] = len(self.synapses)
@@ -324,22 +324,22 @@ class DynamicNeuralNetwork:
         """Start background neural processes"""
         # Hebbian learning update
         self._tasks.append(
-            asyncio.create_task(self._hebbian_learning_loop())
+            self._create_safe_task(self._hebbian_learning_loop(), name="hebbian_learning")
         )
 
         # Synaptic decay
         self._tasks.append(
-            asyncio.create_task(self._synaptic_decay_loop())
+            self._create_safe_task(self._synaptic_decay_loop(), name="synaptic_decay")
         )
 
         # Cluster detection
         self._tasks.append(
-            asyncio.create_task(self._cluster_detection_loop())
+            self._create_safe_task(self._cluster_detection_loop(), name="cluster_detection")
         )
 
         # Activity monitoring
         self._tasks.append(
-            asyncio.create_task(self._activity_monitoring_loop())
+            self._create_safe_task(self._activity_monitoring_loop(), name="activity_monitoring")
         )
 
         logger.info(f"Started {len(self._tasks)} neural background processes")
@@ -372,13 +372,12 @@ class DynamicNeuralNetwork:
         self.metrics["total_neurons"] += 1
 
         # Persist to database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_neurons
-                (neuron_id, name, neuron_type, agent_id, threshold, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            ''', neuron_id, name, neuron_type.value, agent_id, threshold,
-                json.dumps(metadata or {}))
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_neurons
+            (neuron_id, name, neuron_type, agent_id, threshold, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        ''', neuron_id, name, neuron_type.value, agent_id, threshold,
+            json.dumps(metadata or {}))
 
         return neuron_id
 
@@ -409,14 +408,13 @@ class DynamicNeuralNetwork:
         self.metrics["total_synapses"] += 1
 
         # Persist to database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_synapses
-                (synapse_id, source_id, target_id, weight, plasticity)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (source_id, target_id) DO UPDATE SET
-                    weight = EXCLUDED.weight
-            ''', synapse_id, source_id, target_id, weight, plasticity)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_synapses
+            (synapse_id, source_id, target_id, weight, plasticity)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (source_id, target_id) DO UPDATE SET
+                weight = EXCLUDED.weight
+        ''', synapse_id, source_id, target_id, weight, plasticity)
 
         return synapse_id
 
@@ -498,19 +496,18 @@ class DynamicNeuralNetwork:
         })
 
         # Store in database
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO brainops_activation_history
-                (neuron_id, activation_level, trigger_source, propagated_to)
-                VALUES ($1, $2, $3, $4)
-            ''', neuron_id, activation, source, propagated_to)
+        await self._db_execute_with_retry('''
+            INSERT INTO brainops_activation_history
+            (neuron_id, activation_level, trigger_source, propagated_to)
+            VALUES ($1, $2, $3, $4)
+        ''', neuron_id, activation, source, propagated_to)
 
-            # Update neuron stats
-            await conn.execute('''
-                UPDATE brainops_neurons
-                SET fire_count = $2, last_fired = $3
-                WHERE neuron_id = $1
-            ''', neuron_id, neuron.fire_count, neuron.last_fired)
+        # Update neuron stats
+        await self._db_execute_with_retry('''
+            UPDATE brainops_neurons
+            SET fire_count = $2, last_fired = $3
+            WHERE neuron_id = $1
+        ''', neuron_id, neuron.fire_count, neuron.last_fired)
 
         return {
             "status": "activated",
@@ -543,58 +540,57 @@ class DynamicNeuralNetwork:
         """Apply Hebbian learning rules to all synapses"""
         logger.info("Applying Hebbian learning...")
 
-        async with self.db_pool.acquire() as conn:
-            # Get recent co-activations
-            co_activations = await conn.fetch('''
-                SELECT neuron_a, neuron_b, count
-                FROM brainops_co_activations
-                WHERE last_co_activation > NOW() - INTERVAL '1 hour'
-            ''')
+        # Get recent co-activations
+        co_activations = await self._db_fetch_with_retry('''
+            SELECT neuron_a, neuron_b, count
+            FROM brainops_co_activations
+            WHERE last_co_activation > NOW() - INTERVAL '1 hour'
+        ''')
 
-            for row in co_activations:
-                source_id = row['neuron_a']
-                target_id = row['neuron_b']
-                count = row['count']
+        for row in co_activations:
+            source_id = row['neuron_a']
+            target_id = row['neuron_b']
+            count = row['count']
 
-                # Find synapse
-                synapse = next(
-                    (s for s in self.synapses.values()
-                     if s.source_id == source_id and s.target_id == target_id),
-                    None
-                )
+            # Find synapse
+            synapse = next(
+                (s for s in self.synapses.values()
+                 if s.source_id == source_id and s.target_id == target_id),
+                None
+            )
 
-                if synapse:
-                    # Hebbian rule: strengthen connections that fire together
-                    delta_weight = synapse.plasticity * (count / 100.0)
+            if synapse:
+                # Hebbian rule: strengthen connections that fire together
+                delta_weight = synapse.plasticity * (count / 100.0)
 
-                    if count > 10:  # Frequent co-activation
-                        # Long-term potentiation (LTP)
-                        synapse.weight = min(synapse.weight + delta_weight, 1.0)
-                        synapse.state = PathwayState.POTENTIATED
-                        self.metrics["pathways_potentiated"] += 1
-                    elif count < 2:  # Rare co-activation
-                        # Long-term depression (LTD)
-                        synapse.weight = max(synapse.weight - delta_weight, 0.01)
-                        synapse.state = PathwayState.DEPRESSED
-                        self.metrics["pathways_depressed"] += 1
+                if count > 10:  # Frequent co-activation
+                    # Long-term potentiation (LTP)
+                    synapse.weight = min(synapse.weight + delta_weight, 1.0)
+                    synapse.state = PathwayState.POTENTIATED
+                    self.metrics["pathways_potentiated"] += 1
+                elif count < 2:  # Rare co-activation
+                    # Long-term depression (LTD)
+                    synapse.weight = max(synapse.weight - delta_weight, 0.01)
+                    synapse.state = PathwayState.DEPRESSED
+                    self.metrics["pathways_depressed"] += 1
 
-                    # Update in database
-                    await conn.execute('''
-                        UPDATE brainops_synapses
-                        SET weight = $2, state = $3
-                        WHERE synapse_id = $1
-                    ''', synapse.id, synapse.weight, synapse.state.value)
+                # Update in database
+                await self._db_execute_with_retry('''
+                    UPDATE brainops_synapses
+                    SET weight = $2, state = $3
+                    WHERE synapse_id = $1
+                ''', synapse.id, synapse.weight, synapse.state.value)
 
-                    # Update neuron input weights
-                    if target_id in self.neurons:
-                        self.neurons[target_id].input_weights[source_id] = synapse.weight
+                # Update neuron input weights
+                if target_id in self.neurons:
+                    self.neurons[target_id].input_weights[source_id] = synapse.weight
 
-            # Reset co-activation counts for next period
-            await conn.execute('''
-                UPDATE brainops_co_activations
-                SET count = 0
-                WHERE last_co_activation < NOW() - INTERVAL '1 hour'
-            ''')
+        # Reset co-activation counts for next period
+        await self._db_execute_with_retry('''
+            UPDATE brainops_co_activations
+            SET count = 0
+            WHERE last_co_activation < NOW() - INTERVAL '1 hour'
+        ''')
 
         logger.info(f"Hebbian learning complete: {self.metrics['pathways_potentiated']} potentiated, {self.metrics['pathways_depressed']} depressed")
 
@@ -605,22 +601,21 @@ class DynamicNeuralNetwork:
                 # Run every hour
                 await asyncio.sleep(3600)
 
-                async with self.db_pool.acquire() as conn:
-                    # Decay weights of unused synapses
-                    await conn.execute('''
-                        UPDATE brainops_synapses
-                        SET weight = GREATEST(weight * 0.99, 0.01)
-                        WHERE last_active < NOW() - INTERVAL '24 hours'
-                        OR last_active IS NULL
-                    ''')
+                # Decay weights of unused synapses
+                await self._db_execute_with_retry('''
+                    UPDATE brainops_synapses
+                    SET weight = GREATEST(weight * 0.99, 0.01)
+                    WHERE last_active < NOW() - INTERVAL '24 hours'
+                    OR last_active IS NULL
+                ''')
 
-                    # Mark dormant synapses
-                    await conn.execute('''
-                        UPDATE brainops_synapses
-                        SET state = 'dormant'
-                        WHERE last_active < NOW() - INTERVAL '7 days'
-                        AND state != 'dormant'
-                    ''')
+                # Mark dormant synapses
+                await self._db_execute_with_retry('''
+                    UPDATE brainops_synapses
+                    SET state = 'dormant'
+                    WHERE last_active < NOW() - INTERVAL '7 days'
+                    AND state != 'dormant'
+                ''')
 
             except asyncio.CancelledError:
                 break
@@ -716,15 +711,14 @@ class DynamicNeuralNetwork:
                 self.metrics["emergent_clusters"] += 1
 
                 # Store in database
-                async with self.db_pool.acquire() as conn:
-                    await conn.execute('''
-                        INSERT INTO brainops_neural_clusters
-                        (cluster_id, name, neuron_ids, specialization)
-                        VALUES ($1, $2, $3, $4)
-                        ON CONFLICT (cluster_id) DO UPDATE SET
-                            neuron_ids = EXCLUDED.neuron_ids,
-                            specialization = EXCLUDED.specialization
-                    ''', cluster_id, cluster.name, list(neuron_ids), specialization)
+                await self._db_execute_with_retry('''
+                    INSERT INTO brainops_neural_clusters
+                    (cluster_id, name, neuron_ids, specialization)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (cluster_id) DO UPDATE SET
+                        neuron_ids = EXCLUDED.neuron_ids,
+                        specialization = EXCLUDED.specialization
+                ''', cluster_id, cluster.name, list(neuron_ids), specialization)
 
     # =========================================================================
     # ACTIVITY MONITORING
