@@ -2,9 +2,15 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.4.12"
-__build__ = "2026-01-25T00:45:23Z"
+__version__ = "163.5.0"
+__build__ = "2026-01-28T17:04:00Z"
 __status__ = "production"
+# v163.5.0: Resilience hardening - eliminate asyncio task errors and PgBouncer connection drops
+# - Added ResilientSubsystem mixin (_resilience.py) with safe task creation + DB retry helpers
+# - 18 raw asyncio.create_task() -> _create_safe_task() (prevents "Task exception was never retrieved")
+# - 59 raw db_pool.acquire() -> _db_*_with_retry() (auto-retry on PgBouncer connection drops)
+# - All 9 brainops_ai_os subsystems hardened: awareness, self_optimization, metacognitive_controller,
+#   neural_dynamics, learning_pipeline, unified_memory, goal_architecture, proactive_engine, reasoning_engine
 # v163.4.12: SECURITY - remove Stripe env debug endpoint and require auth on all stripe automation routes
 # v163.4.11: Fix api_metrics column name (created_at -> recorded_at) in awareness_system.py
 # v163.4.10: Add AUREA, auth, users, projects, claude_agents, langgraphos, marketplace, system_info routes
