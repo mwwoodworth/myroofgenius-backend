@@ -111,9 +111,10 @@ class BrainOpsCNS:
             result = await loop.run_in_executor(
                 None,
                 lambda: genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/gemini-embedding-001",
                     content=text[:30000],
-                    task_type="retrieval_document"
+                    task_type="retrieval_document",
+                    output_dimensionality=1536,
                 )
             )
             if result and "embedding" in result:
@@ -157,18 +158,21 @@ class BrainOpsCNS:
             content_str = json.dumps(data)
 
             # Store in database
+            # asyncpg cannot natively serialize list[float] to pgvector;
+            # cast the embedding to its text representation.
+            embedding_str = str(embedding)
             result = await conn.fetchval("""
                 INSERT INTO cns_memory (
                     memory_type, category, title, content,
                     embedding, importance_score, tags
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ) VALUES ($1, $2, $3, $4, $5::vector, $6, $7)
                 RETURNING memory_id
             """,
                 data.get('type', 'general'),
                 data.get('category', 'system'),
                 data.get('title', 'Memory'),
                 content_str,
-                embedding,
+                embedding_str,
                 data.get('importance', 0.5),
                 data.get('tags', [])
             )
@@ -184,6 +188,7 @@ class BrainOpsCNS:
         async with self.db_pool.acquire() as conn:
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
+            query_embedding_str = str(query_embedding)
 
             # Search with vector similarity (using cosine distance)
             results = await conn.fetch("""
@@ -195,7 +200,7 @@ class BrainOpsCNS:
                 WHERE expires_at IS NULL OR expires_at > NOW()
                 ORDER BY similarity DESC, importance_score DESC
                 LIMIT $2
-            """, query_embedding, limit)
+            """, query_embedding_str, limit)
 
             # Update access count
             memory_ids = [r['memory_id'] for r in results]

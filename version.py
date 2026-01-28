@@ -2,9 +2,20 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.5.0"
-__build__ = "2026-01-28T17:04:00Z"
+__version__ = "163.5.3"
+__build__ = "2026-01-28T18:30:00Z"
 __status__ = "production"
+# v163.5.3: Fix pgvector serialization - asyncpg can't natively serialize list[float]
+# - cns_service_simplified.py: Convert embedding list to str() + $N::vector SQL cast
+#   in both remember() and recall() methods
+# v163.5.2: Fix Gemini embedding model + credential override bug + ENCRYPTION_KEY
+# - cns_service_simplified.py: text-embedding-004 -> gemini-embedding-001 (correct model)
+#   + output_dimensionality=1536 to match OpenAI vectors for pgvector compatibility
+# - credential_manager.py: Use os.environ.setdefault() instead of os.environ[key]=value
+#   (prevents master_credentials placeholder values from overriding valid Render env vars)
+# - encryption_service.py: Lazy singleton + FERNET_SECRET fallback (prevents import-time crash)
+# - Updated 26 placeholder values in master_credentials table
+# - Added ENCRYPTION_KEY to Render service env vars
 # v163.5.0: Resilience hardening - eliminate asyncio task errors and PgBouncer connection drops
 # - Added ResilientSubsystem mixin (_resilience.py) with safe task creation + DB retry helpers
 # - 18 raw asyncio.create_task() -> _create_safe_task() (prevents "Task exception was never retrieved")

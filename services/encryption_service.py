@@ -58,7 +58,7 @@ class EncryptionService:
 
     def _get_or_create_master_key(self) -> bytes:
         """Get master encryption key from environment or create one"""
-        key_string = os.getenv("ENCRYPTION_KEY")
+        key_string = os.getenv("ENCRYPTION_KEY") or os.getenv("FERNET_SECRET")
 
         if key_string:
             return self._parse_master_key(key_string)
@@ -182,8 +182,16 @@ class EncryptionService:
         # This is simplified - use proper vault service in production
         return f"tok_{token[:32]}"
 
-# Singleton instance
-encryption_service = EncryptionService()
+# Lazy singleton: defer construction so import never crashes.
+_encryption_service: Optional[EncryptionService] = None
+
+
+def _get_service() -> EncryptionService:
+    global _encryption_service
+    if _encryption_service is None:
+        _encryption_service = EncryptionService()
+    return _encryption_service
+
 
 # Field definitions for automatic encryption
 ENCRYPTED_FIELDS = {
@@ -198,10 +206,11 @@ def encrypt_model_fields(model_name: str, data: dict) -> dict:
     if model_name not in ENCRYPTED_FIELDS:
         return data
 
+    svc = _get_service()
     encrypted_data = data.copy()
     for field in ENCRYPTED_FIELDS[model_name]:
         if field in encrypted_data and encrypted_data[field]:
-            encrypted_data[field] = encryption_service.encrypt_field(
+            encrypted_data[field] = svc.encrypt_field(
                 encrypted_data[field],
                 field_name=f"{model_name}.{field}"
             )
@@ -213,11 +222,12 @@ def decrypt_model_fields(model_name: str, data: dict) -> dict:
     if model_name not in ENCRYPTED_FIELDS:
         return data
 
+    svc = _get_service()
     decrypted_data = data.copy()
     for field in ENCRYPTED_FIELDS[model_name]:
         if field in decrypted_data and decrypted_data[field]:
             try:
-                decrypted_data[field] = encryption_service.decrypt_field(
+                decrypted_data[field] = svc.decrypt_field(
                     decrypted_data[field],
                     field_name=f"{model_name}.{field}"
                 )
@@ -227,10 +237,21 @@ def decrypt_model_fields(model_name: str, data: dict) -> dict:
 
     return decrypted_data
 
-# Export main functions
-encrypt = encryption_service.encrypt
-decrypt = encryption_service.decrypt
-encrypt_field = encryption_service.encrypt_field
-decrypt_field = encryption_service.decrypt_field
-hash_value = encryption_service.hash_value
-mask_sensitive_data = encryption_service.mask_sensitive_data
+# Export main functions (lazy-loaded via lambdas for backwards compatibility)
+def encrypt(data: str) -> str:
+    return _get_service().encrypt(data)
+
+def decrypt(encrypted_data: str) -> str:
+    return _get_service().decrypt(encrypted_data)
+
+def encrypt_field(value: Any, field_name: str = "") -> str:
+    return _get_service().encrypt_field(value, field_name)
+
+def decrypt_field(encrypted_value: str, field_name: str = "") -> Any:
+    return _get_service().decrypt_field(encrypted_value, field_name)
+
+def hash_value(value: str, salt: str = "") -> str:
+    return _get_service().hash_value(value, salt)
+
+def mask_sensitive_data(data: str, visible_chars: int = 4) -> str:
+    return _get_service().mask_sensitive_data(data, visible_chars)

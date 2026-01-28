@@ -56,8 +56,11 @@ class CredentialManager:
                         "is_sensitive": is_sensitive,
                     }
 
-                    # Set as environment variable for compatibility
-                    os.environ[key] = value
+                    # Set as environment variable ONLY if not already set.
+                    # Render env-group / Docker ENV values take precedence
+                    # over database entries (which may contain stale placeholders).
+                    if not os.environ.get(key):
+                        os.environ[key] = value
 
                     loaded_count += 1
                     if is_sensitive:
