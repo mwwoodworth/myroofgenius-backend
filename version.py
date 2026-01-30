@@ -2,9 +2,12 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.5.3"
-__build__ = "2026-01-28T18:30:00Z"
+__version__ = "163.5.4"
+__build__ = "2026-01-30T19:25:14Z"
 __status__ = "production"
+# v163.5.4: AI provider reliability hardening
+# - Prefer available Anthropic model IDs (avoid deprecated/invalid model strings)
+# - Improve multi-provider fallback behavior and error visibility
 # v163.5.3: Fix pgvector serialization - asyncpg can't natively serialize list[float]
 # - cns_service_simplified.py: Convert embedding list to str() + $N::vector SQL cast
 #   in both remember() and recall() methods
