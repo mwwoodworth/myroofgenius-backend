@@ -75,7 +75,9 @@ class RealAIService:
         except Exception:
             pass
 
-        match = re.search(r"\{[\\s\\S]*\}", text)
+        # Match the first JSON object anywhere in the response (handles code fences, prose, etc.).
+        # NOTE: Use [\s\S] (not an over-escaped charclass) so we can match across newlines.
+        match = re.search(r"\{[\s\S]*\}", text)
         if not match:
             raise AIProviderCallError("AI provider response was not valid JSON")
 
@@ -320,21 +322,28 @@ class RealAIService:
 
         self._require_provider()
 
-        if self.openai_key:
-            response = await self._call_openai_chat(prompt)
-            provider = "openai"
-        elif self.anthropic_key:
-            response = await self._call_claude_chat(prompt)
-            provider = "anthropic"
-        else:
-            response = await self._call_gemini_chat(prompt)
-            provider = "gemini"
+        last_error: Exception | None = None
+        for provider in ("openai", "anthropic", "gemini"):
+            try:
+                if provider == "openai" and self.openai_key:
+                    response = await self._call_openai_chat(prompt)
+                elif provider == "anthropic" and self.anthropic_key:
+                    response = await self._call_claude_chat(prompt)
+                elif provider == "gemini" and self.gemini_key:
+                    response = await self._call_gemini_chat(prompt)
+                else:
+                    continue
 
-        content = self._extract_json(response)
-        content["generated_by"] = "AI"
-        content["ai_provider"] = provider
-        content["timestamp"] = datetime.now().isoformat()
-        return content
+                content = self._extract_json(response)
+                content["generated_by"] = "AI"
+                content["ai_provider"] = provider
+                content["timestamp"] = datetime.now().isoformat()
+                return content
+            except Exception as exc:
+                last_error = exc
+                logger.error("%s content generation failed: %s", provider, exc)
+
+        raise AIProviderCallError("All configured AI providers failed") from last_error
     
     async def _call_openai_chat(self, prompt: str) -> str:
         """Call OpenAI Chat API"""
@@ -344,7 +353,7 @@ class RealAIService:
         }
         
         payload = {
-            "model": "gpt-4-turbo-preview",
+            "model": "gpt-4o-mini",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7
         }
@@ -357,7 +366,7 @@ class RealAIService:
         
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
-        raise Exception(f"OpenAI error: {response.status_code}")
+        raise Exception(f"OpenAI error: {response.status_code} - {response.text[:500]}")
 
     async def generate_json(self, prompt: str) -> Dict[str, Any]:
         """Generate a JSON response from an LLM provider (no local fallbacks)."""
@@ -393,7 +402,7 @@ class RealAIService:
         }
         
         payload = {
-            "model": "claude-3-opus-20240229",
+            "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 1500,
             "messages": [{"role": "user", "content": prompt}]
         }
@@ -406,7 +415,7 @@ class RealAIService:
         
         if response.status_code == 200:
             return response.json()['content'][0]['text']
-        raise Exception(f"Claude error: {response.status_code}")
+        raise Exception(f"Claude error: {response.status_code} - {response.text[:500]}")
     
     async def _call_gemini_chat(self, prompt: str) -> str:
         """Call Gemini API"""
@@ -417,14 +426,14 @@ class RealAIService:
         }
         
         response = await self.client.post(
-            f"{self.gemini_url}/models/gemini-1.5-pro-002:generateContent?key={self.gemini_key}",
+            f"{self.gemini_url}/models/gemini-2.0-flash:generateContent?key={self.gemini_key}",
             headers=headers,
             json=payload
         )
         
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
-        raise Exception(f"Gemini error: {response.status_code}")
+        raise Exception(f"Gemini error: {response.status_code} - {response.text[:500]}")
     
     async def predict_churn(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
         """Real churn prediction using AI analysis"""

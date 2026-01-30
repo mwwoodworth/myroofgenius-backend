@@ -113,14 +113,21 @@ class MasterCredentialsManager:
                     "deployed": "v30.4.0"
                 })
 
-            # Check for exposed sensitive data
-            elif key in ["EMAIL_PASSWORD", "SMTP_PASSWORD"] and value == "Mww00dw0rth@2O1S$":
-                validation["security_issues"].append({
-                    "key": key,
-                    "issue": "Using sudo password for email",
-                    "risk": "HIGH",
-                    "recommendation": "Use app-specific password"
-                })
+            # Check for exposed sensitive data (never hardcode secrets here).
+            # Heuristic: email/SMTP passwords should never match API keys.
+            elif key in ["EMAIL_PASSWORD", "SMTP_PASSWORD"]:
+                api_keys = [
+                    os.getenv("BRAINOPS_API_KEY", ""),
+                    os.getenv("ADMIN_API_KEY", ""),
+                    os.getenv("AGENTS_API_KEY", ""),
+                ]
+                if value and any(k and value == k for k in api_keys):
+                    validation["security_issues"].append({
+                        "key": key,
+                        "issue": "Email/SMTP password matches an API key",
+                        "risk": "HIGH",
+                        "recommendation": "Use an app-specific SMTP password/token; rotate immediately"
+                    })
 
             else:
                 validation["valid"] += 1

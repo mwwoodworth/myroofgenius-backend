@@ -158,7 +158,8 @@ async def analyze_with_gemini(request: AIRequest):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
 
-        const_model = request.model or 'gemini-1.5-flash-002'
+        # Use a known-available model for this API key (see ListModels in v1beta/models).
+        const_model = request.model or 'gemini-2.0-flash'
         model = genai.GenerativeModel(const_model)
 
         prompt = f"""Analyze this text and respond with ONLY a JSON object:
@@ -212,8 +213,8 @@ async def list_providers():
             },
             "gemini": {
                 "configured": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
-                "models": ["gemini-1.5-flash-002", "gemini-1.5-pro-002"],
-                "default": "gemini-1.5-flash-002"
+                "models": ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"],
+                "default": "gemini-2.0-flash"
             }
         },
         "timestamp": datetime.now().isoformat()

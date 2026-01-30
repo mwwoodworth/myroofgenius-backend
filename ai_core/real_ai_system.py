@@ -51,7 +51,16 @@ class RealAISystem:
             "anthropic": self._call_anthropic,
             "gemini": self._call_gemini
         }
-        self.default_provider = "openai"
+        # Prefer the provider most likely to be available and cost-effective.
+        # Gemini often has the widest default access; OpenAI/Anthropic may require prepaid credits.
+        if GEMINI_API_KEY:
+            self.default_provider = "gemini"
+        elif OPENAI_API_KEY:
+            self.default_provider = "openai"
+        elif ANTHROPIC_API_KEY:
+            self.default_provider = "anthropic"
+        else:
+            self.default_provider = "openai"
         
     async def think(self, prompt: str, context: Dict[str, Any] = None, provider: str = None) -> str:
         """
@@ -95,7 +104,7 @@ class RealAISystem:
             messages.append({"role": "user", "content": prompt})
             
             response = await openai.ChatCompletion.acreate(
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000
@@ -119,7 +128,7 @@ class RealAISystem:
                 system_prompt += f"\n\nContext: {json.dumps(context)}"
             
             response = anthropic_client.messages.create(
-                model="claude-3-opus-20240229",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=1000,
                 temperature=0.7,
                 system=system_prompt,
@@ -140,7 +149,8 @@ class RealAISystem:
             logger.warning("Gemini API key not configured")
             raise Exception("Gemini not available")
         try:
-            model = genai.GenerativeModel('gemini-1.5-pro-002')
+            # Use a currently-available model (ListModels via v1beta/models).
+            model = genai.GenerativeModel('gemini-2.0-flash')
             
             full_prompt = prompt
             if context:

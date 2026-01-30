@@ -31,7 +31,9 @@ class AIGenerateRequest(BaseModel):
     prompt: str
     max_tokens: Optional[int] = 150
     temperature: Optional[float] = 0.7
-    model: Optional[str] = "gpt-3.5-turbo"
+    # Prefer auto-selection. Provider/model defaults are controlled server-side and may
+    # change as APIs evolve (e.g., model deprecations).
+    model: Optional[str] = "auto"
 
 class AIGenerateResponse(BaseModel):
     """Response from AI text generation"""
