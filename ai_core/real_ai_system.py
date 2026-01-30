@@ -128,7 +128,8 @@ class RealAISystem:
                 system_prompt += f"\n\nContext: {json.dumps(context)}"
             
             response = anthropic_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                # Use an actually-available model for this API key.
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=1000,
                 temperature=0.7,
                 system=system_prompt,

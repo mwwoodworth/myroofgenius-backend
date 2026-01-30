@@ -208,8 +208,8 @@ async def list_providers():
             },
             "anthropic": {
                 "configured": bool(os.getenv("ANTHROPIC_API_KEY")),
-                "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"],
-                "default": "claude-3-5-sonnet-20241022"
+                "models": ["claude-sonnet-4-5-20250929", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022"],
+                "default": "claude-sonnet-4-5-20250929"
             },
             "gemini": {
                 "configured": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),

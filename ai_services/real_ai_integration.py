@@ -402,7 +402,8 @@ class RealAIService:
         }
         
         payload = {
-            "model": "claude-3-5-sonnet-20241022",
+            # Use an actually-available model for this API key (see Anthropic /v1/models).
+            "model": "claude-sonnet-4-5-20250929",
             "max_tokens": 1500,
             "messages": [{"role": "user", "content": prompt}]
         }
