@@ -646,13 +646,12 @@ async def api_health_check():
 
     if not offline and db_pool:
         try:
-            # Use asyncio.wait_for to enforce a strict 2-second timeout
-            # This prevents the health check from hanging when DB is slow
-            async def db_probe():
-                async with db_pool.acquire(timeout=2) as conn:
-                    return await conn.fetchval("SELECT 1")
-
-            result = await asyncio.wait_for(db_probe(), timeout=2.0)
+            # IMPORTANT: Avoid wrapping DB acquire/query in asyncio.wait_for().
+            # Cancelling a coroutine while it holds an asyncpg connection can
+            # cause noisy "Task exception was never retrieved" / InvalidStateError
+            # during connection reset/release under load.
+            async with db_pool.acquire(timeout=2) as conn:
+                result = await conn.fetchval("SELECT 1", timeout=2.0)
             if result == 1:
                 db_status = "connected"
                 db_ok = True
@@ -698,7 +697,9 @@ async def api_health_check():
     cns_info = {}
     if db_ok and cns and CNS_AVAILABLE:
         try:
-            cns_info = await asyncio.wait_for(cns.get_status(), timeout=1.0)
+            # Avoid cancelling CNS work mid-flight; cancellation during asyncpg
+            # connection reset/release can emit noisy asyncio errors under load.
+            cns_info = await asyncio.wait_for(asyncio.shield(cns.get_status()), timeout=1.0)
             cns_status = cns_info.get("status", "unknown")
         except asyncio.TimeoutError:
             logger.warning("Health check CNS probe timed out (1s limit)")
@@ -752,11 +753,8 @@ async def _probe_database(timeout: float = 2.0) -> Dict[str, Any]:
     start = time.monotonic()
     if db_pool:
         try:
-            async def _query():
-                async with db_pool.acquire(timeout=timeout) as conn:
-                    return await conn.fetchval("SELECT 1")
-
-            result = await asyncio.wait_for(_query(), timeout=timeout)
+            async with db_pool.acquire(timeout=timeout) as conn:
+                result = await conn.fetchval("SELECT 1", timeout=timeout)
             ok = result == 1
             return {"ok": ok, "status": "connected" if ok else "error", "latency_ms": int((time.monotonic() - start) * 1000)}
         except asyncio.TimeoutError:
