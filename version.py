@@ -2,7 +2,7 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.5.5"
+__version__ = "163.5.6"
 __build__ = "2026-01-30T19:25:14Z"
 __status__ = "production"
 # v163.5.4: AI provider reliability hardening

@@ -87,42 +87,53 @@ class RevenueAutomation:
             customer = await self._get_or_create_stripe_customer(customer_email)
 
             # Create checkout session
-            session = stripe.checkout.Session.create(
+            # Stripe's SDK is synchronous; run in a worker thread so this async
+            # endpoint doesn't block the event loop.
+            session = await asyncio.to_thread(
+                stripe.checkout.Session.create,
                 customer=customer.id,
                 payment_method_types=["card"],
-                line_items=[{
-                    "price": self.price_ids.get(subscription_tier),
-                    "quantity": 1
-                }],
+                line_items=[
+                    {
+                        "price": self.price_ids.get(subscription_tier),
+                        "quantity": 1,
+                    }
+                ],
                 mode="subscription",
                 success_url=success_url,
                 cancel_url=cancel_url,
                 metadata=metadata or {},
                 subscription_data={
                     "trial_period_days": 7,
-                    "metadata": {
-                        "tier": subscription_tier.value
-                    }
-                }
+                    "metadata": {"tier": subscription_tier.value},
+                },
             )
 
             # Record in database
-            with SessionLocal() as db:
-                db.execute(text("""
-                    INSERT INTO stripe_checkout_sessions (
-                        id, session_id, customer_email,
-                        subscription_tier, status, created_at
-                    ) VALUES (
-                        :id, :session_id, :customer_email,
-                        :subscription_tier, 'pending', CURRENT_TIMESTAMP
+            def _record_checkout_session():
+                with SessionLocal() as db:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO stripe_checkout_sessions (
+                                id, session_id, customer_email,
+                                subscription_tier, status, created_at
+                            ) VALUES (
+                                :id, :session_id, :customer_email,
+                                :subscription_tier, 'pending', CURRENT_TIMESTAMP
+                            )
+                            """
+                        ),
+                        {
+                            "id": str(uuid.uuid4()),
+                            "session_id": session.id,
+                            "customer_email": customer_email,
+                            "subscription_tier": subscription_tier.value,
+                        },
                     )
-                """), {
-                    "id": str(uuid.uuid4()),
-                    "session_id": session.id,
-                    "customer_email": customer_email,
-                    "subscription_tier": subscription_tier.value
-                })
-                db.commit()
+                    db.commit()
+
+            await asyncio.to_thread(_record_checkout_session)
 
             return {
                 "checkout_url": session.url,
@@ -418,17 +429,17 @@ class RevenueAutomation:
         """
         Get existing or create new Stripe customer
         """
-        # Check for existing customer
-        customers = stripe.Customer.list(email=email, limit=1)
+        # Stripe SDK is synchronous; keep this non-blocking for async endpoints.
+        customers = await asyncio.to_thread(stripe.Customer.list, email=email, limit=1)
 
-        if customers.data:
+        if getattr(customers, "data", None):
             return customers.data[0]
-        else:
-            # Create new customer
-            return stripe.Customer.create(
-                email=email,
-                metadata={"source": "myroofgenius"}
-            )
+
+        return await asyncio.to_thread(
+            stripe.Customer.create,
+            email=email,
+            metadata={"source": "myroofgenius"},
+        )
 
     async def _trigger_onboarding(self, customer_email: str) -> None:
         """
