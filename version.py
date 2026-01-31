@@ -2,9 +2,10 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.5.6"
-__build__ = "2026-01-30T19:25:14Z"
+__version__ = "163.5.7"
+__build__ = "2026-01-31T04:47:00Z"
 __status__ = "production"
+# v163.5.7: Fix revenue automation metrics schema drift (mrg_revenue customer_id -> tenant_id/user_id)
 # v163.5.4: AI provider reliability hardening
 # - Prefer available Anthropic model IDs (avoid deprecated/invalid model strings)
 # - Improve multi-provider fallback behavior and error visibility
