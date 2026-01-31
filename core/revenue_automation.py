@@ -177,21 +177,29 @@ class RevenueAutomation:
                 result = await handler(event.data.object)
 
                 # Record webhook processing
-                with SessionLocal() as db:
-                    db.execute(text("""
-                        INSERT INTO stripe_webhook_events (
-                            id, event_id, event_type, status,
-                            processed_at
-                        ) VALUES (
-                            :id, :event_id, :event_type, 'processed',
-                            CURRENT_TIMESTAMP
+                def _record_webhook_event():
+                    with SessionLocal() as db:
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO stripe_webhook_events (
+                                    id, event_id, event_type, status,
+                                    processed_at
+                                ) VALUES (
+                                    :id, :event_id, :event_type, 'processed',
+                                    CURRENT_TIMESTAMP
+                                )
+                                """
+                            ),
+                            {
+                                "id": str(uuid.uuid4()),
+                                "event_id": event.id,
+                                "event_type": event.type,
+                            },
                         )
-                    """), {
-                        "id": str(uuid.uuid4()),
-                        "event_id": event.id,
-                        "event_type": event.type
-                    })
-                    db.commit()
+                        db.commit()
+
+                await asyncio.to_thread(_record_webhook_event)
 
                 return result
             else:
@@ -212,57 +220,75 @@ class RevenueAutomation:
         customer_email = session.get("customer_email")
         subscription_id = session.get("subscription")
 
-        with SessionLocal() as db:
-            # Update tenant with Stripe details
-            db.execute(text("""
-                UPDATE tenants
-                SET stripe_customer_id = :customer_id,
-                    stripe_subscription_id = :subscription_id,
-                    subscription_status = 'active',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE email = :email
-            """), {
-                "customer_id": session.get("customer"),
-                "subscription_id": subscription_id,
-                "email": customer_email
-            })
-
-            # Create payment record
-            db.execute(text("""
-                INSERT INTO stripe_payments (
-                    id, customer_email, amount, currency,
-                    status, stripe_payment_id, created_at
-                ) VALUES (
-                    :id, :email, :amount, :currency,
-                    'succeeded', :payment_id, CURRENT_TIMESTAMP
+        def _record_checkout_completion():
+            with SessionLocal() as db:
+                # Update tenant with Stripe details
+                db.execute(
+                    text(
+                        """
+                        UPDATE tenants
+                        SET stripe_customer_id = :customer_id,
+                            stripe_subscription_id = :subscription_id,
+                            subscription_status = 'active',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE email = :email
+                        """
+                    ),
+                    {
+                        "customer_id": session.get("customer"),
+                        "subscription_id": subscription_id,
+                        "email": customer_email,
+                    },
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "email": customer_email,
-                "amount": session.get("amount_total", 0) / 100,
-                "currency": session.get("currency", "usd"),
-                "payment_id": session.get("payment_intent")
-            })
 
-            # Record revenue
-            db.execute(text("""
-                INSERT INTO mrg_revenue (
-                    id, customer_id, amount, source,
-                    description, created_at
-                ) VALUES (
-                    :id,
-                    (SELECT id FROM tenants WHERE email = :email LIMIT 1),
-                    :amount, 'stripe', :description,
-                    CURRENT_TIMESTAMP
+                # Create payment record
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO stripe_payments (
+                            id, customer_email, amount, currency,
+                            status, stripe_payment_id, created_at
+                        ) VALUES (
+                            :id, :email, :amount, :currency,
+                            'succeeded', :payment_id, CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "email": customer_email,
+                        "amount": session.get("amount_total", 0) / 100,
+                        "currency": session.get("currency", "usd"),
+                        "payment_id": session.get("payment_intent"),
+                    },
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "email": customer_email,
-                "amount": session.get("amount_total", 0) / 100,
-                "description": f"Subscription payment - {session.get('id')}"
-            })
 
-            db.commit()
+                # Record revenue
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO mrg_revenue (
+                            id, customer_id, amount, source,
+                            description, created_at
+                        ) VALUES (
+                            :id,
+                            (SELECT id FROM tenants WHERE email = :email LIMIT 1),
+                            :amount, 'stripe', :description,
+                            CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "email": customer_email,
+                        "amount": session.get("amount_total", 0) / 100,
+                        "description": f"Subscription payment - {session.get('id')}",
+                    },
+                )
+
+                db.commit()
+
+        await asyncio.to_thread(_record_checkout_completion)
 
         # Trigger onboarding workflow
         await self._trigger_onboarding(customer_email)
@@ -273,33 +299,44 @@ class RevenueAutomation:
         """
         Handle successful payment
         """
-        with SessionLocal() as db:
-            # Update payment status
-            db.execute(text("""
-                UPDATE stripe_payments
-                SET status = 'succeeded',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE stripe_payment_id = :payment_id
-            """), {
-                "payment_id": invoice.get("payment_intent")
-            })
-
-            # Update revenue metrics
-            db.execute(text("""
-                INSERT INTO revenue_metrics (
-                    id, metric_type, value, date,
-                    created_at
-                ) VALUES (
-                    :id, 'daily_revenue', :amount, :date,
-                    CURRENT_TIMESTAMP
+        def _record_payment_succeeded():
+            with SessionLocal() as db:
+                # Update payment status
+                db.execute(
+                    text(
+                        """
+                        UPDATE stripe_payments
+                        SET status = 'succeeded',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stripe_payment_id = :payment_id
+                        """
+                    ),
+                    {"payment_id": invoice.get("payment_intent")},
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "amount": invoice.get("amount_paid", 0) / 100,
-                "date": datetime.utcnow().date()
-            })
 
-            db.commit()
+                # Update revenue metrics
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO revenue_metrics (
+                            id, metric_type, value, date,
+                            created_at
+                        ) VALUES (
+                            :id, 'daily_revenue', :amount, :date,
+                            CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "amount": invoice.get("amount_paid", 0) / 100,
+                        "date": datetime.utcnow().date(),
+                    },
+                )
+
+                db.commit()
+
+        await asyncio.to_thread(_record_payment_succeeded)
 
         return {"status": "processed"}
 
@@ -309,34 +346,45 @@ class RevenueAutomation:
         """
         customer_email = invoice.get("customer_email")
 
-        with SessionLocal() as db:
-            # Update payment status
-            db.execute(text("""
-                UPDATE stripe_payments
-                SET status = 'failed',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE stripe_payment_id = :payment_id
-            """), {
-                "payment_id": invoice.get("payment_intent")
-            })
-
-            # Create retry task
-            db.execute(text("""
-                INSERT INTO payment_retry_queue (
-                    id, customer_email, invoice_id,
-                    retry_count, next_retry_at, created_at
-                ) VALUES (
-                    :id, :email, :invoice_id,
-                    0, :next_retry, CURRENT_TIMESTAMP
+        def _record_payment_failed():
+            with SessionLocal() as db:
+                # Update payment status
+                db.execute(
+                    text(
+                        """
+                        UPDATE stripe_payments
+                        SET status = 'failed',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stripe_payment_id = :payment_id
+                        """
+                    ),
+                    {"payment_id": invoice.get("payment_intent")},
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "email": customer_email,
-                "invoice_id": invoice.get("id"),
-                "next_retry": datetime.utcnow() + timedelta(days=3)
-            })
 
-            db.commit()
+                # Create retry task
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO payment_retry_queue (
+                            id, customer_email, invoice_id,
+                            retry_count, next_retry_at, created_at
+                        ) VALUES (
+                            :id, :email, :invoice_id,
+                            0, :next_retry, CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "email": customer_email,
+                        "invoice_id": invoice.get("id"),
+                        "next_retry": datetime.utcnow() + timedelta(days=3),
+                    },
+                )
+
+                db.commit()
+
+        await asyncio.to_thread(_record_payment_failed)
 
         # Send payment failed notification
         await self._send_payment_failed_notification(customer_email)
@@ -347,26 +395,34 @@ class RevenueAutomation:
         """
         Handle new subscription creation
         """
-        with SessionLocal() as db:
-            db.execute(text("""
-                INSERT INTO stripe_subscriptions (
-                    id, stripe_subscription_id, customer_id,
-                    status, current_period_start, current_period_end,
-                    created_at
-                ) VALUES (
-                    :id, :subscription_id, :customer_id,
-                    :status, :period_start, :period_end,
-                    CURRENT_TIMESTAMP
+        def _record_subscription_created():
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO stripe_subscriptions (
+                            id, stripe_subscription_id, customer_id,
+                            status, current_period_start, current_period_end,
+                            created_at
+                        ) VALUES (
+                            :id, :subscription_id, :customer_id,
+                            :status, :period_start, :period_end,
+                            CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "subscription_id": subscription.get("id"),
+                        "customer_id": subscription.get("customer"),
+                        "status": subscription.get("status"),
+                        "period_start": datetime.fromtimestamp(subscription.get("current_period_start")),
+                        "period_end": datetime.fromtimestamp(subscription.get("current_period_end")),
+                    },
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "subscription_id": subscription.get("id"),
-                "customer_id": subscription.get("customer"),
-                "status": subscription.get("status"),
-                "period_start": datetime.fromtimestamp(subscription.get("current_period_start")),
-                "period_end": datetime.fromtimestamp(subscription.get("current_period_end"))
-            })
-            db.commit()
+                db.commit()
+
+        await asyncio.to_thread(_record_subscription_created)
 
         return {"status": "processed"}
 
@@ -374,21 +430,29 @@ class RevenueAutomation:
         """
         Handle subscription update
         """
-        with SessionLocal() as db:
-            db.execute(text("""
-                UPDATE stripe_subscriptions
-                SET status = :status,
-                    current_period_start = :period_start,
-                    current_period_end = :period_end,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE stripe_subscription_id = :subscription_id
-            """), {
-                "subscription_id": subscription.get("id"),
-                "status": subscription.get("status"),
-                "period_start": datetime.fromtimestamp(subscription.get("current_period_start")),
-                "period_end": datetime.fromtimestamp(subscription.get("current_period_end"))
-            })
-            db.commit()
+        def _record_subscription_updated():
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        UPDATE stripe_subscriptions
+                        SET status = :status,
+                            current_period_start = :period_start,
+                            current_period_end = :period_end,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stripe_subscription_id = :subscription_id
+                        """
+                    ),
+                    {
+                        "subscription_id": subscription.get("id"),
+                        "status": subscription.get("status"),
+                        "period_start": datetime.fromtimestamp(subscription.get("current_period_start")),
+                        "period_end": datetime.fromtimestamp(subscription.get("current_period_end")),
+                    },
+                )
+                db.commit()
+
+        await asyncio.to_thread(_record_subscription_updated)
 
         return {"status": "processed"}
 
@@ -396,29 +460,38 @@ class RevenueAutomation:
         """
         Handle subscription cancellation
         """
-        with SessionLocal() as db:
-            # Update subscription status
-            db.execute(text("""
-                UPDATE stripe_subscriptions
-                SET status = 'cancelled',
-                    cancelled_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE stripe_subscription_id = :subscription_id
-            """), {
-                "subscription_id": subscription.get("id")
-            })
+        def _record_subscription_cancelled():
+            with SessionLocal() as db:
+                # Update subscription status
+                db.execute(
+                    text(
+                        """
+                        UPDATE stripe_subscriptions
+                        SET status = 'cancelled',
+                            cancelled_at = CURRENT_TIMESTAMP,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stripe_subscription_id = :subscription_id
+                        """
+                    ),
+                    {"subscription_id": subscription.get("id")},
+                )
 
-            # Update tenant status
-            db.execute(text("""
-                UPDATE tenants
-                SET subscription_status = 'cancelled',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE stripe_subscription_id = :subscription_id
-            """), {
-                "subscription_id": subscription.get("id")
-            })
+                # Update tenant status
+                db.execute(
+                    text(
+                        """
+                        UPDATE tenants
+                        SET subscription_status = 'cancelled',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stripe_subscription_id = :subscription_id
+                        """
+                    ),
+                    {"subscription_id": subscription.get("id")},
+                )
 
-            db.commit()
+                db.commit()
+
+        await asyncio.to_thread(_record_subscription_cancelled)
 
         # Trigger retention workflow
         await self._trigger_retention_workflow(subscription.get("customer"))
@@ -445,172 +518,219 @@ class RevenueAutomation:
         """
         Trigger customer onboarding workflow
         """
-        with SessionLocal() as db:
-            db.execute(text("""
-                INSERT INTO workflow_queue (
-                    id, workflow_type, entity_id,
-                    context, status, created_at
-                ) VALUES (
-                    :id, 'customer_onboarding', :entity_id,
-                    :context, 'pending', CURRENT_TIMESTAMP
+        def _enqueue_onboarding_workflow():
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO workflow_queue (
+                            id, workflow_type, entity_id,
+                            context, status, created_at
+                        ) VALUES (
+                            :id, 'customer_onboarding', :entity_id,
+                            :context, 'pending', CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "entity_id": customer_email,
+                        "context": json.dumps({"email": customer_email}),
+                    },
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "entity_id": customer_email,
-                "context": json.dumps({"email": customer_email})
-            })
-            db.commit()
+                db.commit()
+
+        await asyncio.to_thread(_enqueue_onboarding_workflow)
 
     async def _send_payment_failed_notification(self, customer_email: str) -> None:
         """
         Send payment failed notification
         """
-        with SessionLocal() as db:
-            db.execute(text("""
-                INSERT INTO email_queue (
-                    id, recipient_email, template,
-                    status, created_at
-                ) VALUES (
-                    :id, :email, 'payment_failed',
-                    'pending', CURRENT_TIMESTAMP
+        def _enqueue_payment_failed_email():
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO email_queue (
+                            id, recipient_email, template,
+                            status, created_at
+                        ) VALUES (
+                            :id, :email, 'payment_failed',
+                            'pending', CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {"id": str(uuid.uuid4()), "email": customer_email},
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "email": customer_email
-            })
-            db.commit()
+                db.commit()
+
+        await asyncio.to_thread(_enqueue_payment_failed_email)
 
     async def _trigger_retention_workflow(self, customer_id: str) -> None:
         """
         Trigger customer retention workflow
         """
-        with SessionLocal() as db:
-            db.execute(text("""
-                INSERT INTO workflow_queue (
-                    id, workflow_type, entity_id,
-                    context, status, created_at
-                ) VALUES (
-                    :id, 'retention_campaign', :entity_id,
-                    :context, 'pending', CURRENT_TIMESTAMP
+        def _enqueue_retention_workflow():
+            with SessionLocal() as db:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO workflow_queue (
+                            id, workflow_type, entity_id,
+                            context, status, created_at
+                        ) VALUES (
+                            :id, 'retention_campaign', :entity_id,
+                            :context, 'pending', CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "entity_id": customer_id,
+                        "context": json.dumps({"customer_id": customer_id}),
+                    },
                 )
-            """), {
-                "id": str(uuid.uuid4()),
-                "entity_id": customer_id,
-                "context": json.dumps({"customer_id": customer_id})
-            })
-            db.commit()
+                db.commit()
+
+        await asyncio.to_thread(_enqueue_retention_workflow)
 
     async def process_payment_retries(self) -> Dict[str, Any]:
         """
         Process failed payment retries
         """
-        with SessionLocal() as db:
-            # Get payments to retry
-            retries = db.execute(text("""
-                SELECT * FROM payment_retry_queue
-                WHERE next_retry_at <= CURRENT_TIMESTAMP
-                AND retry_count < 3
-                AND status = 'pending'
-                LIMIT 10
-            """)).fetchall()
+        def _process():
+            with SessionLocal() as db:
+                # Get payments to retry
+                retries = db.execute(
+                    text(
+                        """
+                        SELECT * FROM payment_retry_queue
+                        WHERE next_retry_at <= CURRENT_TIMESTAMP
+                        AND retry_count < 3
+                        AND status = 'pending'
+                        LIMIT 10
+                        """
+                    )
+                ).fetchall()
 
-            processed = 0
-            for retry in retries:
-                try:
-                    # Attempt to collect payment
-                    invoice = stripe.Invoice.retrieve(retry.invoice_id)
-                    invoice.pay()
+                processed = 0
+                for retry in retries:
+                    try:
+                        # Stripe SDK is synchronous; run inside the worker thread.
+                        invoice = stripe.Invoice.retrieve(retry.invoice_id)
+                        invoice.pay()
 
-                    # Update retry status
-                    db.execute(text("""
-                        UPDATE payment_retry_queue
-                        SET status = 'succeeded',
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = :id
-                    """), {"id": retry.id})
+                        # Update retry status
+                        db.execute(
+                            text(
+                                """
+                                UPDATE payment_retry_queue
+                                SET status = 'succeeded',
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = :id
+                                """
+                            ),
+                            {"id": retry.id},
+                        )
 
-                    processed += 1
+                        processed += 1
 
-                except stripe.error.StripeError as e:
-                    # Update retry count
-                    db.execute(text("""
-                        UPDATE payment_retry_queue
-                        SET retry_count = retry_count + 1,
-                            next_retry_at = :next_retry,
-                            last_error = :error,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = :id
-                    """), {
-                        "id": retry.id,
-                        "next_retry": datetime.utcnow() + timedelta(days=3),
-                        "error": str(e)
-                    })
+                    except stripe.error.StripeError as e:
+                        # Update retry count
+                        db.execute(
+                            text(
+                                """
+                                UPDATE payment_retry_queue
+                                SET retry_count = retry_count + 1,
+                                    next_retry_at = :next_retry,
+                                    last_error = :error,
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = :id
+                                """
+                            ),
+                            {
+                                "id": retry.id,
+                                "next_retry": datetime.utcnow() + timedelta(days=3),
+                                "error": str(e),
+                            },
+                        )
 
-            db.commit()
+                db.commit()
 
-            return {
-                "processed": processed,
-                "total_retries": len(retries)
-            }
+                return {"processed": processed, "total_retries": len(retries)}
+
+        return await asyncio.to_thread(_process)
 
     async def get_revenue_metrics(self) -> Dict[str, Any]:
         """
         Get revenue metrics and analytics
         """
-        with SessionLocal() as db:
-            # Get current month metrics
-            metrics = db.execute(text("""
-                SELECT
-                    COUNT(DISTINCT customer_id) as customers,
-                    SUM(amount) as total_revenue,
-                    AVG(amount) as avg_transaction,
-                    COUNT(*) as transactions
-                FROM mrg_revenue
-                WHERE created_at >= date_trunc('month', CURRENT_DATE)
-            """)).fetchone()
+        def _query():
+            with SessionLocal() as db:
+                # Get current month metrics
+                metrics = db.execute(
+                    text(
+                        """
+                        SELECT
+                            COUNT(DISTINCT customer_id) as customers,
+                            SUM(amount) as total_revenue,
+                            AVG(amount) as avg_transaction,
+                            COUNT(*) as transactions
+                        FROM mrg_revenue
+                        WHERE created_at >= date_trunc('month', CURRENT_DATE)
+                        """
+                    )
+                ).fetchone()
 
-            # Get MRR (Monthly Recurring Revenue)
-            mrr = db.execute(text("""
-                SELECT
-                    COUNT(*) as active_subscriptions,
-                    SUM(CASE
-                        WHEN subscription_tier = 'starter' THEN 199
-                        WHEN subscription_tier = 'professional' THEN 399
-                        WHEN subscription_tier = 'enterprise' THEN 999
-                        ELSE 0
-                    END) as mrr
-                FROM tenants
-                WHERE subscription_status = 'active'
-            """)).fetchone()
+                # Get MRR (Monthly Recurring Revenue)
+                mrr = db.execute(
+                    text(
+                        """
+                        SELECT
+                            COUNT(*) as active_subscriptions,
+                            SUM(CASE
+                                WHEN subscription_tier = 'starter' THEN 199
+                                WHEN subscription_tier = 'professional' THEN 399
+                                WHEN subscription_tier = 'enterprise' THEN 999
+                                ELSE 0
+                            END) as mrr
+                        FROM tenants
+                        WHERE subscription_status = 'active'
+                        """
+                    )
+                ).fetchone()
 
-            # Get growth metrics
-            growth = db.execute(text("""
-                SELECT
-                    date_trunc('month', created_at) as month,
-                    SUM(amount) as revenue
-                FROM mrg_revenue
-                WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
-                GROUP BY month
-                ORDER BY month
-            """)).fetchall()
+                # Get growth metrics
+                growth = db.execute(
+                    text(
+                        """
+                        SELECT
+                            date_trunc('month', created_at) as month,
+                            SUM(amount) as revenue
+                        FROM mrg_revenue
+                        WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
+                        GROUP BY month
+                        ORDER BY month
+                        """
+                    )
+                ).fetchall()
 
-            return {
-                "current_month": {
-                    "customers": metrics.customers or 0,
-                    "revenue": float(metrics.total_revenue or 0),
-                    "avg_transaction": float(metrics.avg_transaction or 0),
-                    "transactions": metrics.transactions or 0
-                },
-                "mrr": {
-                    "value": float(mrr.mrr or 0),
-                    "subscriptions": mrr.active_subscriptions or 0
-                },
-                "growth": [
-                    {"month": g.month.strftime("%Y-%m"), "revenue": float(g.revenue)}
-                    for g in growth
-                ],
-                "timestamp": datetime.utcnow().isoformat()
-            }
+                return {
+                    "current_month": {
+                        "customers": metrics.customers or 0,
+                        "revenue": float(metrics.total_revenue or 0),
+                        "avg_transaction": float(metrics.avg_transaction or 0),
+                        "transactions": metrics.transactions or 0,
+                    },
+                    "mrr": {
+                        "value": float(mrr.mrr or 0),
+                        "subscriptions": mrr.active_subscriptions or 0,
+                    },
+                    "growth": [{"month": g.month.strftime("%Y-%m"), "revenue": float(g.revenue)} for g in growth],
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+        return await asyncio.to_thread(_query)
 
 
 # Singleton instance
