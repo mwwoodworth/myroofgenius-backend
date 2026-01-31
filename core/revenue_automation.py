@@ -268,13 +268,27 @@ class RevenueAutomation:
                     text(
                         """
                         INSERT INTO mrg_revenue (
-                            id, customer_id, amount, source,
-                            description, created_at
+                            id, tenant_id, user_id,
+                            amount, currency, type,
+                            description,
+                            stripe_payment_intent_id,
+                            status,
+                            paid_at,
+                            created_at,
+                            metadata
                         ) VALUES (
                             :id,
                             (SELECT id FROM tenants WHERE email = :email LIMIT 1),
-                            :amount, 'stripe', :description,
-                            CURRENT_TIMESTAMP
+                            NULL,
+                            :amount,
+                            :currency,
+                            'stripe_checkout',
+                            :description,
+                            :payment_intent_id,
+                            'succeeded',
+                            CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP,
+                            :metadata::jsonb
                         )
                         """
                     ),
@@ -282,7 +296,16 @@ class RevenueAutomation:
                         "id": str(uuid.uuid4()),
                         "email": customer_email,
                         "amount": session.get("amount_total", 0) / 100,
-                        "description": f"Subscription payment - {session.get('id')}",
+                        "currency": session.get("currency", "usd"),
+                        "payment_intent_id": session.get("payment_intent"),
+                        "description": f"Subscription checkout - {session.get('id')}",
+                        "metadata": json.dumps(
+                            {
+                                "checkout_session_id": session.get("id"),
+                                "stripe_customer_id": session.get("customer"),
+                                "customer_email": customer_email,
+                            }
+                        ),
                     },
                 )
 
@@ -672,7 +695,7 @@ class RevenueAutomation:
                     text(
                         """
                         SELECT
-                            COUNT(DISTINCT customer_id) as customers,
+                            COUNT(DISTINCT COALESCE(user_id, tenant_id)) as customers,
                             SUM(amount) as total_revenue,
                             AVG(amount) as avg_transaction,
                             COUNT(*) as transactions
