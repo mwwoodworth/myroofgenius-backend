@@ -171,29 +171,29 @@ async def handle_checkout_completed(db: Session, data: dict):
                     "tenant_id": tenant_id
                 })
 
-            # CRITICAL: Track revenue in revenue_tracking table for MRR/ARR calculations
-            source = 'subscription' if mode == 'subscription' else 'one_time'
-            amount_cents = int(amount_total * 100)
+            # CRITICAL: Track revenue in mrg_revenue table for MRR/ARR calculations
+            revenue_type = 'subscription' if mode == 'subscription' else 'one_time'
 
             db.execute(text("""
-                INSERT INTO revenue_tracking (
-                    id, tenant_id, source, amount_cents, product_key,
-                    stripe_customer_id, stripe_subscription_id, user_id, plan, created_at
+                INSERT INTO mrg_revenue (
+                    id, tenant_id, amount, currency, type, description,
+                    stripe_payment_intent_id, status, created_at, paid_at, metadata
                 )
                 VALUES (
-                    :id, :tenant_id, :source, :amount_cents, :product_key,
-                    :stripe_customer_id, :stripe_subscription_id, :user_id, :plan, NOW()
+                    gen_random_uuid(), :tenant_id, :amount, 'USD', :type, :description,
+                    :payment_intent_id, 'completed', NOW(), NOW(),
+                    jsonb_build_object('product_key', :product_key, 'plan', :plan, 'stripe_customer_id', :stripe_customer_id, 'stripe_subscription_id', :stripe_subscription_id)
                 )
             """), {
-                "id": str(uuid.uuid4()),
                 "tenant_id": tenant_id,
-                "source": source,
-                "amount_cents": amount_cents,
+                "amount": amount_total,
+                "type": revenue_type,
+                "description": f"Checkout: {product_key or 'MRG Product'}",
+                "payment_intent_id": data.get('payment_intent'),
                 "product_key": product_key,
+                "plan": plan,
                 "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "user_id": user_id,
-                "plan": plan
+                "stripe_subscription_id": subscription_id
             })
 
             db.commit()
@@ -333,22 +333,23 @@ async def handle_payment_succeeded(db: Session, data: dict):
                 "subscription_id": subscription_id
             })
 
-        # Track revenue for recurring subscription payments
+        # Track revenue for recurring subscription payments in mrg_revenue
         if subscription_id:
-            amount_cents = int(amount_paid * 100)
             db.execute(text("""
-                INSERT INTO revenue_tracking (
-                    id, tenant_id, source, amount_cents, stripe_customer_id,
-                    stripe_subscription_id, created_at
+                INSERT INTO mrg_revenue (
+                    id, tenant_id, amount, currency, type, description,
+                    stripe_invoice_id, status, created_at, paid_at, metadata
                 )
                 VALUES (
-                    :id, :tenant_id, 'subscription', :amount_cents, :stripe_customer_id,
-                    :stripe_subscription_id, NOW()
+                    gen_random_uuid(), :tenant_id, :amount, 'USD', 'subscription', :description,
+                    :invoice_id, 'completed', NOW(), NOW(),
+                    jsonb_build_object('stripe_customer_id', :stripe_customer_id, 'stripe_subscription_id', :stripe_subscription_id)
                 )
             """), {
-                "id": str(uuid.uuid4()),
                 "tenant_id": tenant_id,
-                "amount_cents": amount_cents,
+                "amount": amount_paid,
+                "description": f"Subscription payment",
+                "invoice_id": invoice_id,
                 "stripe_customer_id": customer_id,
                 "stripe_subscription_id": subscription_id
             })
@@ -463,23 +464,24 @@ async def handle_payment_intent_succeeded(db: Session, data: dict):
             "tenant_id": tenant_id
         })
 
-        # Track one-time revenue
-        amount_cents = int(amount * 100)
+        # Track one-time revenue in mrg_revenue
         product_key = metadata.get('product_key')
 
         db.execute(text("""
-            INSERT INTO revenue_tracking (
-                id, tenant_id, source, amount_cents, product_key,
-                stripe_customer_id, created_at
+            INSERT INTO mrg_revenue (
+                id, tenant_id, amount, currency, type, description,
+                stripe_payment_intent_id, status, created_at, paid_at, metadata
             )
             VALUES (
-                :id, :tenant_id, 'one_time', :amount_cents, :product_key,
-                :stripe_customer_id, NOW()
+                gen_random_uuid(), :tenant_id, :amount, 'USD', 'one_time', :description,
+                :payment_intent_id, 'completed', NOW(), NOW(),
+                jsonb_build_object('product_key', :product_key, 'stripe_customer_id', :stripe_customer_id)
             )
         """), {
-            "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
-            "amount_cents": amount_cents,
+            "amount": amount,
+            "description": f"One-time payment: {product_key or 'MRG Product'}",
+            "payment_intent_id": payment_intent_id,
             "product_key": product_key,
             "stripe_customer_id": customer_id
         })
