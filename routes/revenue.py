@@ -72,6 +72,7 @@ def get_revenue_dashboard(
         raise HTTPException(status_code=403, detail="Tenant assignment required")
 
     try:
+        tenant_uuid = uuid.UUID(tenant_id)
         customers_total = db.execute(
             text("SELECT COUNT(*) FROM customers WHERE tenant_id = :tenant_id"),
             {"tenant_id": tenant_id}
@@ -194,6 +195,27 @@ def get_revenue_dashboard(
         )
         ltv = float(revenue_metrics.ltv) if revenue_metrics and revenue_metrics.ltv is not None else None
         cac = float(revenue_metrics.cac) if revenue_metrics and revenue_metrics.cac is not None else None
+
+        if mrr is None or arr is None:
+            try:
+                mrr_fallback = db.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(amount_cents), 0) / 100.0
+                        FROM revenue_tracking
+                        WHERE source = 'subscription'
+                          AND created_at >= NOW() - INTERVAL '30 days'
+                          AND tenant_id = :tenant_id
+                        """
+                    ),
+                    {"tenant_id": tenant_uuid},
+                ).scalar()
+                if mrr is None:
+                    mrr = float(mrr_fallback or 0)
+                if arr is None and mrr is not None:
+                    arr = round(mrr * 12, 2)
+            except Exception:
+                pass
 
         return {
             "mrr": mrr,
