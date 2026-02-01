@@ -127,36 +127,77 @@ async def handle_checkout_completed(db: Session, data: dict):
         customer_id = data.get('customer')
         subscription_id = data.get('subscription')
         amount_total = data.get('amount_total', 0) / 100  # Convert from cents
+        mode = data.get('mode', 'payment')  # 'payment' or 'subscription'
+
+        # CRITICAL: Extract tenant_id from metadata for revenue attribution
+        metadata = data.get('metadata', {})
+        tenant_id = metadata.get('tenant_id')
+        product_key = metadata.get('product_key')
+        plan = metadata.get('plan')
+        user_id = metadata.get('user_id')
+
+        # Default tenant for MRG if not specified (guest checkouts)
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+            logger.info(f"Using default MRG tenant for checkout: {tenant_id}")
 
         # Create or update customer
         if customer_email:
             db.execute(text("""
-                INSERT INTO customers (id, email, stripe_customer_id, created_at)
-                VALUES (:id, :email, :stripe_id, NOW())
+                INSERT INTO customers (id, email, stripe_customer_id, tenant_id, created_at)
+                VALUES (:id, :email, :stripe_id, :tenant_id, NOW())
                 ON CONFLICT (email) DO UPDATE
-                SET stripe_customer_id = :stripe_id
+                SET stripe_customer_id = :stripe_id, tenant_id = COALESCE(customers.tenant_id, :tenant_id)
             """), {
                 "id": str(uuid.uuid4()),
                 "email": customer_email,
-                "stripe_id": customer_id
+                "stripe_id": customer_id,
+                "tenant_id": tenant_id
             })
 
-            # Create subscription record
+            # Create subscription record with tenant_id
             if subscription_id:
                 db.execute(text("""
-                    INSERT INTO subscriptions (id, customer_id, stripe_subscription_id, status, amount, created_at)
-                    VALUES (:id, :customer_id, :subscription_id, 'active', :amount, NOW())
+                    INSERT INTO subscriptions (id, customer_id, stripe_subscription_id, status, amount, tenant_id, created_at)
+                    VALUES (:id, :customer_id, :subscription_id, 'active', :amount, :tenant_id, NOW())
                     ON CONFLICT (stripe_subscription_id) DO UPDATE
-                    SET status = 'active', amount = :amount
+                    SET status = 'active', amount = :amount, tenant_id = COALESCE(subscriptions.tenant_id, :tenant_id)
                 """), {
                     "id": str(uuid.uuid4()),
                     "customer_id": customer_id,
                     "subscription_id": subscription_id,
-                    "amount": amount_total
+                    "amount": amount_total,
+                    "tenant_id": tenant_id
                 })
 
+            # CRITICAL: Track revenue in revenue_tracking table for MRR/ARR calculations
+            source = 'subscription' if mode == 'subscription' else 'one_time'
+            amount_cents = int(amount_total * 100)
+
+            db.execute(text("""
+                INSERT INTO revenue_tracking (
+                    id, tenant_id, source, amount_cents, product_key,
+                    stripe_customer_id, stripe_subscription_id, user_id, plan, created_at
+                )
+                VALUES (
+                    :id, :tenant_id, :source, :amount_cents, :product_key,
+                    :stripe_customer_id, :stripe_subscription_id, :user_id, :plan, NOW()
+                )
+            """), {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "source": source,
+                "amount_cents": amount_cents,
+                "product_key": product_key,
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "user_id": user_id,
+                "plan": plan
+            })
+
             db.commit()
-            logger.info(f"Checkout completed for {customer_email}")
+            logger.info(f"Checkout completed for {customer_email} (tenant: {tenant_id}, amount: ${amount_total}, source: {source})")
 
     except Exception as e:
         logger.error(f"Error handling checkout: {str(e)}")
@@ -172,21 +213,31 @@ async def handle_subscription_created(db: Session, data: dict):
         plan_id = data.get('items', {}).get('data', [{}])[0].get('price', {}).get('id')
         amount = data.get('items', {}).get('data', [{}])[0].get('price', {}).get('unit_amount', 0) / 100
 
+        # Extract tenant_id from subscription metadata
+        metadata = data.get('metadata', {})
+        tenant_id = metadata.get('tenant_id')
+
+        # Default tenant for MRG if not specified
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+
         db.execute(text("""
-            INSERT INTO subscriptions (id, stripe_subscription_id, customer_id, plan_id, status, amount, created_at)
-            VALUES (:id, :subscription_id, :customer_id, :plan_id, :status, :amount, NOW())
+            INSERT INTO subscriptions (id, stripe_subscription_id, customer_id, plan_id, status, amount, tenant_id, created_at)
+            VALUES (:id, :subscription_id, :customer_id, :plan_id, :status, :amount, :tenant_id, NOW())
             ON CONFLICT (stripe_subscription_id) DO UPDATE
-            SET status = :status, amount = :amount
+            SET status = :status, amount = :amount, tenant_id = COALESCE(subscriptions.tenant_id, :tenant_id)
         """), {
             "id": str(uuid.uuid4()),
             "subscription_id": subscription_id,
             "customer_id": customer_id,
             "plan_id": plan_id,
             "status": status,
-            "amount": amount
+            "amount": amount,
+            "tenant_id": tenant_id
         })
         db.commit()
-        logger.info(f"Subscription created: {subscription_id}")
+        logger.info(f"Subscription created: {subscription_id} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error handling subscription creation: {str(e)}")
@@ -243,15 +294,33 @@ async def handle_payment_succeeded(db: Session, data: dict):
         amount_paid = data.get('amount_paid', 0) / 100
         subscription_id = data.get('subscription')
 
-        # Record payment
+        # Try to get tenant_id from subscription metadata or fallback to default
+        metadata = data.get('subscription_details', {}).get('metadata', {}) if data.get('subscription_details') else {}
+        tenant_id = metadata.get('tenant_id')
+
+        # If no tenant_id in metadata, try to look up from existing subscription
+        if not tenant_id and subscription_id:
+            result = db.execute(text("""
+                SELECT tenant_id FROM subscriptions WHERE stripe_subscription_id = :subscription_id
+            """), {"subscription_id": subscription_id}).first()
+            if result and result.tenant_id:
+                tenant_id = str(result.tenant_id)
+
+        # Default tenant for MRG if not specified
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+
+        # Record payment with tenant_id
         db.execute(text("""
-            INSERT INTO payments (id, invoice_id, customer_id, amount, status, created_at)
-            VALUES (:id, :invoice_id, :customer_id, :amount, 'succeeded', NOW())
+            INSERT INTO payments (id, invoice_id, customer_id, amount, status, tenant_id, created_at)
+            VALUES (:id, :invoice_id, :customer_id, :amount, 'succeeded', :tenant_id, NOW())
         """), {
             "id": str(uuid.uuid4()),
             "invoice_id": invoice_id,
             "customer_id": customer_id,
-            "amount": amount_paid
+            "amount": amount_paid,
+            "tenant_id": tenant_id
         })
 
         # Update subscription payment date
@@ -264,8 +333,28 @@ async def handle_payment_succeeded(db: Session, data: dict):
                 "subscription_id": subscription_id
             })
 
+        # Track revenue for recurring subscription payments
+        if subscription_id:
+            amount_cents = int(amount_paid * 100)
+            db.execute(text("""
+                INSERT INTO revenue_tracking (
+                    id, tenant_id, source, amount_cents, stripe_customer_id,
+                    stripe_subscription_id, created_at
+                )
+                VALUES (
+                    :id, :tenant_id, 'subscription', :amount_cents, :stripe_customer_id,
+                    :stripe_subscription_id, NOW()
+                )
+            """), {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "amount_cents": amount_cents,
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id
+            })
+
         db.commit()
-        logger.info(f"Payment succeeded: {invoice_id} for ${amount_paid}")
+        logger.info(f"Payment succeeded: {invoice_id} for ${amount_paid} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error handling payment success: {str(e)}")
@@ -315,20 +404,30 @@ async def handle_customer_created(db: Session, data: dict):
         email = data.get('email')
         name = data.get('name')
 
+        # Extract tenant_id from customer metadata
+        metadata = data.get('metadata', {})
+        tenant_id = metadata.get('tenant_id')
+
+        # Default tenant for MRG if not specified
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+
         if email:
             db.execute(text("""
-                INSERT INTO customers (id, email, name, stripe_customer_id, created_at)
-                VALUES (:id, :email, :name, :stripe_id, NOW())
+                INSERT INTO customers (id, email, name, stripe_customer_id, tenant_id, created_at)
+                VALUES (:id, :email, :name, :stripe_id, :tenant_id, NOW())
                 ON CONFLICT (email) DO UPDATE
-                SET stripe_customer_id = :stripe_id, name = COALESCE(:name, name)
+                SET stripe_customer_id = :stripe_id, name = COALESCE(:name, name), tenant_id = COALESCE(customers.tenant_id, :tenant_id)
             """), {
                 "id": str(uuid.uuid4()),
                 "email": email,
                 "name": name,
-                "stripe_id": customer_id
+                "stripe_id": customer_id,
+                "tenant_id": tenant_id
             })
             db.commit()
-            logger.info(f"Customer created: {email}")
+            logger.info(f"Customer created: {email} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error creating customer: {str(e)}")
@@ -342,19 +441,51 @@ async def handle_payment_intent_succeeded(db: Session, data: dict):
         amount = data.get('amount', 0) / 100
         customer_id = data.get('customer')
 
-        # Record one-time payment
+        # Extract tenant_id from payment intent metadata
+        metadata = data.get('metadata', {})
+        tenant_id = metadata.get('tenant_id')
+
+        # Default tenant for MRG if not specified
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+
+        # Record one-time payment with tenant_id
         db.execute(text("""
-            INSERT INTO payments (id, payment_intent_id, customer_id, amount, status, created_at)
-            VALUES (:id, :payment_intent_id, :customer_id, :amount, 'succeeded', NOW())
+            INSERT INTO payments (id, payment_intent_id, customer_id, amount, status, tenant_id, created_at)
+            VALUES (:id, :payment_intent_id, :customer_id, :amount, 'succeeded', :tenant_id, NOW())
             ON CONFLICT (payment_intent_id) DO NOTHING
         """), {
             "id": str(uuid.uuid4()),
             "payment_intent_id": payment_intent_id,
             "customer_id": customer_id,
-            "amount": amount
+            "amount": amount,
+            "tenant_id": tenant_id
         })
+
+        # Track one-time revenue
+        amount_cents = int(amount * 100)
+        product_key = metadata.get('product_key')
+
+        db.execute(text("""
+            INSERT INTO revenue_tracking (
+                id, tenant_id, source, amount_cents, product_key,
+                stripe_customer_id, created_at
+            )
+            VALUES (
+                :id, :tenant_id, 'one_time', :amount_cents, :product_key,
+                :stripe_customer_id, NOW()
+            )
+        """), {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "amount_cents": amount_cents,
+            "product_key": product_key,
+            "stripe_customer_id": customer_id
+        })
+
         db.commit()
-        logger.info(f"Payment intent succeeded: {payment_intent_id} for ${amount}")
+        logger.info(f"Payment intent succeeded: {payment_intent_id} for ${amount} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error handling payment intent: {str(e)}")
