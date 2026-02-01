@@ -197,7 +197,7 @@ async def handle_checkout_completed(db: Session, data: dict):
             })
 
             db.commit()
-            logger.info(f"Checkout completed for {customer_email} (tenant: {tenant_id}, amount: ${amount_total}, source: {source})")
+            logger.info(f"Checkout completed for {customer_email} (tenant: {tenant_id}, amount: ${amount_total}, type: {revenue_type})")
 
     except Exception as e:
         logger.error(f"Error handling checkout: {str(e)}")
