@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS payment_refunds (
     status VARCHAR(20) DEFAULT 'completed',
     gateway_response JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by UUID
+    created_by UUID,
+    tenant_id UUID NOT NULL
 );
 
 -- Payment plans table
@@ -76,7 +77,8 @@ CREATE TABLE IF NOT EXISTS payment_gateway_logs (
     response_data JSONB,
     status_code INT,
     error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    tenant_id UUID
 );
 
 -- Create indexes
@@ -89,6 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_payment_plan_installments_due_date ON payment_pla
 CREATE INDEX IF NOT EXISTS idx_saved_payment_methods_customer_id ON saved_payment_methods(customer_id);
 CREATE INDEX IF NOT EXISTS idx_payment_gateway_logs_payment_id ON payment_gateway_logs(payment_id);
 CREATE INDEX IF NOT EXISTS idx_payment_gateway_logs_created_at ON payment_gateway_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_payment_refunds_tenant_id ON payment_refunds(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_payment_gateway_logs_tenant_id ON payment_gateway_logs(tenant_id);
 
 -- Function to update payment plan status
 CREATE OR REPLACE FUNCTION update_payment_plan_status()

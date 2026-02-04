@@ -369,15 +369,39 @@ async def handle_payment_failed(db: Session, data: dict):
         customer_id = data.get('customer')
         subscription_id = data.get('subscription')
 
+        # Try to get tenant_id from subscription metadata or fallback to DB lookup
+        metadata = data.get('subscription_details', {}).get('metadata', {}) if data.get('subscription_details') else {}
+        tenant_id = metadata.get('tenant_id')
+
+        if not tenant_id and subscription_id:
+            result = db.execute(text("""
+                SELECT tenant_id FROM subscriptions WHERE stripe_subscription_id = :subscription_id
+            """), {"subscription_id": subscription_id}).first()
+            if result and result.tenant_id:
+                tenant_id = str(result.tenant_id)
+
+        if not tenant_id and customer_id:
+            result = db.execute(text("""
+                SELECT tenant_id FROM customers WHERE stripe_customer_id = :customer_id
+            """), {"customer_id": customer_id}).first()
+            if result and result.tenant_id:
+                tenant_id = str(result.tenant_id)
+
+        # Default tenant for MRG if not specified
+        MRG_DEFAULT_TENANT_ID = os.getenv('MRG_DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001')
+        if not tenant_id:
+            tenant_id = MRG_DEFAULT_TENANT_ID
+
         # Record failed payment
         db.execute(text("""
-            INSERT INTO payment_failures (id, invoice_id, customer_id, subscription_id, created_at)
-            VALUES (:id, :invoice_id, :customer_id, :subscription_id, NOW())
+            INSERT INTO payment_failures (id, invoice_id, customer_id, subscription_id, tenant_id, created_at)
+            VALUES (:id, :invoice_id, :customer_id, :subscription_id, :tenant_id, NOW())
         """), {
             "id": str(uuid.uuid4()),
             "invoice_id": invoice_id,
             "customer_id": customer_id,
-            "subscription_id": subscription_id
+            "subscription_id": subscription_id,
+            "tenant_id": tenant_id
         })
 
         # Mark subscription as past_due
