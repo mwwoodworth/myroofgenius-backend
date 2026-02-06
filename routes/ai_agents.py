@@ -22,6 +22,28 @@ router = APIRouter(prefix="/api/v1/agents", tags=["AI Agents"])
 
 agent_executor = AgentExecutionManager()
 
+# Slug to DB Name Mapping
+AGENT_SLUG_MAP = {
+    "intelligent-scheduler": "IntelligentScheduler",
+    "lead-scorer": "LeadScorer",
+    "customer-health": "CustomerIntelligence",
+    "predictive-analyzer": "PredictiveAnalyzer",
+    "hr-analytics": "PerformanceMonitor",
+    "payroll-agent": "PayrollProcessor",
+    "onboarding-agent": "OnboardingManager",
+    "training-agent": "TrainingCoordinator",
+    "recruiting-agent": "RecruitingAgent",
+    "insights-analyzer": "InsightsAnalyzer",
+    "metrics-calculator": "MetricsCalculator",
+    "dashboard-monitor": "DashboardMonitor",
+    "dispatch-agent": "DispatchOptimizer",
+    "next-best-action": "RevenueOptimizer",
+    "notification-agent": "NotificationManager",
+    "reporting-agent": "ReportGenerator",
+    "routing-agent": "RouteOptimizer",
+    "market-analyzer": "MarketAnalyzer"
+}
+
 # ============================================================================
 # MODELS
 # ============================================================================
@@ -62,6 +84,9 @@ async def get_db_pool(request: Request):
 async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) -> Dict[str, Any]:
     """Execute an AI agent with production service or raise if unavailable."""
 
+    # Normalize slug
+    normalized_identifier = AGENT_SLUG_MAP.get(agent_identifier, agent_identifier)
+
     async with db_pool.acquire() as conn:
         agent = await conn.fetchrow(
             """
@@ -69,11 +94,24 @@ async def execute_agent(agent_identifier: str, data: Dict[str, Any], db_pool) ->
             FROM ai_agents
             WHERE id::text = $1 OR name = $1
             """,
-            agent_identifier
+            normalized_identifier
         )
 
     if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_identifier}' not found")
+        # Fallback to original identifier if normalized failed
+        if normalized_identifier != agent_identifier:
+             async with db_pool.acquire() as conn:
+                agent = await conn.fetchrow(
+                    """
+                    SELECT id, name
+                    FROM ai_agents
+                    WHERE id::text = $1 OR name = $1
+                    """,
+                    agent_identifier
+                )
+        
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_identifier}' not found (resolved: {normalized_identifier})")
 
     try:
         execution = await agent_executor.execute_agent(

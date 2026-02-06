@@ -442,17 +442,8 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Enforce authentication on all non-exempt routes.
-#
-# IMPORTANT: Starlette executes middleware in *reverse* order of registration.
-# We add AuthenticationMiddleware first, then APIKeyMiddleware, so API keys run
-# first and can satisfy auth by populating request.state.user.
-app.add_middleware(AuthenticationMiddleware)
-
-# Validate API keys for machine-to-machine traffic with caching.
-app.add_middleware(APIKeyMiddleware)
-
 # Apply rate limiting to protect public APIs
+# Added FIRST so it runs LAST (innermost), after authentication has established identity
 app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=settings.rate_limit_per_minute,
@@ -461,6 +452,14 @@ app.add_middleware(
     use_redis=bool(settings.redis_url),
     redis_url=settings.redis_url,
 )
+
+# Validate API keys for machine-to-machine traffic with caching.
+app.add_middleware(APIKeyMiddleware)
+
+# Enforce authentication on all non-exempt routes.
+# IMPORTANT: Starlette executes middleware in *reverse* order of registration.
+# We add AuthenticationMiddleware LAST so it runs FIRST.
+app.add_middleware(AuthenticationMiddleware)
 
 # Load all route modules dynamically
 dynamic_routes_loaded = False
