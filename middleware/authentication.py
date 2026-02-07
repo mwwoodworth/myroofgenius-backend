@@ -34,6 +34,7 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/webhooks/render",
     "/api/v1/revenue/webhook",
     "/webhook/stripe",
+    "/api/v1/gumroad-revenue/webhook/gumroad",  # Gumroad sale pings - no auth header
     "/api/v1/logs/vercel",  # Vercel log drain - no auth needed
     "/api/v1/logs/render",  # Render log drain - no auth needed
     "/api/v1/mcp/health",   # MCP Bridge health check - monitoring
