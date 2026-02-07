@@ -12,9 +12,11 @@ from fastapi import APIRouter, HTTPException, Depends
 import logging
 import openai
 try:
-    import google.generativeai as genai  # TODO: migrate to google.genai Client API
+    from google import genai
+    from google.genai import types
 except ImportError:
     genai = None
+    types = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ class BrainOpsCNS:
         self.db_pool = db_pool
         self.initialized = False
         self._openai_client = None
-        self._gemini_configured = False
+        self._gemini_client = None
         self._active_provider = None
 
         # Load API keys
@@ -40,14 +42,13 @@ class BrainOpsCNS:
 
         if self._gemini_key and genai is not None:
             try:
-                genai.configure(api_key=self._gemini_key)
-                self._gemini_configured = True
+                self._gemini_client = genai.Client(api_key=self._gemini_key)
                 # Never log key material (even partially).
                 logger.info("CNS: GEMINI_API_KEY loaded (redacted)")
             except Exception as e:
                 logger.warning(f"CNS: Failed to configure Gemini: {e}")
 
-        if not self._openai_key and not self._gemini_configured:
+        if not self._openai_key and not self._gemini_client:
             logger.warning("CNS: No AI provider configured - embeddings will fail")
 
     async def initialize(self):
@@ -105,24 +106,30 @@ class BrainOpsCNS:
 
     async def _generate_embedding_gemini(self, text: str) -> Optional[List[float]]:
         """Generate embedding using Gemini."""
-        if not self._gemini_configured:
+        if not self._gemini_client:
             return None
         try:
             # Gemini embeddings are synchronous, run in executor
             import asyncio
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: genai.embed_content(
+            
+            def call_gemini():
+                if types is None:
+                    return None
+                return self._gemini_client.models.embed_content(
                     model="models/gemini-embedding-001",
-                    content=text[:30000],
-                    task_type="retrieval_document",
-                    output_dimensionality=1536,
+                    contents=text[:30000],
+                    config=types.EmbedContentConfig(
+                        task_type="RETRIEVAL_DOCUMENT",
+                        output_dimensionality=1536,
+                    )
                 )
-            )
-            if result and "embedding" in result:
+
+            result = await loop.run_in_executor(None, call_gemini)
+            
+            if result and result.embeddings:
                 self._active_provider = "gemini"
-                return result["embedding"]
+                return result.embeddings[0].values
         except Exception as exc:
             logger.error(f"Gemini embedding failed: {exc}")
         return None
