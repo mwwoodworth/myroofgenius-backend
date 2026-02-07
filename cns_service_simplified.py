@@ -11,7 +11,10 @@ from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 import logging
 import openai
-import google.generativeai as genai
+try:
+    import google.generativeai as genai  # TODO: migrate to google.genai Client API
+except ImportError:
+    genai = None
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ class BrainOpsCNS:
             # Never log key material (even partially).
             logger.info("CNS: OPENAI_API_KEY loaded (redacted)")
 
-        if self._gemini_key:
+        if self._gemini_key and genai is not None:
             try:
                 genai.configure(api_key=self._gemini_key)
                 self._gemini_configured = True
