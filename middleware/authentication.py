@@ -1,6 +1,7 @@
 """Request authentication middleware enforcing Supabase JWT validation."""
 
 import os
+import uuid
 from fastapi import HTTPException
 from typing import Iterable, Optional, Sequence, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -24,6 +25,8 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/api/v1/health",
     "/ready",
     "/api/v1/ready",
+    "/api/v1/auth/health",
+    "/api/v1/auth/login",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -52,6 +55,18 @@ DEFAULT_EXEMPT_PREFIXES: Sequence[str] = (
     "/api/v1/erp/public",
     "/api/v1/products/public",
 )
+
+def _resolve_master_tenant_id() -> Optional[str]:
+    for key in ("BACKEND_INTERNAL_TENANT_ID", "DEFAULT_TENANT_ID", "MRG_DEFAULT_TENANT_ID"):
+        value = (os.getenv(key) or "").strip()
+        if not value:
+            continue
+        try:
+            uuid.UUID(value)
+        except ValueError:
+            continue
+        return value
+    return None
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -92,10 +107,22 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 api_key = auth_header.split(" ", 1)[1]
 
         # MASTER KEY OVERRIDE (from environment variable)
-        master_key = os.getenv("MASTER_API_KEY")
+        master_key = (os.getenv("MASTER_API_KEY") or "").strip() or (os.getenv("BRAINOPS_API_KEY") or "").strip()
         if master_key and api_key == master_key:
             # Allow access as system admin
-            request.state.user = {"id": "system", "role": "admin", "tenant_id": "system"}
+            tenant_id = _resolve_master_tenant_id()
+            request.state.user = {
+                "id": "system",
+                "email": "system@brainops.local",
+                "role": "admin",
+                "tenant_id": tenant_id,
+                "user_metadata": {"tenant_id": tenant_id, "role": "admin"},
+                "app_metadata": {"tenant_id": tenant_id, "role": "admin"},
+            }
+            request.state.authenticated = True
+            if tenant_id:
+                request.state.tenant_id = tenant_id
+            request.state.user_id = "system"
             return await call_next(request)
 
         if api_key:

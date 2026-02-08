@@ -11,7 +11,7 @@ import os
 import json
 import logging
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sqlalchemy import Column, String, Integer, Float, Boolean, JSON, DateTime, ForeignKey, Text, Date, text
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.dialects.postgresql import UUID
@@ -399,51 +399,122 @@ async def get_revenue_metrics(
         # Ensure UUID type consistency
         tenant_uuid = uuid.UUID(tenant_id)
 
-        # Today's revenue
-        today_revenue = db.query(RevenueTracking).filter(
-            RevenueTracking.date == datetime.utcnow().date(),
-            RevenueTracking.tenant_id == tenant_uuid
-        ).with_entities(text("COALESCE(SUM(amount_cents), 0) / 100.0")).scalar()
-        
-        # This month's revenue
-        month_revenue = db.query(RevenueTracking).filter(
-            RevenueTracking.date >= datetime.utcnow().replace(day=1).date(),
-            RevenueTracking.tenant_id == tenant_uuid
-        ).with_entities(text("COALESCE(SUM(amount_cents), 0) / 100.0")).scalar()
-        
-        # Active subscriptions
-        active_subs = db.query(Subscription).filter(
-            Subscription.status == 'active',
-            Subscription.tenant_id == tenant_uuid
-        ).count()
-        
-        # Conversion rate
-        cutoff = datetime.utcnow() - timedelta(days=30)
-        total_sessions = db.query(CheckoutSession).filter(
-            CheckoutSession.created_at >= cutoff,
-            CheckoutSession.tenant_id == tenant_uuid
-        ).count()
-        completed_sessions = db.query(CheckoutSession).filter(
-            CheckoutSession.created_at >= cutoff,
-            CheckoutSession.status == 'completed',
-            CheckoutSession.tenant_id == tenant_uuid
-        ).count()
-        
-        conversion_rate = (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0
+        # Stripe revenue in prod is recorded in `subscriptions` (tenant-scoped).
+        today_revenue = float(
+            db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(COALESCE(amount, 0)), 0)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
+                      AND last_payment_at::date = CURRENT_DATE
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
 
-        # MRR calculation (Simplified based on local data for speed)
-        # For SaaS metrics, we rely on active subscriptions in DB
-        # This avoids slow Stripe calls in the dashboard loop
-        # (Assuming we have price stored or can infer it. For now, returning None or basic)
-        mrr = None
+        month_revenue = float(
+            db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(COALESCE(amount, 0)), 0)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
+                      AND last_payment_at >= DATE_TRUNC('month', NOW())
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+
+        active_subs = int(
+            db.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status = 'active'
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+
+        # Conversion rate is tenant-scoped from our own checkout session tracking.
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        total_sessions = int(
+            db.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM checkout_sessions
+                    WHERE created_at >= :cutoff
+                      AND tenant_id = :tenant_id
+                    """
+                ),
+                {"cutoff": cutoff, "tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+        completed_sessions = int(
+            db.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM checkout_sessions
+                    WHERE created_at >= :cutoff
+                      AND status = 'completed'
+                      AND tenant_id = :tenant_id
+                    """
+                ),
+                {"cutoff": cutoff, "tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+
+        conversion_rate = (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0.0
+
+        mrr = float(
+            db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(
+                      CASE
+                        WHEN COALESCE(billing_cycle, 'monthly') ILIKE 'month%%' THEN COALESCE(amount, 0)
+                        WHEN COALESCE(billing_cycle, '') ILIKE 'year%%'
+                          OR COALESCE(billing_cycle, '') ILIKE 'ann%%'
+                          THEN COALESCE(amount, 0) / 12.0
+                        ELSE 0
+                      END
+                    ), 0)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
         
         return {
-            "today_revenue": float(today_revenue) if today_revenue else 0,
-            "month_revenue": float(month_revenue) if month_revenue else 0,
+            "today_revenue": round(today_revenue, 2),
+            "month_revenue": round(month_revenue, 2),
             "active_subscriptions": active_subs,
             "conversion_rate": round(conversion_rate, 2),
-            "mrr": mrr,
-            "mrr_source": "database",
+            "mrr": round(mrr, 2),
+            "mrr_source": "subscriptions",
             "targets": None,
         }
     except Exception as e:

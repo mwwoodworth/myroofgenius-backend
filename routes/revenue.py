@@ -158,67 +158,74 @@ def get_revenue_dashboard(
         if last_month_revenue > 0:
             growth_rate = ((current_month_revenue - last_month_revenue) / last_month_revenue) * 100
 
-        # Prefer precomputed metrics if present.
-        revenue_metrics = None
-        try:
-            revenue_metrics = db.execute(
+        # Compute subscription KPIs directly from the canonical `subscriptions` table.
+        # `revenue_metrics` is a global key/value table in prod and is not tenant-scoped.
+        active_subscriptions = int(
+            db.execute(
                 text(
                     """
-                    SELECT mrr, arr, churn_rate, ltv, cac
-                    FROM revenue_metrics
+                    SELECT COUNT(*)
+                    FROM subscriptions
                     WHERE tenant_id = :tenant_id
-                    ORDER BY metric_date DESC
-                    LIMIT 1
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
                     """
                 ),
-                {"tenant_id": tenant_id}
-            ).first()
-        except Exception:
-            revenue_metrics = None
-
-        # Subscription metrics are schema-dependent; compute what we can without hardcoded plan pricing.
-        active_subscriptions = None
-        try:
-            active_subscriptions = db.execute(
-                text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active' AND tenant_id = :tenant_id"),
-                {"tenant_id": tenant_id}
+                {"tenant_id": tenant_uuid},
             ).scalar()
-        except Exception:
-            active_subscriptions = None
-
-        mrr = float(revenue_metrics.mrr) if revenue_metrics and revenue_metrics.mrr is not None else None
-        arr = float(revenue_metrics.arr) if revenue_metrics and revenue_metrics.arr is not None else None
-        churn_rate = (
-            float(revenue_metrics.churn_rate)
-            if revenue_metrics and revenue_metrics.churn_rate is not None
-            else None
+            or 0
         )
-        ltv = float(revenue_metrics.ltv) if revenue_metrics and revenue_metrics.ltv is not None else None
-        cac = float(revenue_metrics.cac) if revenue_metrics and revenue_metrics.cac is not None else None
 
-        if mrr is None or arr is None:
-            try:
-                mrr_fallback = db.execute(
-                    text(
-                        """
-                        SELECT COALESCE(SUM(amount_cents), 0) / 100.0
-                        FROM revenue_tracking
-                        WHERE source = 'subscription'
-                          AND created_at >= NOW() - INTERVAL '30 days'
-                          AND tenant_id = :tenant_id
-                        """
-                    ),
-                    {"tenant_id": tenant_uuid},
-                ).scalar()
-                if mrr is None:
-                    mrr = float(mrr_fallback or 0)
-                if arr is None and mrr is not None:
-                    arr = round(mrr * 12, 2)
-            except Exception:
-                pass
+        mrr = float(
+            db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(
+                      CASE
+                        WHEN COALESCE(billing_cycle, 'monthly') ILIKE 'month%%' THEN COALESCE(amount, 0)
+                        WHEN COALESCE(billing_cycle, '') ILIKE 'year%%'
+                          OR COALESCE(billing_cycle, '') ILIKE 'ann%%'
+                          THEN COALESCE(amount, 0) / 12.0
+                        ELSE 0
+                      END
+                    ), 0)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+        arr = round(mrr * 12, 2)
+
+        canceled_30d = int(
+            db.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND COALESCE(canceled_at, cancelled_at) >= NOW() - INTERVAL '30 days'
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+        churn_rate = 0.0
+        if active_subscriptions + canceled_30d > 0:
+            churn_rate = round((canceled_30d / (active_subscriptions + canceled_30d)) * 100, 2)
+
+        # These require attribution of spend + retention cohorts; keep nullable until implemented.
+        ltv = None
+        cac = None
 
         return {
-            "mrr": mrr,
+            "mrr": round(mrr, 2),
             "arr": arr,
             "customers": customers_total,
             "new_customers": new_customers,
@@ -256,42 +263,53 @@ def get_metrics(
             ).scalar() or 0
         )
 
-        customers = None
-        try:
-            customers = (
-                db.execute(
-                    text("SELECT COUNT(*) FROM subscriptions WHERE status = 'active' AND tenant_id = :tenant_id"),
-                    {"tenant_id": tenant_id}
-                ).scalar()
-                or 0
-            )
-        except Exception:
-            customers = None
+        tenant_uuid = uuid.UUID(tenant_id)
 
-        mrr = None
-        try:
-            mrr_row = db.execute(
+        customers = int(
+            db.execute(
                 text(
                     """
-                    SELECT mrr
-                    FROM revenue_metrics
+                    SELECT COUNT(*)
+                    FROM subscriptions
                     WHERE tenant_id = :tenant_id
-                    ORDER BY metric_date DESC
-                    LIMIT 1
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
                     """
                 ),
-                {"tenant_id": tenant_id}
-            ).first()
-            if mrr_row and mrr_row.mrr is not None:
-                mrr = float(mrr_row.mrr)
-        except Exception:
-            mrr = None
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+
+        mrr = float(
+            db.execute(
+                text(
+                    """
+                    SELECT COALESCE(SUM(
+                      CASE
+                        WHEN COALESCE(billing_cycle, 'monthly') ILIKE 'month%%' THEN COALESCE(amount, 0)
+                        WHEN COALESCE(billing_cycle, '') ILIKE 'year%%'
+                          OR COALESCE(billing_cycle, '') ILIKE 'ann%%'
+                          THEN COALESCE(amount, 0) / 12.0
+                        ELSE 0
+                      END
+                    ), 0)
+                    FROM subscriptions
+                    WHERE tenant_id = :tenant_id
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
+                    """
+                ),
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
 
         return {
             "total_leads": total_leads,
             "leads_today": leads_today,
             "customers": customers,
-            "mrr": mrr,
+            "mrr": round(mrr, 2),
         }
     except Exception as e:
         logger.error(f"Error getting metrics: {e}")
@@ -308,6 +326,7 @@ def get_revenue_stats(
         raise HTTPException(status_code=403, detail="Tenant assignment required")
 
     try:
+        tenant_uuid = uuid.UUID(tenant_id)
         current_revenue = db.execute(
             text(
                 """
@@ -318,10 +337,10 @@ def get_revenue_stats(
                 WHERE (status = 'paid' OR payment_status = 'paid')
                 AND created_at >= DATE_TRUNC('month', CURRENT_DATE)
                 AND tenant_id = :tenant_id
-                """
-            ),
-            {"tenant_id": tenant_id}
-        ).first()
+            """
+                ),
+                {"tenant_id": tenant_id}
+            ).first()
 
         last_month_revenue = float(
             db.execute(
@@ -373,25 +392,30 @@ def get_revenue_stats(
         if last_month_revenue > 0:
             growth_rate = ((current_month_value - last_month_revenue) / last_month_revenue) * 100
 
-        revenue_metrics = None
-        try:
-            revenue_metrics = db.execute(
+        mrr = float(
+            db.execute(
                 text(
                     """
-                    SELECT mrr, arr
-                    FROM revenue_metrics
+                    SELECT COALESCE(SUM(
+                      CASE
+                        WHEN COALESCE(billing_cycle, 'monthly') ILIKE 'month%%' THEN COALESCE(amount, 0)
+                        WHEN COALESCE(billing_cycle, '') ILIKE 'year%%'
+                          OR COALESCE(billing_cycle, '') ILIKE 'ann%%'
+                          THEN COALESCE(amount, 0) / 12.0
+                        ELSE 0
+                      END
+                    ), 0)
+                    FROM subscriptions
                     WHERE tenant_id = :tenant_id
-                    ORDER BY metric_date DESC
-                    LIMIT 1
+                      AND COALESCE(is_test, FALSE) = FALSE
+                      AND status IN ('active', 'trialing')
                     """
                 ),
-                {"tenant_id": tenant_id}
-            ).first()
-        except Exception:
-            revenue_metrics = None
-
-        mrr = float(revenue_metrics.mrr) if revenue_metrics and revenue_metrics.mrr is not None else None
-        arr = float(revenue_metrics.arr) if revenue_metrics and revenue_metrics.arr is not None else None
+                {"tenant_id": tenant_uuid},
+            ).scalar()
+            or 0
+        )
+        arr = round(mrr * 12, 2)
 
         return {
             "revenue": {
@@ -401,7 +425,7 @@ def get_revenue_stats(
                 "transaction_count": current_revenue[1] if current_revenue else 0,
             },
             "subscriptions": {
-                "mrr": mrr,
+                "mrr": round(mrr, 2),
                 "arr": arr,
             },
             "customers": {
