@@ -32,7 +32,6 @@ DEFAULT_EXEMPT_PATHS: Sequence[str] = (
     "/openapi.json",
     "/favicon.ico",
     "/api/v1/stripe/webhook",
-    "/api/v1/stripe/webhook/test",
     "/api/v1/webhooks/stripe",
     "/api/v1/webhooks/render",
     "/api/v1/revenue/webhook",

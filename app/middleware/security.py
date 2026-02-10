@@ -67,7 +67,6 @@ DEFAULT_PUBLIC_PATHS: Sequence[str] = (
     "/api/v1/erp/public",
     "/api/v1/products/public",
     "/api/v1/stripe/webhook",
-    "/api/v1/stripe/webhook/test",
     "/api/v1/webhooks/stripe",
     "/api/v1/webhooks/render",
     "/api/v1/revenue/webhook",
