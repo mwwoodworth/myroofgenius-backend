@@ -324,9 +324,9 @@ class InfrastructureManager:
         try:
             async with self.pg_pool.acquire() as conn:
                 avg_time = await conn.fetchval('''
-                    SELECT AVG(response_time) 
+                    SELECT AVG(duration_ms) / 1000.0
                     FROM api_metrics 
-                    WHERE recorded_at > NOW() - INTERVAL '5 minutes'
+                    WHERE timestamp > NOW() - INTERVAL '5 minutes'
                 ''')
                 return avg_time
         except Exception as e:

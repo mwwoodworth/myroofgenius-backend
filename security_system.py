@@ -195,10 +195,10 @@ class SecuritySystem:
             
             # Check for suspicious API usage
             api_abuse = await conn.fetch('''
-                SELECT source_ip, COUNT(*) as requests
+                SELECT ip_address, COUNT(*) as requests
                 FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '1 minute'
-                GROUP BY source_ip
+                WHERE timestamp > NOW() - INTERVAL '1 minute'
+                GROUP BY ip_address
                 HAVING COUNT(*) > $1
             ''', self.security_rules["api_rate_limit"])
             
@@ -206,7 +206,7 @@ class SecuritySystem:
                 threats.append({
                     "type": "api_abuse",
                     "severity": "medium",
-                    "ip_address": abuse["source_ip"],
+                    "ip_address": abuse["ip_address"],
                     "requests": abuse["requests"]
                 })
             

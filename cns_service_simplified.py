@@ -29,6 +29,7 @@ class BrainOpsCNS:
         self.initialized = False
         self._openai_client = None
         self._gemini_client = None
+        self._gemini_configured = False
         self._active_provider = None
 
         # Load API keys
@@ -43,10 +44,13 @@ class BrainOpsCNS:
         if self._gemini_key and genai is not None:
             try:
                 self._gemini_client = genai.Client(api_key=self._gemini_key)
+                self._gemini_configured = True
                 # Never log key material (even partially).
                 logger.info("CNS: GEMINI_API_KEY loaded (redacted)")
             except Exception as e:
                 logger.warning(f"CNS: Failed to configure Gemini: {e}")
+                self._gemini_client = None
+                self._gemini_configured = False
 
         if not self._openai_key and not self._gemini_client:
             logger.warning("CNS: No AI provider configured - embeddings will fail")

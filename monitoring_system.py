@@ -6,6 +6,7 @@ import os
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import asyncpg
@@ -76,14 +77,33 @@ class MonitoringSystem:
         async with self.pg_pool.acquire() as conn:
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS api_metrics (
-                    id SERIAL PRIMARY KEY,
-                    endpoint VARCHAR(255),
-                    method VARCHAR(10),
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    endpoint TEXT,
+                    method TEXT,
                     status_code INT,
-                    response_time FLOAT,
-                    user_id VARCHAR(255),
+                    duration_ms DOUBLE PRECISION,
+                    timestamp TIMESTAMPTZ DEFAULT NOW(),
+                    user_id TEXT,
+                    tenant_id TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT
+                )
+            ''')
+
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS ai_error_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    error_id VARCHAR NOT NULL,
+                    error_type VARCHAR NOT NULL,
                     error_message TEXT,
-                    recorded_at TIMESTAMP DEFAULT NOW()
+                    stack_trace TEXT,
+                    component VARCHAR,
+                    function_name VARCHAR,
+                    severity VARCHAR,
+                    retry_count INT DEFAULT 0,
+                    metadata JSONB DEFAULT '{}'::jsonb,
+                    timestamp TIMESTAMPTZ DEFAULT NOW(),
+                    occurred_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
             
@@ -123,24 +143,23 @@ class MonitoringSystem:
                     calculated_at TIMESTAMP DEFAULT NOW()
                 )
             ''')
-            
+
             await conn.execute('''
-                CREATE TABLE IF NOT EXISTS error_logs (
+                CREATE TABLE IF NOT EXISTS hourly_reports (
                     id SERIAL PRIMARY KEY,
-                    error_type VARCHAR(100),
-                    error_message TEXT,
-                    stack_trace TEXT,
-                    user_id VARCHAR(255),
-                    request_id VARCHAR(255),
-                    metadata JSONB,
-                    occurred_at TIMESTAMP DEFAULT NOW()
+                    report_data JSONB,
+                    period_start TIMESTAMPTZ,
+                    period_end TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
             
             # Create indexes for performance
-            await conn.execute("CREATE INDEX IF NOT EXISTS idx_api_metrics_endpoint ON api_metrics(endpoint, recorded_at)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_api_metrics_endpoint ON api_metrics(endpoint, timestamp)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_error_logs_type_time ON ai_error_logs(error_type, occurred_at DESC)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_severity ON system_alerts(severity, resolved)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service, checked_at)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_hourly_reports_period ON hourly_reports(period_start, period_end)")
     
     async def continuous_monitoring(self):
         """Continuous monitoring loop"""
@@ -287,11 +306,11 @@ class MonitoringSystem:
             api_stats = await conn.fetchrow('''
                 SELECT 
                     COUNT(*) as total_requests,
-                    AVG(response_time) as avg_response_time,
-                    MAX(response_time) as max_response_time,
+                    AVG(duration_ms) / 1000.0 as avg_response_time,
+                    MAX(duration_ms) / 1000.0 as max_response_time,
                     SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors
                 FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '5 minutes'
+                WHERE timestamp > NOW() - INTERVAL '5 minutes'
             ''')
             
             # Lead metrics
@@ -319,7 +338,7 @@ class MonitoringSystem:
                 SELECT 
                     COUNT(*) as total_errors,
                     COUNT(DISTINCT error_type) as unique_errors
-                FROM error_logs
+                FROM ai_error_logs
                 WHERE occurred_at > NOW() - INTERVAL '1 hour'
             ''')
         
@@ -499,12 +518,12 @@ class MonitoringSystem:
             report = await conn.fetchrow('''
                 SELECT 
                     COUNT(*) as total_requests,
-                    AVG(response_time) as avg_response_time,
-                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time) as p95_response_time,
-                    PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY response_time) as p99_response_time,
+                    AVG(duration_ms) / 1000.0 as avg_response_time,
+                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) / 1000.0 as p95_response_time,
+                    PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms) / 1000.0 as p99_response_time,
                     SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors
                 FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '1 hour'
+                WHERE timestamp > NOW() - INTERVAL '1 hour'
             ''')
             
             # Store hourly report
@@ -578,20 +597,20 @@ class MonitoringSystem:
         
         elif metric == "response_time_p95":
             return await conn.fetchval('''
-                SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time)
+                SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) / 1000.0
                 FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '1 hour'
+                WHERE timestamp > NOW() - INTERVAL '1 hour'
             ''') or 0
         
         elif metric == "error_rate":
             total = await conn.fetchval('''
                 SELECT COUNT(*) FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '1 hour'
+                WHERE timestamp > NOW() - INTERVAL '1 hour'
             ''')
             
             errors = await conn.fetchval('''
                 SELECT COUNT(*) FROM api_metrics
-                WHERE recorded_at > NOW() - INTERVAL '1 hour'
+                WHERE timestamp > NOW() - INTERVAL '1 hour'
                 AND status_code >= 400
             ''')
             
@@ -615,10 +634,11 @@ class MonitoringSystem:
     async def log_error(self, error_type: str, message: str, stack_trace: str = None):
         """Log error to database"""
         async with self.pg_pool.acquire() as conn:
+            error_id = f"err_{uuid.uuid4().hex}"
             await conn.execute('''
-                INSERT INTO error_logs (error_type, error_message, stack_trace)
-                VALUES ($1, $2, $3)
-            ''', error_type, message, stack_trace)
+                INSERT INTO ai_error_logs (error_id, error_type, error_message, stack_trace, component, severity, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ''', error_id, error_type, message, stack_trace, "monitoring_system", "error", json.dumps({"source": "monitoring_system"}))
     
     async def get_current_metrics(self) -> Dict:
         """Get current metrics for API response"""

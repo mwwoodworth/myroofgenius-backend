@@ -456,11 +456,11 @@ class AwarenessSystem:
                 metrics = await self._db_fetchrow_with_retry('''
                     SELECT
                         COUNT(*) as request_count,
-                        AVG(response_time) as avg_response_time,
-                        MAX(response_time) as max_response_time,
+                        AVG(duration_ms) as avg_duration_ms,
+                        MAX(duration_ms) as max_duration_ms,
                         SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as error_count
                     FROM api_metrics
-                    WHERE recorded_at > NOW() - INTERVAL '5 minutes'
+                    WHERE timestamp > NOW() - INTERVAL '5 minutes'
                 ''')
 
                 if metrics:
@@ -469,8 +469,8 @@ class AwarenessSystem:
                         timestamp=datetime.now(),
                         value={
                             "request_count_5m": metrics['request_count'] or 0,
-                            "avg_response_time_ms": float(metrics['avg_response_time'] or 0),
-                            "max_response_time_ms": float(metrics['max_response_time'] or 0),
+                            "avg_response_time_ms": float(metrics['avg_duration_ms'] or 0),
+                            "max_response_time_ms": float(metrics['max_duration_ms'] or 0),
                             "error_count_5m": metrics['error_count'] or 0,
                         }
                     )

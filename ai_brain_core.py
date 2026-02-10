@@ -276,17 +276,17 @@ class AIBrainCore:
                     'system_health' as decision_type,
                     jsonb_build_object(
                         'error_rate', 
-                        (SELECT COUNT(*) FROM error_logs 
-                         WHERE created_at > NOW() - INTERVAL '5 minutes'),
+                        (SELECT COUNT(*) FROM ai_error_logs 
+                         WHERE occurred_at > NOW() - INTERVAL '5 minutes'),
                         'response_time',
-                        (SELECT AVG(response_time) FROM api_metrics 
-                         WHERE created_at > NOW() - INTERVAL '5 minutes')
+                        (SELECT AVG(duration_ms) FROM api_metrics 
+                         WHERE timestamp > NOW() - INTERVAL '5 minutes')
                     ) as context,
                     CASE 
                         WHEN EXISTS (
-                            SELECT 1 FROM error_logs 
+                            SELECT 1 FROM ai_error_logs 
                             WHERE severity = 'critical' 
-                            AND created_at > NOW() - INTERVAL '1 minute'
+                            AND occurred_at > NOW() - INTERVAL '1 minute'
                         ) THEN 'critical'
                         ELSE 'medium'
                     END as priority
