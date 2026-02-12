@@ -105,7 +105,13 @@ class SelfOptimizationSystem:
         """Initialize the self-optimization system"""
         self.db_pool = db_pool
 
-        await self._initialize_database()
+        try:
+            await self._initialize_database()
+        except Exception as e:
+            if "permission denied" in str(e).lower():
+                pass
+            else:
+                raise
         await self._load_baselines()
         await self._start_background_processes()
 

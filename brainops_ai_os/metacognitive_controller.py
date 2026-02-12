@@ -189,8 +189,14 @@ class MetacognitiveController:
                     statement_cache_size=0  # pgBouncer compatibility
                 )
 
-            # Create required database tables
-            await self._initialize_database()
+            # Create required database tables (skip if restricted role lacks DDL perms)
+            try:
+                await self._initialize_database()
+            except Exception as e:
+                if "permission denied" in str(e).lower():
+                    logger.info("Skipping DDL init (restricted role) - tables already exist")
+                else:
+                    raise
 
             # Initialize all subsystems
             await self._initialize_subsystems()

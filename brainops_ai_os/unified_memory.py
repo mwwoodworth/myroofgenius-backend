@@ -124,7 +124,13 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
 
         # Create database tables
-        await self._initialize_database()
+        try:
+            await self._initialize_database()
+        except Exception as e:
+            if "permission denied" in str(e).lower():
+                pass
+            else:
+                raise
 
         # Load working memory
         await self._load_working_memory()

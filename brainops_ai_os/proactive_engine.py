@@ -123,7 +123,13 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             import openai
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
 
-        await self._initialize_database()
+        try:
+            await self._initialize_database()
+        except Exception as e:
+            if "permission denied" in str(e).lower():
+                pass
+            else:
+                raise
         await self._start_background_processes()
 
         logger.info("ProactiveIntelligenceEngine initialized")

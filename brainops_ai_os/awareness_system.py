@@ -124,7 +124,13 @@ class AwarenessSystem:
         self._http_client = httpx.AsyncClient(timeout=30.0)
 
         # Create database tables
-        await self._initialize_database()
+        try:
+            await self._initialize_database()
+        except Exception as e:
+            if "permission denied" in str(e).lower():
+                pass
+            else:
+                raise
 
         # Load existing baselines
         await self._load_baselines()
