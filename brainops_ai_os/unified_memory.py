@@ -39,15 +39,17 @@ logger = logging.getLogger(__name__)
 
 class MemoryType(str, Enum):
     """Types of memory in the unified substrate"""
-    EPISODIC = "episodic"      # Specific events
-    SEMANTIC = "semantic"      # Facts and knowledge
+
+    EPISODIC = "episodic"  # Specific events
+    SEMANTIC = "semantic"  # Facts and knowledge
     PROCEDURAL = "procedural"  # How to do things
-    WORKING = "working"        # Current context
-    LONG_TERM = "long_term"    # Persistent storage
+    WORKING = "working"  # Current context
+    LONG_TERM = "long_term"  # Persistent storage
 
 
 class MemoryState(str, Enum):
     """States of memory items"""
+
     ACTIVE = "active"
     CONSOLIDATING = "consolidating"
     ARCHIVED = "archived"
@@ -57,6 +59,7 @@ class MemoryState(str, Enum):
 @dataclass
 class Memory:
     """A memory unit in the substrate"""
+
     id: str
     memory_type: MemoryType
     content: Dict[str, Any]
@@ -121,11 +124,17 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         # Initialize OpenAI client for embeddings
         if self._openai_key:
             import openai
+
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
 
         # Create database tables
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -140,64 +149,28 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
         # Get initial count
         count = await self._db_fetchval_with_retry(
-            "SELECT COUNT(*) FROM brainops_unified_memory WHERE state = 'active'"
+            "SELECT COUNT(*) FROM unified_ai_memory WHERE archived = false"
         )
         self.metrics["total_memories"] = count or 0
 
-        logger.info(f"UnifiedMemorySubstrate initialized with {self.metrics['total_memories']} memories")
+        logger.info(
+            f"UnifiedMemorySubstrate initialized with {self.metrics['total_memories']} memories"
+        )
 
     async def _initialize_database(self):
-        """Create required database tables"""
+        """V7: unified_ai_memory already exists via migration.
+        DDL is blocked by the kill-switch in production/staging.
+        This method only runs in dev with ENABLE_RUNTIME_DDL=1.
+        """
         # Ensure vector extension
         await self._db_execute_with_retry("CREATE EXTENSION IF NOT EXISTS vector")
 
-        await self._db_execute_with_retry('''
-            -- Unified memory table
-            CREATE TABLE IF NOT EXISTS brainops_unified_memory (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                memory_id VARCHAR(50) UNIQUE NOT NULL,
-                memory_type VARCHAR(20) NOT NULL,
-                content JSONB NOT NULL,
-                embedding vector(1536),
-                importance FLOAT DEFAULT 0.5,
-                access_count INT DEFAULT 0,
-                last_accessed TIMESTAMP,
-                associations TEXT[],
-                state VARCHAR(20) DEFAULT 'active',
-                decay_rate FLOAT DEFAULT 0.01,
-                metadata JSONB,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_memory_type
-                ON brainops_unified_memory(memory_type);
-            CREATE INDEX IF NOT EXISTS idx_memory_state
-                ON brainops_unified_memory(state);
-            CREATE INDEX IF NOT EXISTS idx_memory_importance
-                ON brainops_unified_memory(importance DESC);
-            CREATE INDEX IF NOT EXISTS idx_memory_embedding
-                ON brainops_unified_memory
-                USING ivfflat (embedding vector_cosine_ops)
-                WITH (lists = 100);
-
-            -- Memory associations table
-            CREATE TABLE IF NOT EXISTS brainops_memory_associations (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                source_memory_id VARCHAR(50) NOT NULL,
-                target_memory_id VARCHAR(50) NOT NULL,
-                association_type VARCHAR(50) NOT NULL,
-                strength FLOAT DEFAULT 0.5,
-                created_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(source_memory_id, target_memory_id, association_type)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_assoc_source
-                ON brainops_memory_associations(source_memory_id);
-            CREATE INDEX IF NOT EXISTS idx_assoc_target
-                ON brainops_memory_associations(target_memory_id);
-
-            -- Memory consolidation log
+        # NOTE: unified_ai_memory (42-column canonical table) is managed by
+        # migrations, NOT runtime DDL. The DDL kill-switch will block these
+        # CREATE statements in production. They exist only for local dev.
+        await self._db_execute_with_retry(
+            """
+            -- Memory consolidation log (supporting table)
             CREATE TABLE IF NOT EXISTS brainops_memory_consolidation (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 memories_processed INT NOT NULL,
@@ -208,7 +181,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 created_at TIMESTAMP DEFAULT NOW()
             );
 
-            -- Knowledge synthesis results
+            -- Knowledge synthesis results (supporting table)
             CREATE TABLE IF NOT EXISTS brainops_synthesized_knowledge (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 source_memories TEXT[] NOT NULL,
@@ -217,29 +190,33 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 embedding vector(1536),
                 created_at TIMESTAMP DEFAULT NOW()
             );
-        ''')
+        """
+        )
 
     async def _load_working_memory(self):
         """Load recent important memories into working memory"""
-        rows = await self._db_fetch_with_retry('''
-            SELECT memory_id, memory_type, content, importance,
-                   access_count, last_accessed, associations, metadata
-            FROM brainops_unified_memory
-            WHERE state = 'active'
-            ORDER BY last_accessed DESC NULLS LAST, importance DESC
+        rows = await self._db_fetch_with_retry(
+            """
+            SELECT id, memory_type, content, importance_score,
+                   access_count, last_accessed, related_memories, metadata
+            FROM unified_ai_memory
+            WHERE archived = false
+            ORDER BY last_accessed DESC NULLS LAST, importance_score DESC
             LIMIT $1
-        ''', self.working_memory_limit)
+        """,
+            self.working_memory_limit,
+        )
 
         for row in rows:
             memory = Memory(
-                id=row['memory_id'],
-                memory_type=MemoryType(row['memory_type']),
-                content=row['content'],
-                importance=row['importance'],
-                access_count=row['access_count'],
-                last_accessed=row['last_accessed'],
-                associations=row['associations'] or [],
-                metadata=row['metadata'] or {},
+                id=str(row["id"]),
+                memory_type=MemoryType(row["memory_type"]),
+                content=row["content"],
+                importance=row["importance_score"],
+                access_count=row["access_count"],
+                last_accessed=row["last_accessed"],
+                associations=[str(r) for r in (row["related_memories"] or [])],
+                metadata=row["metadata"] or {},
             )
             self.working_memory[memory.id] = memory
 
@@ -249,7 +226,9 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         """Start background memory processes"""
         # Memory consolidation - runs during low activity
         self._tasks.append(
-            self._create_safe_task(self._consolidation_loop(), name="memory_consolidation")
+            self._create_safe_task(
+                self._consolidation_loop(), name="memory_consolidation"
+            )
         )
 
         # Memory decay processing
@@ -259,7 +238,9 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
         # Association strengthening
         self._tasks.append(
-            self._create_safe_task(self._association_loop(), name="association_strengthening")
+            self._create_safe_task(
+                self._association_loop(), name="association_strengthening"
+            )
         )
 
         # Working memory management
@@ -278,7 +259,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         data: Dict[str, Any],
         importance: float = 0.5,
         memory_type: MemoryType = MemoryType.EPISODIC,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Store data in unified memory.
@@ -293,6 +274,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             Memory ID
         """
         import uuid
+
         memory_id = str(uuid.uuid4())
 
         # Generate embedding
@@ -311,17 +293,20 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         # Store in database
         embedding_str = self._embedding_to_string(embedding) if embedding else None
 
-        await self._db_execute_with_retry('''
-            INSERT INTO brainops_unified_memory
-            (memory_id, memory_type, content, embedding, importance, metadata)
-            VALUES ($1, $2, $3, $4::vector, $5, $6)
-        ''',
+        await self._db_execute_with_retry(
+            """
+            INSERT INTO unified_ai_memory
+            (id, memory_type, content, embedding, importance_score, metadata,
+             source_system, created_by)
+            VALUES ($1::uuid, $2, $3, $4::vector, $5, $6,
+                    'brainops_ai_os', 'unified_memory_substrate')
+        """,
             memory_id,
             memory_type.value,
             json.dumps(data),
             embedding_str,
             importance,
-            json.dumps(metadata or {})
+            json.dumps(metadata or {}),
         )
 
         # Add to working memory if important enough
@@ -343,7 +328,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         query: str,
         limit: int = 10,
         memory_type: Optional[MemoryType] = None,
-        min_importance: float = 0.0
+        min_importance: float = 0.0,
     ) -> List[Dict[str, Any]]:
         """
         Recall memories related to a query using semantic search.
@@ -368,41 +353,52 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         type_filter = "AND memory_type = $4" if memory_type else ""
         type_param = [memory_type.value] if memory_type else []
 
-        rows = await self._db_fetch_with_retry(f'''
+        rows = await self._db_fetch_with_retry(
+            f"""
             SELECT
-                memory_id, memory_type, content, importance,
-                access_count, associations, metadata, created_at,
+                id, memory_type, content, importance_score,
+                access_count, related_memories, metadata, created_at,
                 1 - (embedding <=> $1::vector) as similarity
-            FROM brainops_unified_memory
-            WHERE state = 'active'
-            AND importance >= $3
+            FROM unified_ai_memory
+            WHERE archived = false
+            AND importance_score >= $3
             {type_filter}
             ORDER BY similarity DESC
             LIMIT $2
-        ''', embedding_str, limit, min_importance, *type_param)
+        """,
+            embedding_str,
+            limit,
+            min_importance,
+            *type_param,
+        )
 
         memories = []
         for row in rows:
             memory = {
-                "id": row['memory_id'],
-                "type": row['memory_type'],
-                "content": row['content'],
-                "importance": row['importance'],
-                "access_count": row['access_count'],
-                "associations": row['associations'] or [],
-                "metadata": row['metadata'] or {},
-                "created_at": row['created_at'].isoformat() if row['created_at'] else None,
-                "similarity": float(row['similarity']),
+                "id": str(row["id"]),
+                "type": row["memory_type"],
+                "content": row["content"],
+                "importance": row["importance_score"],
+                "access_count": row["access_count"],
+                "associations": [str(r) for r in (row["related_memories"] or [])],
+                "metadata": row["metadata"] or {},
+                "created_at": row["created_at"].isoformat()
+                if row["created_at"]
+                else None,
+                "similarity": float(row["similarity"]),
             }
             memories.append(memory)
 
             # Update access statistics
-            await self._db_execute_with_retry('''
-                UPDATE brainops_unified_memory
+            await self._db_execute_with_retry(
+                """
+                UPDATE unified_ai_memory
                 SET access_count = access_count + 1,
                     last_accessed = NOW()
-                WHERE memory_id = $1
-            ''', row['memory_id'])
+                WHERE id = $1::uuid
+            """,
+                str(row["id"]),
+            )
 
         self.metrics["memories_recalled"] += len(memories)
         return memories
@@ -433,30 +429,38 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             }
 
         # Fetch from database
-        row = await self._db_fetchrow_with_retry('''
-            SELECT memory_id, memory_type, content, importance,
-                   access_count, associations, metadata, created_at
-            FROM brainops_unified_memory
-            WHERE memory_id = $1 AND state = 'active'
-        ''', memory_id)
+        row = await self._db_fetchrow_with_retry(
+            """
+            SELECT id, memory_type, content, importance_score,
+                   access_count, related_memories, metadata, created_at
+            FROM unified_ai_memory
+            WHERE id = $1::uuid AND archived = false
+        """,
+            memory_id,
+        )
 
         if row:
             # Update access
-            await self._db_execute_with_retry('''
-                UPDATE brainops_unified_memory
+            await self._db_execute_with_retry(
+                """
+                UPDATE unified_ai_memory
                 SET access_count = access_count + 1, last_accessed = NOW()
-                WHERE memory_id = $1
-            ''', memory_id)
+                WHERE id = $1::uuid
+            """,
+                memory_id,
+            )
 
             return {
-                "id": row['memory_id'],
-                "type": row['memory_type'],
-                "content": row['content'],
-                "importance": row['importance'],
-                "access_count": row['access_count'] + 1,
-                "associations": row['associations'] or [],
-                "metadata": row['metadata'] or {},
-                "created_at": row['created_at'].isoformat() if row['created_at'] else None,
+                "id": str(row["id"]),
+                "type": row["memory_type"],
+                "content": row["content"],
+                "importance": row["importance_score"],
+                "access_count": row["access_count"] + 1,
+                "associations": [str(r) for r in (row["related_memories"] or [])],
+                "metadata": row["metadata"] or {},
+                "created_at": row["created_at"].isoformat()
+                if row["created_at"]
+                else None,
             }
 
         return None
@@ -473,16 +477,22 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             True if successful
         """
         if hard_delete:
-            result = await self._db_execute_with_retry('''
-                DELETE FROM brainops_unified_memory
-                WHERE memory_id = $1
-            ''', memory_id)
+            result = await self._db_execute_with_retry(
+                """
+                DELETE FROM unified_ai_memory
+                WHERE id = $1::uuid
+            """,
+                memory_id,
+            )
         else:
-            result = await self._db_execute_with_retry('''
-                UPDATE brainops_unified_memory
-                SET state = 'decayed'
-                WHERE memory_id = $1
-            ''', memory_id)
+            result = await self._db_execute_with_retry(
+                """
+                UPDATE unified_ai_memory
+                SET archived = true, archived_at = NOW()
+                WHERE id = $1::uuid
+            """,
+                memory_id,
+            )
 
         # Remove from working memory and cache
         self.working_memory.pop(memory_id, None)
@@ -501,13 +511,17 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         Returns:
             True if successful
         """
-        await self._db_execute_with_retry('''
-            UPDATE brainops_unified_memory
-            SET importance = LEAST(importance + $2, 1.0),
+        await self._db_execute_with_retry(
+            """
+            UPDATE unified_ai_memory
+            SET importance_score = LEAST(importance_score + $2, 1.0),
                 access_count = access_count + 1,
                 last_accessed = NOW()
-            WHERE memory_id = $1
-        ''', memory_id, strength)
+            WHERE id = $1::uuid
+        """,
+            memory_id,
+            strength,
+        )
 
         # Update in working memory if present
         if memory_id in self.working_memory:
@@ -526,85 +540,84 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
         source_id: str,
         target_id: str,
         association_type: str = "related",
-        strength: float = 0.5
+        strength: float = 0.5,
     ) -> bool:
-        """Create an association between two memories"""
-        await self._db_execute_with_retry('''
-            INSERT INTO brainops_memory_associations
-            (source_memory_id, target_memory_id, association_type, strength)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (source_memory_id, target_memory_id, association_type)
-            DO UPDATE SET strength = EXCLUDED.strength
-        ''', source_id, target_id, association_type, strength)
-
-        # Update memory associations array
-        await self._db_execute_with_retry('''
-            UPDATE brainops_unified_memory
-            SET associations = array_append(
-                COALESCE(associations, ARRAY[]::text[]),
-                $2
+        """Create an association between two memories using related_memories array"""
+        # Update related_memories array on the source memory
+        await self._db_execute_with_retry(
+            """
+            UPDATE unified_ai_memory
+            SET related_memories = array_append(
+                COALESCE(related_memories, ARRAY[]::uuid[]),
+                $2::uuid
             )
-            WHERE memory_id = $1
-            AND NOT ($2 = ANY(COALESCE(associations, ARRAY[]::text[])))
-        ''', source_id, target_id)
+            WHERE id = $1::uuid
+            AND NOT ($2::uuid = ANY(COALESCE(related_memories, ARRAY[]::uuid[])))
+        """,
+            source_id,
+            target_id,
+        )
 
         self.metrics["associations_created"] += 1
         return True
 
     async def _create_automatic_associations(
-        self,
-        memory_id: str,
-        embedding: List[float]
+        self, memory_id: str, embedding: List[float]
     ):
         """Automatically create associations with similar memories"""
         embedding_str = self._embedding_to_string(embedding)
 
         # Find similar memories
-        similar = await self._db_fetch_with_retry('''
-            SELECT memory_id,
+        similar = await self._db_fetch_with_retry(
+            """
+            SELECT id,
                    1 - (embedding <=> $1::vector) as similarity
-            FROM brainops_unified_memory
-            WHERE memory_id != $2
-            AND state = 'active'
+            FROM unified_ai_memory
+            WHERE id != $2::uuid
+            AND archived = false
             AND embedding IS NOT NULL
             ORDER BY similarity DESC
             LIMIT 5
-        ''', embedding_str, memory_id)
+        """,
+            embedding_str,
+            memory_id,
+        )
 
         for row in similar:
-            if row['similarity'] > 0.7:  # Only associate if similar enough
+            if row["similarity"] > 0.7:  # Only associate if similar enough
                 await self.create_association(
                     memory_id,
-                    row['memory_id'],
+                    str(row["id"]),
                     "semantic_similarity",
-                    float(row['similarity'])
+                    float(row["similarity"]),
                 )
 
     async def get_associated_memories(
-        self,
-        memory_id: str,
-        limit: int = 10
+        self, memory_id: str, limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """Get memories associated with a given memory"""
-        rows = await self._db_fetch_with_retry('''
-            SELECT m.memory_id, m.memory_type, m.content, m.importance,
-                   a.association_type, a.strength
-            FROM brainops_memory_associations a
-            JOIN brainops_unified_memory m ON a.target_memory_id = m.memory_id
-            WHERE a.source_memory_id = $1
-            AND m.state = 'active'
-            ORDER BY a.strength DESC
+        """Get memories associated with a given memory via related_memories array"""
+        rows = await self._db_fetch_with_retry(
+            """
+            SELECT m.id, m.memory_type, m.content, m.importance_score
+            FROM unified_ai_memory src
+            CROSS JOIN LATERAL unnest(src.related_memories) AS rel_id
+            JOIN unified_ai_memory m ON m.id = rel_id
+            WHERE src.id = $1::uuid
+            AND m.archived = false
             LIMIT $2
-        ''', memory_id, limit)
+        """,
+            memory_id,
+            limit,
+        )
 
         return [
             {
-                "id": row['memory_id'],
-                "type": row['memory_type'],
-                "content": row['content'],
-                "importance": row['importance'],
-                "association_type": row['association_type'],
-                "strength": row['strength'],
+                "id": str(row["id"]),
+                "type": row["memory_type"],
+                "content": row["content"],
+                "importance": row["importance_score"],
+                "association_type": "related",
+                "strength": 1.0,
             }
             for row in rows
         ]
@@ -631,14 +644,21 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
                 # Log consolidation
                 duration = (datetime.now() - start_time).total_seconds()
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     INSERT INTO brainops_memory_consolidation
                     (memories_processed, memories_archived, duration_seconds)
                     VALUES ($1, $2, $3)
-                ''', consolidated, archived, duration)
+                """,
+                    consolidated,
+                    archived,
+                    duration,
+                )
 
                 self.metrics["consolidations"] += 1
-                logger.info(f"Consolidation complete: {consolidated} processed, {archived} archived in {duration:.1f}s")
+                logger.info(
+                    f"Consolidation complete: {consolidated} processed, {archived} archived in {duration:.1f}s"
+                )
 
             except asyncio.CancelledError:
                 break
@@ -652,15 +672,16 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
         # Find clusters of similar memories
         # This is a simplified version - production would use proper clustering
-        rows = await self._db_fetch_with_retry('''
+        rows = await self._db_fetch_with_retry(
+            """
             WITH memory_pairs AS (
                 SELECT
-                    m1.memory_id as id1,
-                    m2.memory_id as id2,
+                    m1.id::text as id1,
+                    m2.id::text as id2,
                     1 - (m1.embedding <=> m2.embedding) as similarity
-                FROM brainops_unified_memory m1
-                JOIN brainops_unified_memory m2
-                    ON m1.memory_id < m2.memory_id
+                FROM unified_ai_memory m1
+                JOIN unified_ai_memory m2
+                    ON m1.id < m2.id
                 WHERE m1.state = 'active'
                 AND m2.state = 'active'
                 AND m1.embedding IS NOT NULL
@@ -670,15 +691,13 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             SELECT id1, id2, similarity
             FROM memory_pairs
             LIMIT 100
-        ''')
+        """
+        )
 
         for row in rows:
             # Create association if very similar
             await self.create_association(
-                row['id1'],
-                row['id2'],
-                "near_duplicate",
-                row['similarity']
+                row["id1"], row["id2"], "near_duplicate", row["similarity"]
             )
             processed += 1
 
@@ -686,15 +705,17 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
     async def _archive_old_memories(self) -> int:
         """Archive old, low-importance, rarely-accessed memories"""
-        result = await self._db_execute_with_retry('''
-            UPDATE brainops_unified_memory
-            SET state = 'archived'
-            WHERE state = 'active'
-            AND importance < 0.3
+        result = await self._db_execute_with_retry(
+            """
+            UPDATE unified_ai_memory
+            SET archived = true, archived_at = NOW()
+            WHERE archived = false
+            AND importance_score < 0.3
             AND access_count < 3
             AND created_at < NOW() - INTERVAL '30 days'
             AND (last_accessed IS NULL OR last_accessed < NOW() - INTERVAL '14 days')
-        ''')
+        """
+        )
 
         # Parse affected rows
         try:
@@ -712,13 +733,15 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 await asyncio.sleep(21600)
 
                 # Decay memories that haven't been accessed recently
-                await self._db_execute_with_retry('''
-                    UPDATE brainops_unified_memory
-                    SET importance = GREATEST(importance * (1 - decay_rate), 0.1)
-                    WHERE state = 'active'
+                await self._db_execute_with_retry(
+                    """
+                    UPDATE unified_ai_memory
+                    SET importance_score = GREATEST(importance_score * (1 - decay_rate), 0.1)
+                    WHERE archived = false
                     AND last_accessed < NOW() - INTERVAL '7 days'
-                    AND importance > 0.1
-                ''')
+                    AND importance_score > 0.1
+                """
+                )
 
                 logger.info("Memory decay applied")
 
@@ -737,19 +760,20 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
                 # Find memories accessed together (within 5 minutes)
                 # and strengthen their associations
-                await self._db_execute_with_retry('''
-                    UPDATE brainops_memory_associations a
-                    SET strength = LEAST(strength + 0.05, 1.0)
-                    WHERE EXISTS (
-                        SELECT 1 FROM brainops_unified_memory m1
-                        JOIN brainops_unified_memory m2
-                        ON m1.memory_id = a.source_memory_id
-                        AND m2.memory_id = a.target_memory_id
-                        WHERE m1.last_accessed IS NOT NULL
-                        AND m2.last_accessed IS NOT NULL
-                        AND ABS(EXTRACT(EPOCH FROM (m1.last_accessed - m2.last_accessed))) < 300
-                    )
-                ''')
+                await self._db_execute_with_retry(
+                    """
+                    UPDATE unified_ai_memory dst
+                    SET related_memories = array_append(dst.related_memories, src.id)
+                    FROM unified_ai_memory src
+                    WHERE dst.archived = false
+                    AND src.archived = false
+                    AND dst.id <> src.id
+                    AND dst.last_accessed IS NOT NULL
+                    AND src.last_accessed IS NOT NULL
+                    AND ABS(EXTRACT(EPOCH FROM (dst.last_accessed - src.last_accessed))) < 300
+                    AND NOT (dst.related_memories @> ARRAY[src.id])
+                """
+                )
 
             except asyncio.CancelledError:
                 break
@@ -779,12 +803,12 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             sorted_memories = sorted(
                 self.working_memory.items(),
                 key=lambda x: (x[1].importance, x[1].last_accessed or datetime.min),
-                reverse=True
+                reverse=True,
             )
 
             # Keep top items
             self.working_memory = {
-                k: v for k, v in sorted_memories[:self.working_memory_limit]
+                k: v for k, v in sorted_memories[: self.working_memory_limit]
             }
 
     # =========================================================================
@@ -801,8 +825,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
             truncated = text[:30000] if len(text) > 30000 else text
 
             response = await self._openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=truncated
+                model="text-embedding-3-small", input=truncated
             )
 
             if response.data:
@@ -834,7 +857,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
     def _embedding_to_string(self, embedding: List[float]) -> str:
         """Convert embedding to PostgreSQL vector string"""
-        return '[' + ','.join(str(x) for x in embedding) + ']'
+        return "[" + ",".join(str(x) for x in embedding) + "]"
 
     # =========================================================================
     # PUBLIC API
@@ -849,7 +872,7 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 request.get("data", {}),
                 request.get("importance", 0.5),
                 MemoryType(request.get("type", "episodic")),
-                request.get("metadata")
+                request.get("metadata"),
             )
             return {"status": "stored", "memory_id": memory_id}
 
@@ -858,21 +881,19 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 request.get("query", ""),
                 request.get("limit", 10),
                 MemoryType(request.get("type")) if request.get("type") else None,
-                request.get("min_importance", 0.0)
+                request.get("min_importance", 0.0),
             )
             return {"status": "recalled", "memories": memories}
 
         elif action == "forget":
             success = await self.forget(
-                request.get("memory_id"),
-                request.get("hard_delete", False)
+                request.get("memory_id"), request.get("hard_delete", False)
             )
             return {"status": "forgotten" if success else "failed"}
 
         elif action == "reinforce":
             success = await self.reinforce(
-                request.get("memory_id"),
-                request.get("strength", 0.1)
+                request.get("memory_id"), request.get("strength", 0.1)
             )
             return {"status": "reinforced" if success else "failed"}
 
@@ -893,20 +914,20 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
 
     async def get_stats(self) -> Dict[str, int]:
         """Get memory statistics"""
-        stats = await self._db_fetchrow_with_retry('''
+        stats = await self._db_fetchrow_with_retry(
+            """
             SELECT
-                COUNT(*) FILTER (WHERE state = 'active') as active,
-                COUNT(*) FILTER (WHERE state = 'archived') as archived,
-                COUNT(*) FILTER (WHERE state = 'decayed') as decayed,
+                COUNT(*) FILTER (WHERE archived = false) as active,
+                COUNT(*) FILTER (WHERE archived = true) as archived,
                 COUNT(*) as total
-            FROM brainops_unified_memory
-        ''')
+            FROM unified_ai_memory
+        """
+        )
 
         return {
-            "active": stats['active'] or 0,
-            "archived": stats['archived'] or 0,
-            "decayed": stats['decayed'] or 0,
-            "total": stats['total'] or 0,
+            "active": stats["active"] or 0,
+            "archived": stats["archived"] or 0,
+            "total": stats["total"] or 0,
             "working_memory": len(self.working_memory),
             "cache": len(self.memory_cache),
         }
