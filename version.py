@@ -2,9 +2,11 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.5.9"
-__build__ = "2026-02-12T17:30:00Z"
+__version__ = "163.7.0"
+__build__ = "2026-02-13T19:30:00Z"
 __status__ = "production"
+# v163.7.0: V7 security hardening - DDL kill-switch, memory convergence,
+#   tenant isolation in webhooks/integrations, legacy brain disabled
 # v163.5.9: Version alignment for dominance maintenance plan
 # v163.5.8: DDL init wrapped in try/except for restricted backend_worker role
 # v163.5.7: Fix revenue automation metrics schema drift (mrg_revenue customer_id -> tenant_id/user_id)
