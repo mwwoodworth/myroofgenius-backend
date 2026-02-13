@@ -31,16 +31,18 @@ logger = logging.getLogger(__name__)
 
 class ReasoningType(str, Enum):
     """Types of reasoning"""
-    DEDUCTIVE = "deductive"       # From general to specific
-    INDUCTIVE = "inductive"       # From specific to general
-    ABDUCTIVE = "abductive"       # Best explanation
-    CAUSAL = "causal"             # Cause and effect
-    ANALOGICAL = "analogical"     # By comparison
+
+    DEDUCTIVE = "deductive"  # From general to specific
+    INDUCTIVE = "inductive"  # From specific to general
+    ABDUCTIVE = "abductive"  # Best explanation
+    CAUSAL = "causal"  # Cause and effect
+    ANALOGICAL = "analogical"  # By comparison
 
 
 @dataclass
 class ReasoningStep:
     """A step in a reasoning chain"""
+
     step_number: int
     description: str
     conclusion: str
@@ -52,6 +54,7 @@ class ReasoningStep:
 @dataclass
 class ReasoningResult:
     """Result of a reasoning process"""
+
     id: str
     query: str
     reasoning_type: ReasoningType
@@ -106,14 +109,23 @@ class ReasoningEngine(ResilientSubsystem):
         # Initialize AI clients
         if self._openai_key:
             import openai
+
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
 
         if self._anthropic_key:
             import anthropic
-            self._anthropic_client = anthropic.AsyncAnthropic(api_key=self._anthropic_key)
+
+            self._anthropic_client = anthropic.AsyncAnthropic(
+                api_key=self._anthropic_key
+            )
 
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -124,7 +136,8 @@ class ReasoningEngine(ResilientSubsystem):
 
     async def _initialize_database(self):
         """Create required database tables"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Reasoning results
             CREATE TABLE IF NOT EXISTS brainops_reasoning (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -152,7 +165,8 @@ class ReasoningEngine(ResilientSubsystem):
                 confidence FLOAT,
                 created_at TIMESTAMP DEFAULT NOW()
             );
-        ''')
+        """
+        )
 
     # =========================================================================
     # CHAIN OF THOUGHT REASONING
@@ -162,7 +176,7 @@ class ReasoningEngine(ResilientSubsystem):
         self,
         query: str,
         context: Optional[Dict[str, Any]] = None,
-        reasoning_type: ReasoningType = ReasoningType.DEDUCTIVE
+        reasoning_type: ReasoningType = ReasoningType.DEDUCTIVE,
     ) -> ReasoningResult:
         """
         Perform chain-of-thought reasoning on a query.
@@ -213,7 +227,7 @@ class ReasoningEngine(ResilientSubsystem):
         self,
         query: str,
         context: Optional[Dict[str, Any]],
-        reasoning_type: ReasoningType
+        reasoning_type: ReasoningType,
     ) -> str:
         """Build a prompt for chain-of-thought reasoning"""
         type_instructions = {
@@ -224,7 +238,9 @@ class ReasoningEngine(ResilientSubsystem):
             ReasoningType.ANALOGICAL: "Use analogical reasoning: draw conclusions by comparing similar situations.",
         }
 
-        context_str = f"\n\nContext:\n{json.dumps(context, indent=2)}" if context else ""
+        context_str = (
+            f"\n\nContext:\n{json.dumps(context, indent=2)}" if context else ""
+        )
 
         return f"""You are a sophisticated reasoning engine. {type_instructions.get(reasoning_type, '')}
 
@@ -253,7 +269,7 @@ OVERALL CONFIDENCE: [0-1]
     def _parse_reasoning_steps(self, response: str) -> List[ReasoningStep]:
         """Parse AI response into reasoning steps"""
         steps = []
-        lines = response.split('\n')
+        lines = response.split("\n")
 
         current_step = None
         step_num = 0
@@ -261,45 +277,49 @@ OVERALL CONFIDENCE: [0-1]
         for line in lines:
             line = line.strip()
 
-            if line.startswith('STEP'):
+            if line.startswith("STEP"):
                 step_num += 1
                 current_step = {
-                    'step_number': step_num,
-                    'description': line.split(':', 1)[1].strip() if ':' in line else '',
-                    'conclusion': '',
-                    'confidence': 0.5,
-                    'evidence': [],
-                    'assumptions': [],
+                    "step_number": step_num,
+                    "description": line.split(":", 1)[1].strip() if ":" in line else "",
+                    "conclusion": "",
+                    "confidence": 0.5,
+                    "evidence": [],
+                    "assumptions": [],
                 }
 
-            elif line.startswith('CONCLUSION:') and current_step:
-                current_step['conclusion'] = line.split(':', 1)[1].strip()
+            elif line.startswith("CONCLUSION:") and current_step:
+                current_step["conclusion"] = line.split(":", 1)[1].strip()
 
-            elif line.startswith('CONFIDENCE:') and current_step:
+            elif line.startswith("CONFIDENCE:") and current_step:
                 try:
-                    current_step['confidence'] = float(line.split(':', 1)[1].strip())
+                    current_step["confidence"] = float(line.split(":", 1)[1].strip())
                 except:
                     pass
 
-            elif line.startswith('EVIDENCE:') and current_step:
-                current_step['evidence'].append(line.split(':', 1)[1].strip())
+            elif line.startswith("EVIDENCE:") and current_step:
+                current_step["evidence"].append(line.split(":", 1)[1].strip())
 
-            elif line.startswith('FINAL CONCLUSION:'):
+            elif line.startswith("FINAL CONCLUSION:"):
                 if current_step:
                     steps.append(ReasoningStep(**current_step))
                 # Create final step
-                steps.append(ReasoningStep(
-                    step_number=step_num + 1,
-                    description="Final synthesis",
-                    conclusion=line.split(':', 1)[1].strip(),
-                    confidence=0.8,
-                    evidence=[],
-                    assumptions=[],
-                ))
+                steps.append(
+                    ReasoningStep(
+                        step_number=step_num + 1,
+                        description="Final synthesis",
+                        conclusion=line.split(":", 1)[1].strip(),
+                        confidence=0.8,
+                        evidence=[],
+                        assumptions=[],
+                    )
+                )
 
-            elif current_step and not line.startswith(('STEP', 'CONCLUSION', 'CONFIDENCE', 'EVIDENCE', 'OVERALL')):
-                if line and current_step['description']:
-                    current_step['description'] += ' ' + line
+            elif current_step and not line.startswith(
+                ("STEP", "CONCLUSION", "CONFIDENCE", "EVIDENCE", "OVERALL")
+            ):
+                if line and current_step["description"]:
+                    current_step["description"] += " " + line
 
         # Add last step if not added
         if current_step and (not steps or steps[-1].step_number != step_num):
@@ -307,14 +327,16 @@ OVERALL CONFIDENCE: [0-1]
 
         # If no steps parsed, create a simple one
         if not steps:
-            steps.append(ReasoningStep(
-                step_number=1,
-                description="Direct analysis",
-                conclusion=response[:500],
-                confidence=0.5,
-                evidence=[],
-                assumptions=[],
-            ))
+            steps.append(
+                ReasoningStep(
+                    step_number=1,
+                    description="Direct analysis",
+                    conclusion=response[:500],
+                    confidence=0.5,
+                    evidence=[],
+                    assumptions=[],
+                )
+            )
 
         return steps
 
@@ -342,7 +364,7 @@ OVERALL CONFIDENCE: [0-1]
         self,
         context: Dict[str, Any],
         options: List[Any],
-        constraints: Optional[List[str]] = None
+        constraints: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Make a decision based on context and options.
@@ -397,24 +419,24 @@ REASONING: [explanation]
 
         # Store decision
         decision_id = str(uuid.uuid4())
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_decision_analysis
             (decision_id, context, options, analysis, recommendation, confidence)
             VALUES ($1, $2, $3, $4, $5, $6)
-        ''',
+        """,
             decision_id,
             json.dumps(context),
             json.dumps(options),
-            json.dumps(result.get('analysis', {})),
-            json.dumps(result.get('selected_option', {})),
-            result.get('confidence', 0.5))
+            json.dumps(result.get("analysis", {})),
+            json.dumps(result.get("selected_option", {})),
+            result.get("confidence", 0.5),
+        )
 
         return result
 
     def _parse_decision_response(
-        self,
-        response: str,
-        options: List[Any]
+        self, response: str, options: List[Any]
     ) -> Dict[str, Any]:
         """Parse decision response"""
         result = {
@@ -424,23 +446,23 @@ REASONING: [explanation]
             "reasoning": "",
         }
 
-        lines = response.split('\n')
+        lines = response.split("\n")
         for line in lines:
             line = line.strip()
-            if line.startswith('RECOMMENDATION:'):
-                rec = line.split(':', 1)[1].strip()
+            if line.startswith("RECOMMENDATION:"):
+                rec = line.split(":", 1)[1].strip()
                 # Try to match to an option
                 for i, opt in enumerate(options):
-                    if str(i) in rec or str(i+1) in rec:
+                    if str(i) in rec or str(i + 1) in rec:
                         result["selected_option"] = opt
                         break
-            elif line.startswith('CONFIDENCE:'):
+            elif line.startswith("CONFIDENCE:"):
                 try:
-                    result["confidence"] = float(line.split(':', 1)[1].strip())
+                    result["confidence"] = float(line.split(":", 1)[1].strip())
                 except:
                     pass
-            elif line.startswith('REASONING:'):
-                result["reasoning"] = line.split(':', 1)[1].strip()
+            elif line.startswith("REASONING:"):
+                result["reasoning"] = line.split(":", 1)[1].strip()
 
         return result
 
@@ -460,12 +482,16 @@ REASONING: [explanation]
         """
         self.metrics["goals_decomposed"] += 1
 
-        goal_dict = goal if isinstance(goal, dict) else {
-            "title": goal.title,
-            "description": goal.description,
-            "level": goal.level.value,
-            "deadline": goal.deadline.isoformat() if goal.deadline else None,
-        }
+        goal_dict = (
+            goal
+            if isinstance(goal, dict)
+            else {
+                "title": goal.title,
+                "description": goal.description,
+                "level": goal.level.value,
+                "deadline": goal.deadline.isoformat() if goal.deadline else None,
+            }
+        )
 
         prompt = f"""Decompose this goal into actionable subtasks.
 
@@ -491,8 +517,8 @@ Format as JSON array:
         # Parse JSON from response
         try:
             # Find JSON array in response
-            start = response.find('[')
-            end = response.rfind(']') + 1
+            start = response.find("[")
+            end = response.rfind("]") + 1
             if start >= 0 and end > start:
                 subtasks = json.loads(response[start:end])
                 return subtasks
@@ -501,9 +527,18 @@ Format as JSON array:
 
         # Fallback: create simple subtasks
         return [
-            {"title": f"Subtask 1 for: {goal_dict.get('title', 'Goal')}", "priority": "medium"},
-            {"title": f"Subtask 2 for: {goal_dict.get('title', 'Goal')}", "priority": "medium"},
-            {"title": f"Subtask 3 for: {goal_dict.get('title', 'Goal')}", "priority": "medium"},
+            {
+                "title": f"Subtask 1 for: {goal_dict.get('title', 'Goal')}",
+                "priority": "medium",
+            },
+            {
+                "title": f"Subtask 2 for: {goal_dict.get('title', 'Goal')}",
+                "priority": "medium",
+            },
+            {
+                "title": f"Subtask 3 for: {goal_dict.get('title', 'Goal')}",
+                "priority": "medium",
+            },
         ]
 
     # =========================================================================
@@ -546,34 +581,34 @@ REASONING: explanation
             "reasoning": "",
         }
 
-        lines = response.split('\n')
+        lines = response.split("\n")
         for line in lines:
             line = line.strip()
-            if line.startswith('IMMEDIATE_IMPACT:'):
+            if line.startswith("IMMEDIATE_IMPACT:"):
                 try:
                     result["immediate_impact"] = float(
-                        line.split('$')[1].split()[0].replace(',', '')
+                        line.split("$")[1].split()[0].replace(",", "")
                     )
                 except:
                     pass
-            elif line.startswith('LONGTERM_IMPACT:'):
+            elif line.startswith("LONGTERM_IMPACT:"):
                 try:
                     result["longterm_impact"] = float(
-                        line.split('$')[1].split()[0].replace(',', '')
+                        line.split("$")[1].split()[0].replace(",", "")
                     )
                 except:
                     pass
-            elif line.startswith('PROBABILITY:'):
+            elif line.startswith("PROBABILITY:"):
                 try:
-                    result["probability"] = float(line.split(':')[1].strip())
+                    result["probability"] = float(line.split(":")[1].strip())
                 except:
                     pass
-            elif line.startswith('PRIORITY:'):
-                result["priority"] = line.split(':')[1].strip().lower()
-            elif line.startswith('- '):
+            elif line.startswith("PRIORITY:"):
+                result["priority"] = line.split(":")[1].strip().lower()
+            elif line.startswith("- "):
                 result["actions"].append(line[2:])
-            elif line.startswith('REASONING:'):
-                result["reasoning"] = line.split(':', 1)[1].strip()
+            elif line.startswith("REASONING:"):
+                result["reasoning"] = line.split(":", 1)[1].strip()
 
         return result
 
@@ -613,30 +648,39 @@ REASONING: explanation
 
     async def _store_reasoning(self, result: ReasoningResult):
         """Store reasoning result in database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_reasoning
             (reasoning_id, query, reasoning_type, steps, final_conclusion,
              confidence, alternatives)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ''',
+        """,
             result.id,
             result.query,
             result.reasoning_type.value,
-            json.dumps([{
-                'step_number': s.step_number,
-                'description': s.description,
-                'conclusion': s.conclusion,
-                'confidence': s.confidence,
-            } for s in result.steps]),
+            json.dumps(
+                [
+                    {
+                        "step_number": s.step_number,
+                        "description": s.description,
+                        "conclusion": s.conclusion,
+                        "confidence": s.confidence,
+                    }
+                    for s in result.steps
+                ]
+            ),
             result.final_conclusion,
             result.confidence,
-            json.dumps(result.alternatives))
+            json.dumps(result.alternatives),
+        )
 
     # =========================================================================
     # PUBLIC API
     # =========================================================================
 
-    async def process_reasoning_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_reasoning_request(
+        self, request: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Process reasoning request from controller"""
         request_type = request.get("type", "reason")
 
@@ -644,7 +688,9 @@ REASONING: explanation
             result = await self.reason(
                 query=request.get("query", ""),
                 context=request.get("context"),
-                reasoning_type=ReasoningType(request.get("reasoning_type", "deductive")),
+                reasoning_type=ReasoningType(
+                    request.get("reasoning_type", "deductive")
+                ),
             )
             return {
                 "status": "completed",

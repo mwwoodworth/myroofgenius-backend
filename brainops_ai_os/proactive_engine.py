@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class OpportunityType(str, Enum):
     """Types of proactive opportunities"""
+
     REVENUE = "revenue"
     EFFICIENCY = "efficiency"
     CUSTOMER = "customer"
@@ -41,6 +42,7 @@ class OpportunityType(str, Enum):
 
 class PredictionType(str, Enum):
     """Types of predictions"""
+
     CHURN = "churn"
     REVENUE = "revenue"
     DEMAND = "demand"
@@ -51,6 +53,7 @@ class PredictionType(str, Enum):
 @dataclass
 class Opportunity:
     """A proactive opportunity"""
+
     id: str
     type: OpportunityType
     title: str
@@ -68,6 +71,7 @@ class Opportunity:
 @dataclass
 class Prediction:
     """A proactive prediction"""
+
     id: str
     type: PredictionType
     target: str
@@ -121,10 +125,16 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
 
         if self._openai_key:
             import openai
+
             self._openai_client = openai.AsyncOpenAI(api_key=self._openai_key)
 
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -136,7 +146,8 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
 
     async def _initialize_database(self):
         """Create required database tables"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Opportunities
             CREATE TABLE IF NOT EXISTS brainops_opportunities (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -188,13 +199,16 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 actionable BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT NOW()
             );
-        ''')
+        """
+        )
 
     async def _start_background_processes(self):
         """Start background processes"""
         # Opportunity scanning
         self._tasks.append(
-            self._create_safe_task(self._opportunity_scan_loop(), name="opportunity_scan")
+            self._create_safe_task(
+                self._opportunity_scan_loop(), name="opportunity_scan"
+            )
         )
 
         # Prediction generation
@@ -204,12 +218,16 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
 
         # Insight generation
         self._tasks.append(
-            self._create_safe_task(self._insight_generation_loop(), name="insight_generation")
+            self._create_safe_task(
+                self._insight_generation_loop(), name="insight_generation"
+            )
         )
 
         # Prediction verification
         self._tasks.append(
-            self._create_safe_task(self._prediction_verification_loop(), name="prediction_verification")
+            self._create_safe_task(
+                self._prediction_verification_loop(), name="prediction_verification"
+            )
         )
 
         logger.info(f"Started {len(self._tasks)} proactive background processes")
@@ -235,14 +253,16 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     async def _scan_for_opportunities(self):
         """Scan business data for opportunities"""
         # Revenue opportunities - leads not followed up
-        unfollowed_leads = await self._db_fetch_with_retry('''
+        unfollowed_leads = await self._db_fetch_with_retry(
+            """
             SELECT id, name, email, score, created_at
             FROM leads
             WHERE status = 'new'
             AND score >= 70
             AND created_at > NOW() - INTERVAL '48 hours'
             AND created_at < NOW() - INTERVAL '4 hours'
-        ''')
+        """
+        )
 
         for lead in unfollowed_leads:
             await self._create_opportunity(
@@ -252,15 +272,16 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 potential_value=500,  # Estimated value
                 confidence=0.7,
                 urgency=0.8,
-                context={"lead_id": str(lead['id']), "score": lead['score']},
+                context={"lead_id": str(lead["id"]), "score": lead["score"]},
                 actions=[
-                    {"action": "call", "target": lead['email']},
+                    {"action": "call", "target": lead["email"]},
                     {"action": "assign", "to": "senior_sales"},
-                ]
+                ],
             )
 
         # Customer retention - declining activity
-        declining_customers = await self._db_fetch_with_retry('''
+        declining_customers = await self._db_fetch_with_retry(
+            """
             SELECT c.id, c.name, c.email,
                    COUNT(DISTINCT j.id) as recent_jobs
             FROM customers c
@@ -270,7 +291,8 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             AND c.created_at < NOW() - INTERVAL '6 months'
             GROUP BY c.id, c.name, c.email
             HAVING COUNT(DISTINCT j.id) = 0
-        ''')
+        """
+        )
 
         for customer in declining_customers:
             await self._create_opportunity(
@@ -280,16 +302,17 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 potential_value=1000,
                 confidence=0.6,
                 urgency=0.5,
-                context={"customer_id": str(customer['id'])},
+                context={"customer_id": str(customer["id"])},
                 actions=[
                     {"action": "send_email", "template": "reengagement"},
                     {"action": "schedule_call", "purpose": "check_in"},
-                ]
+                ],
             )
 
         # Cost savings - efficiency opportunities
         # Check for duplicate or redundant operations
-        duplicate_operations = await self._db_fetch_with_retry('''
+        duplicate_operations = await self._db_fetch_with_retry(
+            """
             SELECT COUNT(*) as count, operation_type
             FROM (
                 SELECT 'lead_followup' as operation_type, lead_id
@@ -299,10 +322,11 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 HAVING COUNT(*) > 3
             ) duplicates
             GROUP BY operation_type
-        ''')
+        """
+        )
 
         for op in duplicate_operations:
-            if op['count'] > 5:
+            if op["count"] > 5:
                 await self._create_opportunity(
                     OpportunityType.EFFICIENCY,
                     f"Reduce duplicate {op['operation_type']} operations",
@@ -310,10 +334,13 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                     potential_value=100,
                     confidence=0.8,
                     urgency=0.3,
-                    context={"operation_type": op['operation_type'], "count": op['count']},
+                    context={
+                        "operation_type": op["operation_type"],
+                        "count": op["count"],
+                    },
                     actions=[
-                        {"action": "optimize_workflow", "target": op['operation_type']},
-                    ]
+                        {"action": "optimize_workflow", "target": op["operation_type"]},
+                    ],
                 )
 
     async def _create_opportunity(
@@ -326,7 +353,7 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         urgency: float,
         context: Dict[str, Any],
         actions: List[Dict[str, Any]],
-        expires_hours: int = 72
+        expires_hours: int = 72,
     ):
         """Create and store an opportunity"""
         opp_id = str(uuid.uuid4())
@@ -349,28 +376,44 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         self.metrics["actions_suggested"] += len(actions)
 
         # Store in database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_opportunities
             (opportunity_id, opportunity_type, title, description,
              potential_value, confidence, urgency, recommended_actions,
              context, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ''',
-            opp_id, opp_type.value, title, description,
-            potential_value, confidence, urgency, json.dumps(actions),
-            json.dumps(context), opportunity.expires_at)
+        """,
+            opp_id,
+            opp_type.value,
+            title,
+            description,
+            potential_value,
+            confidence,
+            urgency,
+            json.dumps(actions),
+            json.dumps(context),
+            opportunity.expires_at,
+        )
 
         # Notify controller if high value/urgency
         if (potential_value > 500 or urgency > 0.7) and self.controller:
             from .metacognitive_controller import AttentionPriority
-            priority = AttentionPriority.URGENT if urgency > 0.7 else AttentionPriority.HIGH
-            await self.controller._record_thought({
-                "type": "opportunity",
-                "opportunity_id": opp_id,
-                "title": title,
-                "value": potential_value,
-                "urgency": urgency,
-            }, priority, "proactive_engine")
+
+            priority = (
+                AttentionPriority.URGENT if urgency > 0.7 else AttentionPriority.HIGH
+            )
+            await self.controller._record_thought(
+                {
+                    "type": "opportunity",
+                    "opportunity_id": opp_id,
+                    "title": title,
+                    "value": potential_value,
+                    "urgency": urgency,
+                },
+                priority,
+                "proactive_engine",
+            )
 
     # =========================================================================
     # PREDICTION GENERATION
@@ -393,7 +436,8 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     async def _generate_predictions(self):
         """Generate predictions from data patterns"""
         # Churn prediction
-        at_risk_customers = await self._db_fetch_with_retry('''
+        at_risk_customers = await self._db_fetch_with_retry(
+            """
             SELECT c.id, c.name,
                    MAX(j.created_at) as last_job,
                    COUNT(DISTINCT j.id) as total_jobs
@@ -403,7 +447,8 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             GROUP BY c.id, c.name
             HAVING MAX(j.created_at) < NOW() - INTERVAL '180 days'
                OR (COUNT(DISTINCT j.id) > 5 AND MAX(j.created_at) < NOW() - INTERVAL '90 days')
-        ''')
+        """
+        )
 
         for customer in at_risk_customers:
             await self._create_prediction(
@@ -411,15 +456,17 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 target=f"customer:{customer['id']}",
                 probability=0.7,
                 timeframe="30 days",
-                impact=customer['total_jobs'] * 500,
+                impact=customer["total_jobs"] * 500,
                 preventive_actions=[
                     {"action": "outreach_call", "reason": "retention"},
                     {"action": "special_offer", "type": "loyalty_discount"},
-                ]
+                ],
             )
 
         # Revenue prediction - based on lead pipeline
-        pipeline_value = await self._db_fetchval_with_retry('''
+        pipeline_value = (
+            await self._db_fetchval_with_retry(
+                """
             SELECT SUM(
                 CASE
                     WHEN score >= 80 THEN estimated_value * 0.8
@@ -431,7 +478,10 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             FROM leads
             WHERE status NOT IN ('won', 'lost')
             AND estimated_value IS NOT NULL
-        ''') or 0
+        """
+            )
+            or 0
+        )
 
         if pipeline_value > 0:
             await self._create_prediction(
@@ -443,7 +493,7 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 preventive_actions=[
                     {"action": "focus_high_score_leads"},
                     {"action": "accelerate_follow_ups"},
-                ]
+                ],
             )
 
     async def _create_prediction(
@@ -453,7 +503,7 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         probability: float,
         timeframe: str,
         impact: float,
-        preventive_actions: List[Dict[str, Any]]
+        preventive_actions: List[Dict[str, Any]],
     ):
         """Create and store a prediction"""
         pred_id = str(uuid.uuid4())
@@ -471,14 +521,21 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         self.predictions[pred_id] = prediction
         self.metrics["predictions_made"] += 1
 
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_predictions
             (prediction_id, prediction_type, target, probability,
              timeframe, impact, preventive_actions)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ''',
-            pred_id, pred_type.value, target, probability,
-            timeframe, impact, json.dumps(preventive_actions))
+        """,
+            pred_id,
+            pred_type.value,
+            target,
+            probability,
+            timeframe,
+            impact,
+            json.dumps(preventive_actions),
+        )
 
     # =========================================================================
     # INSIGHT GENERATION
@@ -501,7 +558,8 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     async def _generate_insights(self):
         """Generate insights from aggregated data"""
         # Lead source performance
-        source_performance = await self._db_fetch_with_retry('''
+        source_performance = await self._db_fetch_with_retry(
+            """
             SELECT
                 source,
                 COUNT(*) as total,
@@ -512,24 +570,25 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             WHERE created_at > NOW() - INTERVAL '30 days'
             GROUP BY source
             HAVING COUNT(*) >= 10
-        ''')
+        """
+        )
 
         for source in source_performance:
-            if source['conversion_rate'] and source['conversion_rate'] > 0.3:
+            if source["conversion_rate"] and source["conversion_rate"] > 0.3:
                 await self._store_insight(
                     "high_converting_source",
                     f"High-converting lead source: {source['source']}",
                     f"Source {source['source']} has {source['conversion_rate']*100:.1f}% conversion rate",
                     "leads",
-                    source['conversion_rate']
+                    source["conversion_rate"],
                 )
-            elif source['conversion_rate'] and source['conversion_rate'] < 0.05:
+            elif source["conversion_rate"] and source["conversion_rate"] < 0.05:
                 await self._store_insight(
                     "low_converting_source",
                     f"Low-converting lead source: {source['source']}",
                     f"Source {source['source']} has only {source['conversion_rate']*100:.1f}% conversion",
                     "leads",
-                    0.8
+                    0.8,
                 )
 
     async def _store_insight(
@@ -538,14 +597,21 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         title: str,
         description: str,
         data_source: str,
-        confidence: float
+        confidence: float,
     ):
         """Store an insight"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_insights
             (insight_type, title, description, data_source, confidence)
             VALUES ($1, $2, $3, $4, $5)
-        ''', insight_type, title, description, data_source, confidence)
+        """,
+            insight_type,
+            title,
+            description,
+            data_source,
+            confidence,
+        )
 
     # =========================================================================
     # PREDICTION VERIFICATION
@@ -568,32 +634,33 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     async def _verify_predictions(self):
         """Verify if predictions came true"""
         # Get predictions to verify (older than timeframe)
-        predictions = await self._db_fetch_with_retry('''
+        predictions = await self._db_fetch_with_retry(
+            """
             SELECT prediction_id, prediction_type, target, probability
             FROM brainops_predictions
             WHERE verified IS NULL
             AND created_at < NOW() - INTERVAL '30 days'
-        ''')
+        """
+        )
 
         for pred in predictions:
             verified = await self._check_prediction_outcome(
-                pred['prediction_type'],
-                pred['target']
+                pred["prediction_type"], pred["target"]
             )
 
-            await self._db_execute_with_retry('''
+            await self._db_execute_with_retry(
+                """
                 UPDATE brainops_predictions
                 SET verified = $2, verified_at = NOW()
                 WHERE prediction_id = $1
-            ''', pred['prediction_id'], verified)
+            """,
+                pred["prediction_id"],
+                verified,
+            )
 
             self.metrics["predictions_verified"] += 1
 
-    async def _check_prediction_outcome(
-        self,
-        pred_type: str,
-        target: str
-    ) -> bool:
+    async def _check_prediction_outcome(self, pred_type: str, target: str) -> bool:
         """Check if a prediction came true"""
         # Would implement actual verification logic here
         # For now, return based on type

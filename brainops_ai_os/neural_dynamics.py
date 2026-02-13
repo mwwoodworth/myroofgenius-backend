@@ -34,29 +34,32 @@ logger = logging.getLogger(__name__)
 
 class NeuronType(str, Enum):
     """Types of neurons in the network"""
-    SENSORY = "sensory"       # Input processing
-    MOTOR = "motor"           # Output/action
+
+    SENSORY = "sensory"  # Input processing
+    MOTOR = "motor"  # Output/action
     INTERNEURON = "interneuron"  # Internal processing
-    MODULATORY = "modulatory"    # Modifies other neurons
+    MODULATORY = "modulatory"  # Modifies other neurons
 
 
 class PathwayState(str, Enum):
     """States of neural pathways"""
+
     ACTIVE = "active"
     POTENTIATED = "potentiated"  # Recently strengthened
-    DEPRESSED = "depressed"       # Recently weakened
-    DORMANT = "dormant"           # Rarely used
+    DEPRESSED = "depressed"  # Recently weakened
+    DORMANT = "dormant"  # Rarely used
 
 
 @dataclass
 class Neuron:
     """A neuron in the dynamic network"""
+
     id: str
     name: str
     neuron_type: NeuronType
     agent_id: Optional[str] = None  # Associated AI agent
     activation: float = 0.0  # Current activation level
-    threshold: float = 0.5   # Activation threshold
+    threshold: float = 0.5  # Activation threshold
     bias: float = 0.0
     input_weights: Dict[str, float] = field(default_factory=dict)
     output_connections: Set[str] = field(default_factory=set)
@@ -68,6 +71,7 @@ class Neuron:
 @dataclass
 class Synapse:
     """A connection between neurons"""
+
     id: str
     source_id: str
     target_id: str
@@ -81,6 +85,7 @@ class Synapse:
 @dataclass
 class NeuralCluster:
     """A cluster of related neurons"""
+
     id: str
     name: str
     neuron_ids: Set[str]
@@ -141,6 +146,11 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         # Create database tables
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -156,11 +166,14 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         # Start background processes
         await self._start_background_processes()
 
-        logger.info(f"DynamicNeuralNetwork initialized with {len(self.neurons)} neurons, {len(self.synapses)} synapses")
+        logger.info(
+            f"DynamicNeuralNetwork initialized with {len(self.neurons)} neurons, {len(self.synapses)} synapses"
+        )
 
     async def _initialize_database(self):
         """Create required database tables"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Neurons table
             CREATE TABLE IF NOT EXISTS brainops_neurons (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -238,69 +251,80 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                 last_co_activation TIMESTAMP DEFAULT NOW(),
                 UNIQUE(neuron_a, neuron_b)
             );
-        ''')
+        """
+        )
 
     async def _load_network(self):
         """Load existing network from database"""
         # Load neurons
-        neurons = await self._db_fetch_with_retry('''
+        neurons = await self._db_fetch_with_retry(
+            """
             SELECT neuron_id, name, neuron_type, agent_id, threshold,
                    bias, fire_count, last_fired, metadata
             FROM brainops_neurons
-        ''')
+        """
+        )
 
         for row in neurons:
             neuron = Neuron(
-                id=row['neuron_id'],
-                name=row['name'],
-                neuron_type=NeuronType(row['neuron_type']),
-                agent_id=row['agent_id'],
-                threshold=row['threshold'],
-                bias=row['bias'],
-                fire_count=row['fire_count'],
-                last_fired=row['last_fired'],
-                metadata=row['metadata'] or {},
+                id=row["neuron_id"],
+                name=row["name"],
+                neuron_type=NeuronType(row["neuron_type"]),
+                agent_id=row["agent_id"],
+                threshold=row["threshold"],
+                bias=row["bias"],
+                fire_count=row["fire_count"],
+                last_fired=row["last_fired"],
+                metadata=row["metadata"] or {},
             )
             self.neurons[neuron.id] = neuron
 
         # Load synapses
-        synapses = await self._db_fetch_with_retry('''
+        synapses = await self._db_fetch_with_retry(
+            """
             SELECT synapse_id, source_id, target_id, weight,
                    plasticity, co_activation_count, state, last_active
             FROM brainops_synapses
-        ''')
+        """
+        )
 
         for row in synapses:
             synapse = Synapse(
-                id=row['synapse_id'],
-                source_id=row['source_id'],
-                target_id=row['target_id'],
-                weight=row['weight'],
-                plasticity=row['plasticity'],
-                co_activation_count=row['co_activation_count'],
-                state=PathwayState(row['state']),
-                last_active=row['last_active'],
+                id=row["synapse_id"],
+                source_id=row["source_id"],
+                target_id=row["target_id"],
+                weight=row["weight"],
+                plasticity=row["plasticity"],
+                co_activation_count=row["co_activation_count"],
+                state=PathwayState(row["state"]),
+                last_active=row["last_active"],
             )
             self.synapses[synapse.id] = synapse
 
             # Update neuron connections
             if synapse.source_id in self.neurons:
-                self.neurons[synapse.source_id].output_connections.add(synapse.target_id)
+                self.neurons[synapse.source_id].output_connections.add(
+                    synapse.target_id
+                )
             if synapse.target_id in self.neurons:
-                self.neurons[synapse.target_id].input_weights[synapse.source_id] = synapse.weight
+                self.neurons[synapse.target_id].input_weights[
+                    synapse.source_id
+                ] = synapse.weight
 
         # Load clusters
-        clusters = await self._db_fetch_with_retry('''
+        clusters = await self._db_fetch_with_retry(
+            """
             SELECT cluster_id, name, neuron_ids, specialization
             FROM brainops_neural_clusters
-        ''')
+        """
+        )
 
         for row in clusters:
             cluster = NeuralCluster(
-                id=row['cluster_id'],
-                name=row['name'],
-                neuron_ids=set(row['neuron_ids'] or []),
-                specialization=row['specialization'],
+                id=row["cluster_id"],
+                name=row["name"],
+                neuron_ids=set(row["neuron_ids"] or []),
+                specialization=row["specialization"],
             )
             self.clusters[cluster.id] = cluster
 
@@ -317,20 +341,22 @@ class DynamicNeuralNetwork(ResilientSubsystem):
 
             if neuron_id not in self.neurons:
                 await self.create_neuron(
-                    name=agent.get('name', agent_id),
+                    name=agent.get("name", agent_id),
                     neuron_type=NeuronType.INTERNEURON,
                     agent_id=agent_id,
                     metadata={
-                        "capabilities": agent.get('capabilities', []),
-                        "type": agent.get('type', 'general'),
-                    }
+                        "capabilities": agent.get("capabilities", []),
+                        "type": agent.get("type", "general"),
+                    },
                 )
 
     async def _start_background_processes(self):
         """Start background neural processes"""
         # Hebbian learning update
         self._tasks.append(
-            self._create_safe_task(self._hebbian_learning_loop(), name="hebbian_learning")
+            self._create_safe_task(
+                self._hebbian_learning_loop(), name="hebbian_learning"
+            )
         )
 
         # Synaptic decay
@@ -340,12 +366,16 @@ class DynamicNeuralNetwork(ResilientSubsystem):
 
         # Cluster detection
         self._tasks.append(
-            self._create_safe_task(self._cluster_detection_loop(), name="cluster_detection")
+            self._create_safe_task(
+                self._cluster_detection_loop(), name="cluster_detection"
+            )
         )
 
         # Activity monitoring
         self._tasks.append(
-            self._create_safe_task(self._activity_monitoring_loop(), name="activity_monitoring")
+            self._create_safe_task(
+                self._activity_monitoring_loop(), name="activity_monitoring"
+            )
         )
 
         logger.info(f"Started {len(self._tasks)} neural background processes")
@@ -360,7 +390,7 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         neuron_type: NeuronType,
         agent_id: Optional[str] = None,
         threshold: float = 0.5,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Create a new neuron"""
         neuron_id = str(uuid.uuid4())
@@ -378,12 +408,19 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         self.metrics["total_neurons"] += 1
 
         # Persist to database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_neurons
             (neuron_id, name, neuron_type, agent_id, threshold, metadata)
             VALUES ($1, $2, $3, $4, $5, $6)
-        ''', neuron_id, name, neuron_type.value, agent_id, threshold,
-            json.dumps(metadata or {}))
+        """,
+            neuron_id,
+            name,
+            neuron_type.value,
+            agent_id,
+            threshold,
+            json.dumps(metadata or {}),
+        )
 
         return neuron_id
 
@@ -392,7 +429,7 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         source_id: str,
         target_id: str,
         weight: float = 0.5,
-        plasticity: float = 0.1
+        plasticity: float = 0.1,
     ) -> Optional[str]:
         """Create a synapse between two neurons"""
         if source_id not in self.neurons or target_id not in self.neurons:
@@ -414,21 +451,25 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         self.metrics["total_synapses"] += 1
 
         # Persist to database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_synapses
             (synapse_id, source_id, target_id, weight, plasticity)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (source_id, target_id) DO UPDATE SET
                 weight = EXCLUDED.weight
-        ''', synapse_id, source_id, target_id, weight, plasticity)
+        """,
+            synapse_id,
+            source_id,
+            target_id,
+            weight,
+            plasticity,
+        )
 
         return synapse_id
 
     async def activate_neuron(
-        self,
-        neuron_id: str,
-        input_value: float,
-        source: str = "external"
+        self, neuron_id: str, input_value: float, source: str = "external"
     ) -> Dict[str, Any]:
         """
         Activate a neuron and propagate through the network.
@@ -470,18 +511,19 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                     # Get synapse weight
                     synapse_key = f"{neuron_id}_{target_id}"
                     synapse = next(
-                        (s for s in self.synapses.values()
-                         if s.source_id == neuron_id and s.target_id == target_id),
-                        None
+                        (
+                            s
+                            for s in self.synapses.values()
+                            if s.source_id == neuron_id and s.target_id == target_id
+                        ),
+                        None,
                     )
 
                     if synapse:
                         # Propagate activation
                         propagated_activation = activation * synapse.weight
                         await self.activate_neuron(
-                            target_id,
-                            propagated_activation,
-                            source=neuron_id
+                            target_id, propagated_activation, source=neuron_id
                         )
                         propagated_to.append(target_id)
 
@@ -493,27 +535,40 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         self.metrics["total_activations"] += 1
 
         # Record activation
-        self.activation_history.append({
-            "neuron_id": neuron_id,
-            "activation": activation,
-            "source": source,
-            "propagated_to": propagated_to,
-            "timestamp": now,
-        })
+        self.activation_history.append(
+            {
+                "neuron_id": neuron_id,
+                "activation": activation,
+                "source": source,
+                "propagated_to": propagated_to,
+                "timestamp": now,
+            }
+        )
 
         # Store in database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_activation_history
             (neuron_id, activation_level, trigger_source, propagated_to)
             VALUES ($1, $2, $3, $4)
-        ''', neuron_id, activation, source, propagated_to)
+        """,
+            neuron_id,
+            activation,
+            source,
+            propagated_to,
+        )
 
         # Update neuron stats
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             UPDATE brainops_neurons
             SET fire_count = $2, last_fired = $3
             WHERE neuron_id = $1
-        ''', neuron_id, neuron.fire_count, neuron.last_fired)
+        """,
+            neuron_id,
+            neuron.fire_count,
+            neuron.last_fired,
+        )
 
         return {
             "status": "activated",
@@ -547,22 +602,27 @@ class DynamicNeuralNetwork(ResilientSubsystem):
         logger.info("Applying Hebbian learning...")
 
         # Get recent co-activations
-        co_activations = await self._db_fetch_with_retry('''
+        co_activations = await self._db_fetch_with_retry(
+            """
             SELECT neuron_a, neuron_b, count
             FROM brainops_co_activations
             WHERE last_co_activation > NOW() - INTERVAL '1 hour'
-        ''')
+        """
+        )
 
         for row in co_activations:
-            source_id = row['neuron_a']
-            target_id = row['neuron_b']
-            count = row['count']
+            source_id = row["neuron_a"]
+            target_id = row["neuron_b"]
+            count = row["count"]
 
             # Find synapse
             synapse = next(
-                (s for s in self.synapses.values()
-                 if s.source_id == source_id and s.target_id == target_id),
-                None
+                (
+                    s
+                    for s in self.synapses.values()
+                    if s.source_id == source_id and s.target_id == target_id
+                ),
+                None,
             )
 
             if synapse:
@@ -581,24 +641,33 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                     self.metrics["pathways_depressed"] += 1
 
                 # Update in database
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     UPDATE brainops_synapses
                     SET weight = $2, state = $3
                     WHERE synapse_id = $1
-                ''', synapse.id, synapse.weight, synapse.state.value)
+                """,
+                    synapse.id,
+                    synapse.weight,
+                    synapse.state.value,
+                )
 
                 # Update neuron input weights
                 if target_id in self.neurons:
                     self.neurons[target_id].input_weights[source_id] = synapse.weight
 
         # Reset co-activation counts for next period
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             UPDATE brainops_co_activations
             SET count = 0
             WHERE last_co_activation < NOW() - INTERVAL '1 hour'
-        ''')
+        """
+        )
 
-        logger.info(f"Hebbian learning complete: {self.metrics['pathways_potentiated']} potentiated, {self.metrics['pathways_depressed']} depressed")
+        logger.info(
+            f"Hebbian learning complete: {self.metrics['pathways_potentiated']} potentiated, {self.metrics['pathways_depressed']} depressed"
+        )
 
     async def _synaptic_decay_loop(self):
         """Apply decay to unused synapses"""
@@ -608,20 +677,24 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                 await asyncio.sleep(3600)
 
                 # Decay weights of unused synapses
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     UPDATE brainops_synapses
                     SET weight = GREATEST(weight * 0.99, 0.01)
                     WHERE last_active < NOW() - INTERVAL '24 hours'
                     OR last_active IS NULL
-                ''')
+                """
+                )
 
                 # Mark dormant synapses
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     UPDATE brainops_synapses
                     SET state = 'dormant'
                     WHERE last_active < NOW() - INTERVAL '7 days'
                     AND state != 'dormant'
-                ''')
+                """
+                )
 
             except asyncio.CancelledError:
                 break
@@ -701,10 +774,14 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                     agent_id = self.neurons[nid].agent_id
                     if agent_id and self.controller:
                         agent = self.controller.agents.get(agent_id, {})
-                        spec = agent.get('type', 'general')
+                        spec = agent.get("type", "general")
                         specializations.append(spec)
 
-            specialization = max(set(specializations), key=specializations.count) if specializations else "general"
+            specialization = (
+                max(set(specializations), key=specializations.count)
+                if specializations
+                else "general"
+            )
 
             if cluster_id not in self.clusters:
                 cluster = NeuralCluster(
@@ -717,14 +794,20 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                 self.metrics["emergent_clusters"] += 1
 
                 # Store in database
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     INSERT INTO brainops_neural_clusters
                     (cluster_id, name, neuron_ids, specialization)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT (cluster_id) DO UPDATE SET
                         neuron_ids = EXCLUDED.neuron_ids,
                         specialization = EXCLUDED.specialization
-                ''', cluster_id, cluster.name, list(neuron_ids), specialization)
+                """,
+                    cluster_id,
+                    cluster.name,
+                    list(neuron_ids),
+                    specialization,
+                )
 
     # =========================================================================
     # ACTIVITY MONITORING
@@ -738,13 +821,16 @@ class DynamicNeuralNetwork(ResilientSubsystem):
 
                 # Calculate activity metrics
                 recent_activations = [
-                    a for a in self.activation_history
-                    if (datetime.now() - a['timestamp']).total_seconds() < 300
+                    a
+                    for a in self.activation_history
+                    if (datetime.now() - a["timestamp"]).total_seconds() < 300
                 ]
 
-                active_neurons = len(set(a['neuron_id'] for a in recent_activations))
+                active_neurons = len(set(a["neuron_id"] for a in recent_activations))
                 total_neurons = len(self.neurons)
-                activity_level = active_neurons / total_neurons if total_neurons > 0 else 0
+                activity_level = (
+                    active_neurons / total_neurons if total_neurons > 0 else 0
+                )
 
                 # Log if unusual activity
                 if activity_level > 0.8:
@@ -763,9 +849,7 @@ class DynamicNeuralNetwork(ResilientSubsystem):
     # =========================================================================
 
     async def route_to_agents(
-        self,
-        task: Dict[str, Any],
-        context: Dict[str, Any]
+        self, task: Dict[str, Any], context: Dict[str, Any]
     ) -> List[str]:
         """
         Route a task to appropriate agents based on neural network state.
@@ -785,7 +869,7 @@ class DynamicNeuralNetwork(ResilientSubsystem):
             if neuron.agent_id:
                 # Check if neuron's specialization matches task
                 metadata = neuron.metadata or {}
-                capabilities = metadata.get('capabilities', [])
+                capabilities = metadata.get("capabilities", [])
 
                 relevance = 0.0
                 for cap in capabilities:
@@ -793,8 +877,10 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                         relevance += 0.3
 
                 if relevance > 0:
-                    result = await self.activate_neuron(neuron_id, relevance, "task_routing")
-                    if result.get('fired'):
+                    result = await self.activate_neuron(
+                        neuron_id, relevance, "task_routing"
+                    )
+                    if result.get("fired"):
                         activated_agents.append(neuron.agent_id)
 
         # Also include agents from strongly connected neurons
@@ -830,11 +916,12 @@ class DynamicNeuralNetwork(ResilientSubsystem):
     async def get_activity_level(self) -> float:
         """Get current neural activity level (0-1)"""
         recent_activations = [
-            a for a in self.activation_history
-            if (datetime.now() - a['timestamp']).total_seconds() < 300
+            a
+            for a in self.activation_history
+            if (datetime.now() - a["timestamp"]).total_seconds() < 300
         ]
 
-        active_neurons = len(set(a['neuron_id'] for a in recent_activations))
+        active_neurons = len(set(a["neuron_id"] for a in recent_activations))
         total_neurons = len(self.neurons)
 
         return active_neurons / total_neurons if total_neurons > 0 else 0.0
@@ -853,7 +940,9 @@ class DynamicNeuralNetwork(ResilientSubsystem):
                 ps.value: sum(1 for s in self.synapses.values() if s.state == ps)
                 for ps in PathwayState
             },
-            "avg_synapse_weight": np.mean([s.weight for s in self.synapses.values()]) if self.synapses else 0,
+            "avg_synapse_weight": np.mean([s.weight for s in self.synapses.values()])
+            if self.synapses
+            else 0,
             "metrics": self.metrics.copy(),
         }
 

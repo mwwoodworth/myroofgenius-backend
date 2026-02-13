@@ -31,13 +31,15 @@ logger = logging.getLogger(__name__)
 
 class GoalLevel(str, Enum):
     """Hierarchical levels of goals"""
-    STRATEGIC = "strategic"      # Long-term (months/years)
-    TACTICAL = "tactical"        # Medium-term (weeks/months)
+
+    STRATEGIC = "strategic"  # Long-term (months/years)
+    TACTICAL = "tactical"  # Medium-term (weeks/months)
     OPERATIONAL = "operational"  # Short-term (hours/days)
 
 
 class GoalStatus(str, Enum):
     """Status of goals"""
+
     PENDING = "pending"
     ACTIVE = "active"
     IN_PROGRESS = "in_progress"
@@ -49,6 +51,7 @@ class GoalStatus(str, Enum):
 
 class GoalPriority(str, Enum):
     """Priority levels"""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -58,6 +61,7 @@ class GoalPriority(str, Enum):
 @dataclass
 class Goal:
     """A goal in the hierarchy"""
+
     id: str
     title: str
     description: str
@@ -119,6 +123,11 @@ class GoalArchitecture(ResilientSubsystem):
         # Create database tables
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -135,7 +144,8 @@ class GoalArchitecture(ResilientSubsystem):
 
     async def _initialize_database(self):
         """Create required database tables"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Goals table
             CREATE TABLE IF NOT EXISTS brainops_goals (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -189,44 +199,48 @@ class GoalArchitecture(ResilientSubsystem):
                 resolved BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT NOW()
             );
-        ''')
+        """
+        )
 
     async def _load_goals(self):
         """Load existing goals from database"""
-        rows = await self._db_fetch_with_retry('''
+        rows = await self._db_fetch_with_retry(
+            """
             SELECT goal_id, title, description, level, priority, status,
                    parent_id, child_ids, success_criteria, progress,
                    deadline, assigned_agents, dependencies, metadata,
                    created_at, started_at, completed_at
             FROM brainops_goals
             WHERE status NOT IN ('completed', 'cancelled', 'failed')
-        ''')
+        """
+        )
 
         for row in rows:
             goal = Goal(
-                id=row['goal_id'],
-                title=row['title'],
-                description=row['description'] or "",
-                level=GoalLevel(row['level']),
-                priority=GoalPriority(row['priority']),
-                status=GoalStatus(row['status']),
-                parent_id=row['parent_id'],
-                child_ids=row['child_ids'] or [],
-                success_criteria=row['success_criteria'] or [],
-                progress=row['progress'] or 0,
-                deadline=row['deadline'],
-                assigned_agents=row['assigned_agents'] or [],
-                dependencies=row['dependencies'] or [],
-                metadata=row['metadata'] or {},
-                created_at=row['created_at'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
+                id=row["goal_id"],
+                title=row["title"],
+                description=row["description"] or "",
+                level=GoalLevel(row["level"]),
+                priority=GoalPriority(row["priority"]),
+                status=GoalStatus(row["status"]),
+                parent_id=row["parent_id"],
+                child_ids=row["child_ids"] or [],
+                success_criteria=row["success_criteria"] or [],
+                progress=row["progress"] or 0,
+                deadline=row["deadline"],
+                assigned_agents=row["assigned_agents"] or [],
+                dependencies=row["dependencies"] or [],
+                metadata=row["metadata"] or {},
+                created_at=row["created_at"],
+                started_at=row["started_at"],
+                completed_at=row["completed_at"],
             )
             self.goals[goal.id] = goal
 
         self.metrics["total_goals"] = len(self.goals)
         self.metrics["active_goals"] = sum(
-            1 for g in self.goals.values()
+            1
+            for g in self.goals.values()
             if g.status in [GoalStatus.ACTIVE, GoalStatus.IN_PROGRESS]
         )
 
@@ -237,7 +251,9 @@ class GoalArchitecture(ResilientSubsystem):
         """Start background processes"""
         # Progress monitoring
         self._tasks.append(
-            self._create_safe_task(self._progress_monitoring_loop(), name="progress_monitoring")
+            self._create_safe_task(
+                self._progress_monitoring_loop(), name="progress_monitoring"
+            )
         )
 
         # Deadline checking
@@ -247,7 +263,9 @@ class GoalArchitecture(ResilientSubsystem):
 
         # Priority rebalancing
         self._tasks.append(
-            self._create_safe_task(self._priority_rebalance_loop(), name="priority_rebalance")
+            self._create_safe_task(
+                self._priority_rebalance_loop(), name="priority_rebalance"
+            )
         )
 
         logger.info(f"Started {len(self._tasks)} goal background processes")
@@ -267,7 +285,7 @@ class GoalArchitecture(ResilientSubsystem):
         deadline: Optional[datetime] = None,
         assigned_agents: Optional[List[str]] = None,
         dependencies: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Create a new goal"""
         goal_id = str(uuid.uuid4())
@@ -295,15 +313,25 @@ class GoalArchitecture(ResilientSubsystem):
             await self._update_goal_in_db(self.goals[parent_id])
 
         # Store in database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_goals
             (goal_id, title, description, level, priority, parent_id,
              success_criteria, deadline, assigned_agents, dependencies, metadata)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ''',
-            goal_id, title, description, level.value, priority.value,
-            parent_id, json.dumps(success_criteria or []), deadline,
-            assigned_agents or [], dependencies or [], json.dumps(metadata or {}))
+        """,
+            goal_id,
+            title,
+            description,
+            level.value,
+            priority.value,
+            parent_id,
+            json.dumps(success_criteria or []),
+            deadline,
+            assigned_agents or [],
+            dependencies or [],
+            json.dumps(metadata or {}),
+        )
 
         # Add to priority queue
         await self._add_to_priority_queue(goal_id)
@@ -311,10 +339,7 @@ class GoalArchitecture(ResilientSubsystem):
         return goal_id
 
     async def update_goal_status(
-        self,
-        goal_id: str,
-        status: GoalStatus,
-        notes: str = ""
+        self, goal_id: str, status: GoalStatus, notes: str = ""
     ) -> bool:
         """Update goal status"""
         if goal_id not in self.goals:
@@ -345,18 +370,20 @@ class GoalArchitecture(ResilientSubsystem):
         await self._update_goal_in_db(goal)
 
         # Log progress
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_goal_progress (goal_id, progress, notes)
             VALUES ($1, $2, $3)
-        ''', goal_id, goal.progress, f"Status changed: {old_status.value} -> {status.value}. {notes}")
+        """,
+            goal_id,
+            goal.progress,
+            f"Status changed: {old_status.value} -> {status.value}. {notes}",
+        )
 
         return True
 
     async def update_goal_progress(
-        self,
-        goal_id: str,
-        progress: float,
-        notes: str = ""
+        self, goal_id: str, progress: float, notes: str = ""
     ) -> bool:
         """Update goal progress (0-1)"""
         if goal_id not in self.goals:
@@ -371,10 +398,15 @@ class GoalArchitecture(ResilientSubsystem):
         await self._update_goal_in_db(goal)
 
         # Log progress
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_goal_progress (goal_id, progress, notes)
             VALUES ($1, $2, $3)
-        ''', goal_id, progress, notes)
+        """,
+            goal_id,
+            progress,
+            notes,
+        )
 
         # Update parent progress
         if goal.parent_id:
@@ -407,23 +439,27 @@ class GoalArchitecture(ResilientSubsystem):
 
     async def _update_goal_in_db(self, goal: Goal):
         """Update goal in database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             UPDATE brainops_goals
             SET status = $2, progress = $3, child_ids = $4,
                 started_at = $5, completed_at = $6
             WHERE goal_id = $1
-        ''',
-            goal.id, goal.status.value, goal.progress, goal.child_ids,
-            goal.started_at, goal.completed_at)
+        """,
+            goal.id,
+            goal.status.value,
+            goal.progress,
+            goal.child_ids,
+            goal.started_at,
+            goal.completed_at,
+        )
 
     # =========================================================================
     # GOAL DECOMPOSITION
     # =========================================================================
 
     async def decompose_goal(
-        self,
-        goal_id: str,
-        subtasks: List[Dict[str, Any]]
+        self, goal_id: str, subtasks: List[Dict[str, Any]]
     ) -> List[str]:
         """Decompose a goal into subtasks"""
         if goal_id not in self.goals:
@@ -442,15 +478,17 @@ class GoalArchitecture(ResilientSubsystem):
 
         for subtask in subtasks:
             child_id = await self.create_goal(
-                title=subtask.get('title', 'Subtask'),
-                description=subtask.get('description', ''),
+                title=subtask.get("title", "Subtask"),
+                description=subtask.get("description", ""),
                 level=child_level,
-                priority=GoalPriority(subtask.get('priority', parent_goal.priority.value)),
+                priority=GoalPriority(
+                    subtask.get("priority", parent_goal.priority.value)
+                ),
                 parent_id=goal_id,
-                success_criteria=subtask.get('success_criteria', []),
-                deadline=subtask.get('deadline'),
-                assigned_agents=subtask.get('agents', []),
-                dependencies=subtask.get('dependencies', []),
+                success_criteria=subtask.get("success_criteria", []),
+                deadline=subtask.get("deadline"),
+                assigned_agents=subtask.get("agents", []),
+                dependencies=subtask.get("dependencies", []),
             )
             created_ids.append(child_id)
 
@@ -478,8 +516,10 @@ class GoalArchitecture(ResilientSubsystem):
     async def _rebuild_priority_queue(self):
         """Rebuild the priority queue based on current goals"""
         active_goals = [
-            g for g in self.goals.values()
-            if g.status in [GoalStatus.PENDING, GoalStatus.ACTIVE, GoalStatus.IN_PROGRESS]
+            g
+            for g in self.goals.values()
+            if g.status
+            in [GoalStatus.PENDING, GoalStatus.ACTIVE, GoalStatus.IN_PROGRESS]
         ]
 
         # Sort by priority, then by deadline, then by level
@@ -502,7 +542,7 @@ class GoalArchitecture(ResilientSubsystem):
                 priority_order.get(g.priority, 2),
                 g.deadline or datetime.max,
                 level_order.get(g.level, 1),
-            )
+            ),
         )
 
         self.priority_queue = [g.id for g in sorted_goals]
@@ -519,7 +559,17 @@ class GoalArchitecture(ResilientSubsystem):
             if goal and goal.status in [GoalStatus.PENDING, GoalStatus.ACTIVE]:
                 # Check dependencies
                 deps_met = all(
-                    self.goals.get(dep_id, Goal(id='', title='', description='', level=GoalLevel.OPERATIONAL, priority=GoalPriority.LOW)).status == GoalStatus.COMPLETED
+                    self.goals.get(
+                        dep_id,
+                        Goal(
+                            id="",
+                            title="",
+                            description="",
+                            level=GoalLevel.OPERATIONAL,
+                            priority=GoalPriority.LOW,
+                        ),
+                    ).status
+                    == GoalStatus.COMPLETED
                     for dep_id in goal.dependencies
                     if dep_id in self.goals
                 )
@@ -543,13 +593,18 @@ class GoalArchitecture(ResilientSubsystem):
                     GoalPriority.LOW: 3,
                 }.get(goal.priority, 2)
 
-                items.append({
-                    "id": goal.id,
-                    "description": goal.title,
-                    "priority": priority_num,
-                    "urgency": 1.0 if goal.deadline and goal.deadline < datetime.now() + timedelta(days=1) else 0.5,
-                    "type": "goal",
-                })
+                items.append(
+                    {
+                        "id": goal.id,
+                        "description": goal.title,
+                        "priority": priority_num,
+                        "urgency": 1.0
+                        if goal.deadline
+                        and goal.deadline < datetime.now() + timedelta(days=1)
+                        else 0.5,
+                        "type": "goal",
+                    }
+                )
 
         return items
 
@@ -567,16 +622,24 @@ class GoalArchitecture(ResilientSubsystem):
                 for goal in self.goals.values():
                     if goal.status == GoalStatus.IN_PROGRESS:
                         # Check if progress has stalled
-                        recent_progress = await self._db_fetchval_with_retry('''
+                        recent_progress = await self._db_fetchval_with_retry(
+                            """
                             SELECT progress FROM brainops_goal_progress
                             WHERE goal_id = $1
                             ORDER BY recorded_at DESC
                             LIMIT 1
-                        ''', goal.id)
+                        """,
+                            goal.id,
+                        )
 
-                        if recent_progress is not None and abs(goal.progress - recent_progress) < 0.01:
+                        if (
+                            recent_progress is not None
+                            and abs(goal.progress - recent_progress) < 0.01
+                        ):
                             # Progress stalled - might need attention
-                            logger.info(f"Goal {goal.id} progress stalled at {goal.progress:.1%}")
+                            logger.info(
+                                f"Goal {goal.id} progress stalled at {goal.progress:.1%}"
+                            )
 
             except asyncio.CancelledError:
                 break
@@ -592,7 +655,10 @@ class GoalArchitecture(ResilientSubsystem):
 
                 now = datetime.now()
                 for goal in self.goals.values():
-                    if goal.deadline and goal.status not in [GoalStatus.COMPLETED, GoalStatus.CANCELLED]:
+                    if goal.deadline and goal.status not in [
+                        GoalStatus.COMPLETED,
+                        GoalStatus.CANCELLED,
+                    ]:
                         time_remaining = goal.deadline - now
 
                         if time_remaining < timedelta(hours=0):
@@ -600,11 +666,16 @@ class GoalArchitecture(ResilientSubsystem):
                             logger.warning(f"Goal {goal.id} deadline passed!")
                             if self.controller:
                                 from .metacognitive_controller import AttentionPriority
-                                await self.controller._record_thought({
-                                    "type": "deadline_passed",
-                                    "goal_id": goal.id,
-                                    "title": goal.title,
-                                }, AttentionPriority.URGENT, "goal_architecture")
+
+                                await self.controller._record_thought(
+                                    {
+                                        "type": "deadline_passed",
+                                        "goal_id": goal.id,
+                                        "title": goal.title,
+                                    },
+                                    AttentionPriority.URGENT,
+                                    "goal_architecture",
+                                )
 
                         elif time_remaining < timedelta(days=1):
                             # Deadline approaching
@@ -678,7 +749,8 @@ class GoalArchitecture(ResilientSubsystem):
                 "deadline": g.deadline.isoformat() if g.deadline else None,
             }
             for g in self.goals.values()
-            if g.status in [GoalStatus.ACTIVE, GoalStatus.IN_PROGRESS, GoalStatus.PENDING]
+            if g.status
+            in [GoalStatus.ACTIVE, GoalStatus.IN_PROGRESS, GoalStatus.PENDING]
         ]
 
     async def get_health(self) -> Dict[str, Any]:

@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class OptimizationType(str, Enum):
     """Types of optimization"""
+
     PERFORMANCE = "performance"
     RESOURCE = "resource"
     QUERY = "query"
@@ -41,6 +42,7 @@ class OptimizationType(str, Enum):
 
 class OptimizationStatus(str, Enum):
     """Status of optimization"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -51,6 +53,7 @@ class OptimizationStatus(str, Enum):
 @dataclass
 class Optimization:
     """An optimization action"""
+
     id: str
     type: OptimizationType
     description: str
@@ -107,6 +110,11 @@ class SelfOptimizationSystem:
 
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -119,8 +127,9 @@ class SelfOptimizationSystem:
 
     async def _initialize_database(self):
         """Create required database tables"""
-        async with self.db_pool.acquire() as conn:
-            await conn.execute('''
+        from brainops_ai_os._resilience import assert_no_runtime_ddl
+
+        ddl = """
                 -- Optimization history
                 CREATE TABLE IF NOT EXISTS brainops_optimizations (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -161,17 +170,22 @@ class SelfOptimizationSystem:
                     details JSONB,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
-            ''')
+            """
+        assert_no_runtime_ddl(ddl)
+        async with self.db_pool.acquire() as conn:
+            await conn.execute(ddl)
 
     async def _load_baselines(self):
         """Load performance baselines"""
-        rows = await self._db_fetch_with_retry('''
+        rows = await self._db_fetch_with_retry(
+            """
             SELECT metric_name, baseline_mean
             FROM brainops_baselines
-        ''')
+        """
+        )
 
         for row in rows:
-            self.baselines[row['metric_name']] = row['baseline_mean']
+            self.baselines[row["metric_name"]] = row["baseline_mean"]
 
         # Set default baselines if empty
         if not self.baselines:
@@ -192,7 +206,9 @@ class SelfOptimizationSystem:
                 return
             exc = t.exception()
             if exc is not None:
-                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
+                logger.error(
+                    "Background task %s failed: %s", t.get_name(), exc, exc_info=exc
+                )
 
         task.add_done_callback(_on_done)
         return task
@@ -270,17 +286,23 @@ class SelfOptimizationSystem:
         """Start background optimization processes"""
         # Performance monitoring
         self._tasks.append(
-            self._create_safe_task(self._performance_monitoring_loop(), name="perf_monitoring")
+            self._create_safe_task(
+                self._performance_monitoring_loop(), name="perf_monitoring"
+            )
         )
 
         # Resource optimization
         self._tasks.append(
-            self._create_safe_task(self._resource_optimization_loop(), name="resource_optimization")
+            self._create_safe_task(
+                self._resource_optimization_loop(), name="resource_optimization"
+            )
         )
 
         # Cache optimization
         self._tasks.append(
-            self._create_safe_task(self._cache_optimization_loop(), name="cache_optimization")
+            self._create_safe_task(
+                self._cache_optimization_loop(), name="cache_optimization"
+            )
         )
 
         # Self-healing monitor
@@ -290,7 +312,9 @@ class SelfOptimizationSystem:
 
         # Database optimization
         self._tasks.append(
-            self._create_safe_task(self._database_optimization_loop(), name="db_optimization")
+            self._create_safe_task(
+                self._database_optimization_loop(), name="db_optimization"
+            )
         )
 
         logger.info(f"Started {len(self._tasks)} optimization background processes")
@@ -318,7 +342,7 @@ class SelfOptimizationSystem:
                                 OptimizationType.PERFORMANCE,
                                 f"Performance degradation: {metric_name}",
                                 metric_name,
-                                {"current": value, "baseline": baseline}
+                                {"current": value, "baseline": baseline},
                             )
 
             except asyncio.CancelledError:
@@ -361,7 +385,7 @@ class SelfOptimizationSystem:
                     await self._optimize_memory()
 
                 # Check disk usage
-                disk = psutil.disk_usage('/')
+                disk = psutil.disk_usage("/")
                 if disk.percent > 90:
                     await self._optimize_disk()
 
@@ -389,6 +413,7 @@ class SelfOptimizationSystem:
 
         # Force garbage collection
         import gc
+
         gc.collect()
 
         after_state = {"memory_percent": psutil.virtual_memory().percent}
@@ -400,7 +425,7 @@ class SelfOptimizationSystem:
             "system_memory",
             before_state,
             after_state,
-            improvement
+            improvement,
         )
 
     async def _optimize_disk(self):
@@ -408,20 +433,26 @@ class SelfOptimizationSystem:
         logger.info("Triggering disk optimization...")
 
         # Clean up old logs and temp files (with retry)
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             DELETE FROM brainops_sensor_readings
             WHERE created_at < NOW() - INTERVAL '7 days'
-        ''')
+        """
+        )
 
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             DELETE FROM brainops_activation_history
             WHERE created_at < NOW() - INTERVAL '3 days'
-        ''')
+        """
+        )
 
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             DELETE FROM brainops_thought_stream
             WHERE created_at < NOW() - INTERVAL '7 days'
-        ''')
+        """
+        )
 
     # =========================================================================
     # CACHE OPTIMIZATION
@@ -452,7 +483,7 @@ class SelfOptimizationSystem:
                 await asyncio.sleep(3600)  # Every hour
 
                 # Analyze tables for optimization (with retry)
-                await self._db_execute_with_retry("ANALYZE brainops_unified_memory")
+                await self._db_execute_with_retry("ANALYZE unified_ai_memory")
                 await self._db_execute_with_retry("ANALYZE brainops_sensor_readings")
                 await self._db_execute_with_retry("ANALYZE brainops_thought_stream")
 
@@ -500,7 +531,7 @@ class SelfOptimizationSystem:
                             str(exc),
                             "Logged error for investigation",
                             False,
-                            {"exception": str(exc)}
+                            {"exception": str(exc)},
                         )
 
     async def _check_database_health(self):
@@ -514,7 +545,7 @@ class SelfOptimizationSystem:
                 str(e),
                 "Attempting reconnection",
                 False,
-                {"error": str(e)}
+                {"error": str(e)},
             )
 
     async def activate_self_healing(self, alert: Dict[str, Any]):
@@ -539,11 +570,7 @@ class SelfOptimizationSystem:
             action = "Logged for investigation"
 
         await self._record_self_healing(
-            alert_type,
-            json.dumps(alert),
-            action,
-            True,
-            alert
+            alert_type, json.dumps(alert), action, True, alert
         )
 
         self.metrics["self_heals"] += 1
@@ -554,14 +581,21 @@ class SelfOptimizationSystem:
         trigger: str,
         action: str,
         success: bool,
-        details: Dict[str, Any]
+        details: Dict[str, Any],
     ):
         """Record self-healing event"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_self_healing
             (event_type, trigger, action_taken, success, details)
             VALUES ($1, $2, $3, $4, $5)
-        ''', event_type, trigger, action, success, json.dumps(details))
+        """,
+            event_type,
+            trigger,
+            action,
+            success,
+            json.dumps(details),
+        )
 
     # =========================================================================
     # OPTIMIZATION RECORDING
@@ -572,7 +606,7 @@ class SelfOptimizationSystem:
         opt_type: OptimizationType,
         description: str,
         target: str,
-        before_state: Dict[str, Any]
+        before_state: Dict[str, Any],
     ):
         """Trigger an optimization"""
         opt_id = str(uuid.uuid4())
@@ -612,25 +646,34 @@ class SelfOptimizationSystem:
         target: str,
         before_state: Dict[str, Any],
         after_state: Dict[str, Any],
-        improvement: float
+        improvement: float,
     ):
         """Record a completed optimization"""
         opt_id = str(uuid.uuid4())
 
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_optimizations
             (optimization_id, optimization_type, description, target,
              before_state, after_state, improvement, status, completed_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        ''',
-            opt_id, opt_type.value, description, target,
-            json.dumps(before_state), json.dumps(after_state),
-            improvement, OptimizationStatus.COMPLETED.value)
+        """,
+            opt_id,
+            opt_type.value,
+            description,
+            target,
+            json.dumps(before_state),
+            json.dumps(after_state),
+            improvement,
+            OptimizationStatus.COMPLETED.value,
+        )
 
         self.metrics["optimizations_applied"] += 1
         self.metrics["improvements_total"] += improvement
 
-        logger.info(f"Optimization recorded: {description} (improvement: {improvement:.1f}%)")
+        logger.info(
+            f"Optimization recorded: {description} (improvement: {improvement:.1f}%)"
+        )
 
     # =========================================================================
     # PUBLIC API
@@ -656,10 +699,13 @@ class SelfOptimizationSystem:
         return {
             "status": "healthy" if active_tasks == len(self._tasks) else "degraded",
             "score": active_tasks / len(self._tasks) if self._tasks else 1.0,
-            "active_optimizations": len([
-                o for o in self.optimizations.values()
-                if o.status == OptimizationStatus.IN_PROGRESS
-            ]),
+            "active_optimizations": len(
+                [
+                    o
+                    for o in self.optimizations.values()
+                    if o.status == OptimizationStatus.IN_PROGRESS
+                ]
+            ),
             "metrics": self.metrics.copy(),
         }
 

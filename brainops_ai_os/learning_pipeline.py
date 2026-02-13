@@ -32,15 +32,17 @@ logger = logging.getLogger(__name__)
 
 class LearningType(str, Enum):
     """Types of learning"""
-    REINFORCEMENT = "reinforcement"   # Learning from outcomes
-    PATTERN = "pattern"               # Pattern recognition
-    CORRECTION = "correction"         # Error correction
-    OPTIMIZATION = "optimization"     # Performance optimization
-    TRANSFER = "transfer"             # Cross-domain learning
+
+    REINFORCEMENT = "reinforcement"  # Learning from outcomes
+    PATTERN = "pattern"  # Pattern recognition
+    CORRECTION = "correction"  # Error correction
+    OPTIMIZATION = "optimization"  # Performance optimization
+    TRANSFER = "transfer"  # Cross-domain learning
 
 
 class PatternCategory(str, Enum):
     """Categories of patterns"""
+
     BEHAVIORAL = "behavioral"
     TEMPORAL = "temporal"
     CAUSAL = "causal"
@@ -51,6 +53,7 @@ class PatternCategory(str, Enum):
 @dataclass
 class LearningOutcome:
     """Tracked outcome for learning"""
+
     id: str
     decision_id: str
     action_type: str
@@ -65,6 +68,7 @@ class LearningOutcome:
 @dataclass
 class Pattern:
     """A learned pattern"""
+
     id: str
     category: PatternCategory
     description: str
@@ -119,6 +123,11 @@ class LearningPipeline(ResilientSubsystem):
         # Create database tables
         try:
             await self._initialize_database()
+        except RuntimeError as e:
+            if "BLOCKED_RUNTIME_DDL" in str(e):
+                logger.info("DDL kill-switch active — skipping runtime table creation")
+            else:
+                raise
         except Exception as e:
             if "permission denied" in str(e).lower():
                 pass
@@ -135,7 +144,8 @@ class LearningPipeline(ResilientSubsystem):
 
     async def _initialize_database(self):
         """Create required database tables"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Learning outcomes
             CREATE TABLE IF NOT EXISTS brainops_learning_outcomes (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -200,28 +210,31 @@ class LearningPipeline(ResilientSubsystem):
                 created_at TIMESTAMP DEFAULT NOW(),
                 completed_at TIMESTAMP
             );
-        ''')
+        """
+        )
 
     async def _load_patterns(self):
         """Load existing patterns from database"""
-        rows = await self._db_fetch_with_retry('''
+        rows = await self._db_fetch_with_retry(
+            """
             SELECT pattern_id, category, description, conditions, outcomes,
                    confidence, occurrence_count, last_seen, created_at
             FROM brainops_learned_patterns
             WHERE confidence > 0.3
-        ''')
+        """
+        )
 
         for row in rows:
             pattern = Pattern(
-                id=row['pattern_id'],
-                category=PatternCategory(row['category']),
-                description=row['description'] or "",
-                conditions=row['conditions'] or [],
-                outcomes=row['outcomes'] or [],
-                confidence=row['confidence'],
-                occurrence_count=row['occurrence_count'],
-                last_seen=row['last_seen'],
-                created_at=row['created_at'],
+                id=row["pattern_id"],
+                category=PatternCategory(row["category"]),
+                description=row["description"] or "",
+                conditions=row["conditions"] or [],
+                outcomes=row["outcomes"] or [],
+                confidence=row["confidence"],
+                occurrence_count=row["occurrence_count"],
+                last_seen=row["last_seen"],
+                created_at=row["created_at"],
             )
             self.patterns[pattern.id] = pattern
 
@@ -229,17 +242,23 @@ class LearningPipeline(ResilientSubsystem):
         """Start background processes"""
         # Pattern detection
         self._tasks.append(
-            self._create_safe_task(self._pattern_detection_loop(), name="pattern_detection")
+            self._create_safe_task(
+                self._pattern_detection_loop(), name="pattern_detection"
+            )
         )
 
         # Knowledge synthesis
         self._tasks.append(
-            self._create_safe_task(self._knowledge_synthesis_loop(), name="knowledge_synthesis")
+            self._create_safe_task(
+                self._knowledge_synthesis_loop(), name="knowledge_synthesis"
+            )
         )
 
         # Performance monitoring
         self._tasks.append(
-            self._create_safe_task(self._performance_monitoring_loop(), name="performance_monitoring")
+            self._create_safe_task(
+                self._performance_monitoring_loop(), name="performance_monitoring"
+            )
         )
 
         logger.info(f"Started {len(self._tasks)} learning background processes")
@@ -254,7 +273,7 @@ class LearningPipeline(ResilientSubsystem):
         action_type: str,
         expected_result: Dict[str, Any],
         actual_result: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Track an outcome for learning"""
         outcome_id = str(uuid.uuid4())
@@ -279,42 +298,49 @@ class LearningPipeline(ResilientSubsystem):
 
         # Keep buffer size limited
         if len(self.recent_outcomes) > self.outcome_buffer_size:
-            self.recent_outcomes = self.recent_outcomes[-self.outcome_buffer_size:]
+            self.recent_outcomes = self.recent_outcomes[-self.outcome_buffer_size :]
 
         self.metrics["outcomes_tracked"] += 1
 
         # Store in database
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_learning_outcomes
             (outcome_id, decision_id, action_type, expected_result,
              actual_result, success, feedback_score, context)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ''',
-            outcome_id, decision_id, action_type,
-            json.dumps(expected_result), json.dumps(actual_result),
-            success, feedback_score, json.dumps(context or {}))
+        """,
+            outcome_id,
+            decision_id,
+            action_type,
+            json.dumps(expected_result),
+            json.dumps(actual_result),
+            success,
+            feedback_score,
+            json.dumps(context or {}),
+        )
 
         return outcome_id
 
     def _evaluate_success(
-        self,
-        expected: Dict[str, Any],
-        actual: Dict[str, Any]
+        self, expected: Dict[str, Any], actual: Dict[str, Any]
     ) -> bool:
         """Evaluate if outcome was successful"""
         # Check for explicit success indicators
-        if 'success' in actual:
-            return actual['success']
+        if "success" in actual:
+            return actual["success"]
 
-        if 'error' in actual:
+        if "error" in actual:
             return False
 
         # Compare key metrics if present
-        for key in ['score', 'value', 'result']:
+        for key in ["score", "value", "result"]:
             if key in expected and key in actual:
                 exp_val = expected[key]
                 act_val = actual[key]
-                if isinstance(exp_val, (int, float)) and isinstance(act_val, (int, float)):
+                if isinstance(exp_val, (int, float)) and isinstance(
+                    act_val, (int, float)
+                ):
                     # Within 20% is considered success
                     if exp_val != 0:
                         return abs(act_val - exp_val) / abs(exp_val) < 0.2
@@ -324,12 +350,10 @@ class LearningPipeline(ResilientSubsystem):
         return True
 
     def _calculate_feedback_score(
-        self,
-        expected: Dict[str, Any],
-        actual: Dict[str, Any]
+        self, expected: Dict[str, Any], actual: Dict[str, Any]
     ) -> float:
         """Calculate feedback score (-1 to 1)"""
-        if 'error' in actual:
+        if "error" in actual:
             return -1.0
 
         scores = []
@@ -340,7 +364,9 @@ class LearningPipeline(ResilientSubsystem):
                 exp_val = expected[key]
                 act_val = actual[key]
 
-                if isinstance(exp_val, (int, float)) and isinstance(act_val, (int, float)):
+                if isinstance(exp_val, (int, float)) and isinstance(
+                    act_val, (int, float)
+                ):
                     if exp_val != 0:
                         diff_ratio = (act_val - exp_val) / abs(exp_val)
                         score = max(-1, min(1, 1 - abs(diff_ratio)))
@@ -400,15 +426,11 @@ class LearningPipeline(ResilientSubsystem):
                 await self._extract_failure_pattern(action_type, failed)
 
     async def _extract_success_pattern(
-        self,
-        action_type: str,
-        outcomes: List[LearningOutcome]
+        self, action_type: str, outcomes: List[LearningOutcome]
     ):
         """Extract pattern from successful outcomes"""
         # Find common context elements
-        common_context = self._find_common_elements(
-            [o.context for o in outcomes]
-        )
+        common_context = self._find_common_elements([o.context for o in outcomes])
 
         if common_context:
             pattern_id = f"success_{action_type}_{uuid.uuid4().hex[:8]}"
@@ -431,14 +453,10 @@ class LearningPipeline(ResilientSubsystem):
             await self._store_pattern(pattern)
 
     async def _extract_failure_pattern(
-        self,
-        action_type: str,
-        outcomes: List[LearningOutcome]
+        self, action_type: str, outcomes: List[LearningOutcome]
     ):
         """Extract pattern from failed outcomes"""
-        common_context = self._find_common_elements(
-            [o.context for o in outcomes]
-        )
+        common_context = self._find_common_elements([o.context for o in outcomes])
 
         if common_context:
             pattern_id = f"failure_{action_type}_{uuid.uuid4().hex[:8]}"
@@ -459,7 +477,9 @@ class LearningPipeline(ResilientSubsystem):
 
             await self._store_pattern(pattern)
 
-    def _find_common_elements(self, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _find_common_elements(
+        self, contexts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Find common elements across contexts"""
         if not contexts:
             return []
@@ -482,7 +502,8 @@ class LearningPipeline(ResilientSubsystem):
 
     async def _store_pattern(self, pattern: Pattern):
         """Store pattern in database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_learned_patterns
             (pattern_id, category, description, conditions, outcomes,
              confidence, occurrence_count, last_seen)
@@ -491,10 +512,16 @@ class LearningPipeline(ResilientSubsystem):
                 confidence = EXCLUDED.confidence,
                 occurrence_count = EXCLUDED.occurrence_count,
                 last_seen = EXCLUDED.last_seen
-        ''',
-            pattern.id, pattern.category.value, pattern.description,
-            json.dumps(pattern.conditions), json.dumps(pattern.outcomes),
-            pattern.confidence, pattern.occurrence_count, pattern.last_seen)
+        """,
+            pattern.id,
+            pattern.category.value,
+            pattern.description,
+            json.dumps(pattern.conditions),
+            json.dumps(pattern.outcomes),
+            pattern.confidence,
+            pattern.occurrence_count,
+            pattern.last_seen,
+        )
 
     # =========================================================================
     # KNOWLEDGE SYNTHESIS
@@ -528,35 +555,41 @@ class LearningPipeline(ResilientSubsystem):
         # Successful patterns -> Best practices
         if by_category[PatternCategory.SUCCESSFUL]:
             for pattern in by_category[PatternCategory.SUCCESSFUL]:
-                insights.append({
-                    "type": "best_practice",
-                    "description": pattern.description,
-                    "conditions": pattern.conditions,
-                    "confidence": pattern.confidence,
-                })
+                insights.append(
+                    {
+                        "type": "best_practice",
+                        "description": pattern.description,
+                        "conditions": pattern.conditions,
+                        "confidence": pattern.confidence,
+                    }
+                )
 
         # Failure patterns -> Warnings
         if by_category[PatternCategory.ANOMALOUS]:
             for pattern in by_category[PatternCategory.ANOMALOUS]:
-                insights.append({
-                    "type": "warning",
-                    "description": f"Avoid: {pattern.description}",
-                    "conditions": pattern.conditions,
-                    "confidence": pattern.confidence,
-                })
+                insights.append(
+                    {
+                        "type": "warning",
+                        "description": f"Avoid: {pattern.description}",
+                        "conditions": pattern.conditions,
+                        "confidence": pattern.confidence,
+                    }
+                )
 
         # Store insights if significant
         if insights:
             for insight in insights:
-                await self._db_execute_with_retry('''
+                await self._db_execute_with_retry(
+                    """
                     INSERT INTO brainops_learning_suggestions
                     (suggestion_type, description, evidence, priority)
                     VALUES ($1, $2, $3, $4)
-                ''',
-                    insight['type'],
-                    insight['description'],
-                    json.dumps(insight.get('conditions', [])),
-                    insight.get('confidence', 0.5))
+                """,
+                    insight["type"],
+                    insight["description"],
+                    json.dumps(insight.get("conditions", [])),
+                    insight.get("confidence", 0.5),
+                )
 
             self.metrics["improvements_suggested"] += len(insights)
 
@@ -581,29 +614,33 @@ class LearningPipeline(ResilientSubsystem):
     async def _check_performance(self):
         """Check for performance regression"""
         # Get recent success rate
-        recent = await self._db_fetchrow_with_retry('''
+        recent = await self._db_fetchrow_with_retry(
+            """
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
             FROM brainops_learning_outcomes
             WHERE created_at > NOW() - INTERVAL '1 hour'
-        ''')
+        """
+        )
 
-        if recent and recent['total'] > 10:
-            recent_rate = recent['successes'] / recent['total']
+        if recent and recent["total"] > 10:
+            recent_rate = recent["successes"] / recent["total"]
 
             # Get historical success rate
-            historical = await self._db_fetchrow_with_retry('''
+            historical = await self._db_fetchrow_with_retry(
+                """
                 SELECT
                     COUNT(*) as total,
                     SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
                 FROM brainops_learning_outcomes
                 WHERE created_at > NOW() - INTERVAL '24 hours'
                 AND created_at < NOW() - INTERVAL '1 hour'
-            ''')
+            """
+            )
 
-            if historical and historical['total'] > 10:
-                historical_rate = historical['successes'] / historical['total']
+            if historical and historical["total"] > 10:
+                historical_rate = historical["successes"] / historical["total"]
 
                 # Check for regression
                 if recent_rate < historical_rate - 0.1:  # 10% drop
@@ -614,11 +651,16 @@ class LearningPipeline(ResilientSubsystem):
 
                     if self.controller:
                         from .metacognitive_controller import AttentionPriority
-                        await self.controller._record_thought({
-                            "type": "performance_regression",
-                            "recent_rate": recent_rate,
-                            "historical_rate": historical_rate,
-                        }, AttentionPriority.HIGH, "learning_pipeline")
+
+                        await self.controller._record_thought(
+                            {
+                                "type": "performance_regression",
+                                "recent_rate": recent_rate,
+                                "historical_rate": historical_rate,
+                            },
+                            AttentionPriority.HIGH,
+                            "learning_pipeline",
+                        )
 
     # =========================================================================
     # PUBLIC API

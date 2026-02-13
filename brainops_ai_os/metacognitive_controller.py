@@ -33,12 +33,14 @@ logger = logging.getLogger(__name__)
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder for datetime objects"""
+
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
         if isinstance(obj, Enum):
             return obj.value
         return super().default(obj)
+
 
 # Database configuration - deferred to initialization time
 # DATABASE_URL is obtained lazily to allow module import without env vars set
@@ -52,6 +54,7 @@ def get_database_url():
 
 class ConsciousnessState(str, Enum):
     """States of the metacognitive controller"""
+
     INITIALIZING = "initializing"
     AWAKE = "awake"
     FOCUSED = "focused"
@@ -64,17 +67,19 @@ class ConsciousnessState(str, Enum):
 
 class AttentionPriority(str, Enum):
     """Attention allocation priorities"""
-    CRITICAL = "critical"      # System failures, security threats
-    URGENT = "urgent"          # Revenue opportunities, customer issues
-    HIGH = "high"              # Important business operations
-    NORMAL = "normal"          # Standard processing
-    LOW = "low"                # Background tasks
+
+    CRITICAL = "critical"  # System failures, security threats
+    URGENT = "urgent"  # Revenue opportunities, customer issues
+    HIGH = "high"  # Important business operations
+    NORMAL = "normal"  # Standard processing
+    LOW = "low"  # Background tasks
     MAINTENANCE = "maintenance"  # System maintenance
 
 
 @dataclass
 class ThoughtUnit:
     """A single unit of thought in the consciousness stream"""
+
     id: str
     timestamp: datetime
     content: Dict[str, Any]
@@ -88,6 +93,7 @@ class ThoughtUnit:
 @dataclass
 class SystemState:
     """Unified state representation of the entire system"""
+
     timestamp: datetime
     consciousness_state: ConsciousnessState
     attention_focus: Optional[str]
@@ -166,8 +172,12 @@ class MetacognitiveController:
 
         # Alert dedup: track processed alert IDs and rate-limit repeated alerts
         self._processed_alert_ids: set = set()
-        self._alert_last_recorded: Dict[str, datetime] = {}  # alert_type -> last recorded time
-        self._alert_record_interval = timedelta(minutes=5)  # min interval between recording same alert type
+        self._alert_last_recorded: Dict[
+            str, datetime
+        ] = {}  # alert_type -> last recorded time
+        self._alert_record_interval = timedelta(
+            minutes=5
+        )  # min interval between recording same alert type
 
         # Callbacks for event handling
         self._event_handlers: Dict[str, List[Callable]] = {}
@@ -191,15 +201,24 @@ class MetacognitiveController:
                     min_size=5,
                     max_size=20,
                     command_timeout=60,
-                    statement_cache_size=0  # pgBouncer compatibility
+                    statement_cache_size=0,  # pgBouncer compatibility
                 )
 
             # Create required database tables (skip if restricted role lacks DDL perms)
             try:
                 await self._initialize_database()
+            except RuntimeError as e:
+                if "BLOCKED_RUNTIME_DDL" in str(e):
+                    logger.info(
+                        "DDL kill-switch active — skipping runtime table creation"
+                    )
+                else:
+                    raise
             except Exception as e:
                 if "permission denied" in str(e).lower():
-                    logger.info("Skipping DDL init (restricted role) - tables already exist")
+                    logger.info(
+                        "Skipping DDL init (restricted role) - tables already exist"
+                    )
                 else:
                     raise
 
@@ -219,23 +238,29 @@ class MetacognitiveController:
             self.state = ConsciousnessState.AWAKE
 
             # Record initialization in thought stream
-            await self._record_thought({
-                "type": "initialization",
-                "content": "BrainOps AI OS fully initialized and awake",
-                "subsystems_loaded": [
-                    "awareness_system",
-                    "unified_memory",
-                    "neural_network",
-                    "goal_architecture",
-                    "learning_pipeline",
-                    "proactive_engine",
-                    "reasoning_engine",
-                    "self_optimization"
-                ],
-                "agents_loaded": len(self.agents),
-            }, AttentionPriority.HIGH, "metacognitive_controller")
+            await self._record_thought(
+                {
+                    "type": "initialization",
+                    "content": "BrainOps AI OS fully initialized and awake",
+                    "subsystems_loaded": [
+                        "awareness_system",
+                        "unified_memory",
+                        "neural_network",
+                        "goal_architecture",
+                        "learning_pipeline",
+                        "proactive_engine",
+                        "reasoning_engine",
+                        "self_optimization",
+                    ],
+                    "agents_loaded": len(self.agents),
+                },
+                AttentionPriority.HIGH,
+                "metacognitive_controller",
+            )
 
-            logger.info("✅ BrainOps AI OS - Metacognitive Controller fully initialized")
+            logger.info(
+                "✅ BrainOps AI OS - Metacognitive Controller fully initialized"
+            )
             return True
 
         except Exception as e:
@@ -244,7 +269,8 @@ class MetacognitiveController:
 
     async def _initialize_database(self):
         """Create all required database tables for the metacognitive controller"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             -- Metacognitive state tracking
             CREATE TABLE IF NOT EXISTS brainops_metacognitive_state (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -337,7 +363,8 @@ class MetacognitiveController:
                 ON brainops_reflections(controller_id);
             CREATE INDEX IF NOT EXISTS idx_reflection_type
                 ON brainops_reflections(reflection_type);
-        ''')
+        """
+        )
 
         logger.info("Database tables initialized for MetacognitiveController")
 
@@ -353,6 +380,7 @@ class MetacognitiveController:
         from .proactive_engine import ProactiveIntelligenceEngine
         from .reasoning_engine import ReasoningEngine
         from .self_optimization import SelfOptimizationSystem
+
         logger.info("✅ All subsystem modules imported")
 
         # Initialize each subsystem with reference to this controller
@@ -404,46 +432,51 @@ class MetacognitiveController:
 
     async def _load_state(self):
         """Load existing state from database"""
-        row = await self._db_fetchrow_with_retry('''
+        row = await self._db_fetchrow_with_retry(
+            """
             SELECT * FROM brainops_metacognitive_state
             WHERE controller_id = $1
             ORDER BY created_at DESC
             LIMIT 1
-        ''', self.id)
+        """,
+            self.id,
+        )
 
         if row:
-            self.metrics = row['metrics']
+            self.metrics = row["metrics"]
             logger.info(f"Loaded existing state from database")
         else:
             logger.info("No existing state found, starting fresh")
 
     async def _load_agents(self):
         """Load all registered agents from database"""
-        rows = await self._db_fetch_with_retry('''
+        rows = await self._db_fetch_with_retry(
+            """
             SELECT id, name, type, model, status, capabilities, config, metadata,
                    total_executions, success_rate
             FROM ai_agents
             WHERE status = 'active'
-        ''')
+        """
+        )
 
         for row in rows:
-            self.agents[str(row['id'])] = {
-                'id': str(row['id']),
-                'name': row['name'],
-                'type': row['type'],
-                'model': row['model'],
-                'status': 'ready',
-                'capabilities': row['capabilities'] or [],
-                'config': row['config'] or {},
-                'metadata': row['metadata'] or {},
-                'total_executions': row['total_executions'] or 0,
-                'success_rate': float(row['success_rate'] or 100),
+            self.agents[str(row["id"])] = {
+                "id": str(row["id"]),
+                "name": row["name"],
+                "type": row["type"],
+                "model": row["model"],
+                "status": "ready",
+                "capabilities": row["capabilities"] or [],
+                "config": row["config"] or {},
+                "metadata": row["metadata"] or {},
+                "total_executions": row["total_executions"] or 0,
+                "success_rate": float(row["success_rate"] or 100),
             }
 
-            self.agent_performance[str(row['id'])] = {
-                'success_rate': float(row['success_rate'] or 100),
-                'avg_response_time': 0,
-                'total_executions': row['total_executions'] or 0,
+            self.agent_performance[str(row["id"])] = {
+                "success_rate": float(row["success_rate"] or 100),
+                "avg_response_time": 0,
+                "total_executions": row["total_executions"] or 0,
             }
 
         logger.info(f"Loaded {len(self.agents)} agents")
@@ -457,7 +490,9 @@ class MetacognitiveController:
                 return
             exc = t.exception()
             if exc is not None:
-                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
+                logger.error(
+                    "Background task %s failed: %s", t.get_name(), exc, exc_info=exc
+                )
 
         task.add_done_callback(_on_done)
         return task
@@ -465,6 +500,9 @@ class MetacognitiveController:
     # -- DB retry helpers (PgBouncer connection-drop resilience) ---------------
 
     async def _db_execute_with_retry(self, query: str, *args, max_retries: int = 2):
+        from brainops_ai_os._resilience import assert_no_runtime_ddl
+
+        assert_no_runtime_ddl(query)
         last_error = None
         for attempt in range(max_retries + 1):
             try:
@@ -534,17 +572,23 @@ class MetacognitiveController:
         """Start all background processes for continuous operation"""
         # Main consciousness loop - always running
         self._background_tasks.append(
-            self._create_safe_task(self._consciousness_loop(), name="consciousness_loop")
+            self._create_safe_task(
+                self._consciousness_loop(), name="consciousness_loop"
+            )
         )
 
         # Attention management
         self._background_tasks.append(
-            self._create_safe_task(self._attention_management_loop(), name="attention_management")
+            self._create_safe_task(
+                self._attention_management_loop(), name="attention_management"
+            )
         )
 
         # Decision processing
         self._background_tasks.append(
-            self._create_safe_task(self._decision_processing_loop(), name="decision_processing")
+            self._create_safe_task(
+                self._decision_processing_loop(), name="decision_processing"
+            )
         )
 
         # Self-reflection cycle
@@ -554,12 +598,16 @@ class MetacognitiveController:
 
         # State persistence
         self._background_tasks.append(
-            self._create_safe_task(self._state_persistence_loop(), name="state_persistence")
+            self._create_safe_task(
+                self._state_persistence_loop(), name="state_persistence"
+            )
         )
 
         # Metrics collection
         self._background_tasks.append(
-            self._create_safe_task(self._metrics_collection_loop(), name="metrics_collection")
+            self._create_safe_task(
+                self._metrics_collection_loop(), name="metrics_collection"
+            )
         )
 
         logger.info(f"Started {len(self._background_tasks)} background processes")
@@ -594,11 +642,14 @@ class MetacognitiveController:
                 await self._update_system_state()
 
                 # 5. Emit consciousness tick event
-                await self._emit_event("consciousness_tick", {
-                    "state": self.state.value,
-                    "focus": self.attention_focus,
-                    "thoughts_in_queue": len(self.current_thoughts),
-                })
+                await self._emit_event(
+                    "consciousness_tick",
+                    {
+                        "state": self.state.value,
+                        "focus": self.attention_focus,
+                        "thoughts_in_queue": len(self.current_thoughts),
+                    },
+                )
 
                 # Calculate sleep time to maintain ~100ms cycle
                 elapsed = time.time() - loop_start
@@ -618,8 +669,7 @@ class MetacognitiveController:
         """Process thoughts in the thought stream"""
         # Get unprocessed thoughts by priority
         thoughts_to_process = [
-            t for t in self.current_thoughts.values()
-            if not t.processed
+            t for t in self.current_thoughts.values() if not t.processed
         ]
 
         # Sort by priority
@@ -669,7 +719,9 @@ class MetacognitiveController:
             return await self.proactive_engine.process_prediction(thought.content)
 
         elif thought_type in ["reasoning", "analysis", "decision"]:
-            return await self.reasoning_engine.process_reasoning_request(thought.content)
+            return await self.reasoning_engine.process_reasoning_request(
+                thought.content
+            )
 
         elif thought_type in ["optimization", "improvement"]:
             return await self.self_optimization.process_optimization(thought.content)
@@ -704,27 +756,33 @@ class MetacognitiveController:
         # If any subsystem is unhealthy, create alert
         for name, health in health_status.items():
             if health.get("status") == "error":
-                await self._record_thought({
-                    "type": "alert",
-                    "severity": "warning",
-                    "subsystem": name,
-                    "message": f"Subsystem {name} health check failed",
-                    "details": health,
-                }, AttentionPriority.HIGH, "metacognitive_controller")
+                await self._record_thought(
+                    {
+                        "type": "alert",
+                        "severity": "warning",
+                        "subsystem": name,
+                        "message": f"Subsystem {name} health check failed",
+                        "details": health,
+                    },
+                    AttentionPriority.HIGH,
+                    "metacognitive_controller",
+                )
 
     async def _process_critical_alerts(self):
         """Process any critical alerts that need immediate attention"""
         if self.awareness_system:
             alerts = await self.awareness_system.get_critical_alerts()
             for alert in alerts:
-                alert_id = alert.get('id', '')
+                alert_id = alert.get("id", "")
                 if alert_id in self._processed_alert_ids:
                     continue  # Skip already-processed alerts to prevent flooding
                 await self._handle_critical_alert(alert)
                 self._processed_alert_ids.add(alert_id)
                 # Cap set size to prevent memory leak
                 if len(self._processed_alert_ids) > 10000:
-                    self._processed_alert_ids = set(list(self._processed_alert_ids)[-5000:])
+                    self._processed_alert_ids = set(
+                        list(self._processed_alert_ids)[-5000:]
+                    )
 
     async def _handle_critical_alert(self, alert: Dict[str, Any]):
         """Handle a critical alert with immediate action"""
@@ -732,11 +790,13 @@ class MetacognitiveController:
         self.attention_focus = f"CRITICAL: {alert.get('type', 'unknown')}"
 
         # Log attention shift
-        self.attention_history.append({
-            "timestamp": datetime.now().isoformat(),
-            "focus": self.attention_focus,
-            "reason": "critical_alert",
-        })
+        self.attention_history.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "focus": self.attention_focus,
+                "reason": "critical_alert",
+            }
+        )
         self.metrics["attention_shifts"] += 1
 
         # Determine appropriate response
@@ -759,26 +819,34 @@ class MetacognitiveController:
         """Handle security threat alerts"""
         # Log and escalate
         logger.critical(f"Security threat detected: {alert}")
-        await self._record_thought({
-            "type": "security_incident",
-            "alert": alert,
-            "action": "escalated",
-        }, AttentionPriority.CRITICAL, "metacognitive_controller")
+        await self._record_thought(
+            {
+                "type": "security_incident",
+                "alert": alert,
+                "action": "escalated",
+            },
+            AttentionPriority.CRITICAL,
+            "metacognitive_controller",
+        )
 
     async def _handle_revenue_impact(self, alert: Dict[str, Any]):
         """Handle revenue impact alerts"""
         # Analyze and recommend action
         if self.reasoning_engine:
             analysis = await self.reasoning_engine.analyze_revenue_impact(alert)
-            await self._record_thought({
-                "type": "revenue_analysis",
-                "alert": alert,
-                "analysis": analysis,
-            }, AttentionPriority.URGENT, "metacognitive_controller")
+            await self._record_thought(
+                {
+                    "type": "revenue_analysis",
+                    "alert": alert,
+                    "analysis": analysis,
+                },
+                AttentionPriority.URGENT,
+                "metacognitive_controller",
+            )
 
     async def _handle_generic_alert(self, alert: Dict[str, Any]):
         """Handle generic alerts with rate limiting to prevent thought stream flooding"""
-        alert_type = alert.get('type', 'unknown')
+        alert_type = alert.get("type", "unknown")
         now = datetime.now()
         last_recorded = self._alert_last_recorded.get(alert_type)
 
@@ -786,10 +854,14 @@ class MetacognitiveController:
             return  # Rate limited: same alert type recorded too recently
 
         self._alert_last_recorded[alert_type] = now
-        await self._record_thought({
-            "type": "alert_processed",
-            "alert": alert,
-        }, AttentionPriority.HIGH, "metacognitive_controller")
+        await self._record_thought(
+            {
+                "type": "alert_processed",
+                "alert": alert,
+            },
+            AttentionPriority.HIGH,
+            "metacognitive_controller",
+        )
 
     async def _update_system_state(self):
         """Update the unified system state"""
@@ -835,10 +907,7 @@ class MetacognitiveController:
             priorities.extend(opportunities)
 
         # Sort by priority and urgency
-        priorities.sort(key=lambda x: (
-            x.get("priority", 5),
-            -x.get("urgency", 0)
-        ))
+        priorities.sort(key=lambda x: (x.get("priority", 5), -x.get("urgency", 0)))
 
         return priorities
 
@@ -858,11 +927,17 @@ class MetacognitiveController:
 
     async def _log_attention_shift(self, focus: str, reason: str):
         """Log attention shift to database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_attention_log
             (controller_id, focus_target, priority, reason)
             VALUES ($1, $2, $3, $4)
-        ''', self.id, focus, "high", reason)
+        """,
+            self.id,
+            focus,
+            "high",
+            reason,
+        )
 
     # =========================================================================
     # DECISION PROCESSING
@@ -877,8 +952,7 @@ class MetacognitiveController:
                 # Get next decision from queue (with timeout)
                 try:
                     priority, decision = await asyncio.wait_for(
-                        self.decision_queue.get(),
-                        timeout=1.0
+                        self.decision_queue.get(), timeout=1.0
                     )
                     await self._process_decision(decision)
                 except asyncio.TimeoutError:
@@ -903,7 +977,7 @@ class MetacognitiveController:
                 result = await self.reasoning_engine.make_decision(
                     context=decision.get("context", {}),
                     options=decision.get("options", []),
-                    constraints=decision.get("constraints", [])
+                    constraints=decision.get("constraints", []),
                 )
             else:
                 # Fallback to simple decision making
@@ -921,10 +995,13 @@ class MetacognitiveController:
             self.metrics["decisions_made"] += 1
 
             # Emit decision event
-            await self._emit_event("decision_made", {
-                "decision_id": decision_id,
-                "result": result,
-            })
+            await self._emit_event(
+                "decision_made",
+                {
+                    "decision_id": decision_id,
+                    "result": result,
+                },
+            )
 
             return result
 
@@ -939,15 +1016,16 @@ class MetacognitiveController:
         decision_id: str,
         decision: Dict[str, Any],
         result: Dict[str, Any],
-        execution_time: int
+        execution_time: int,
     ):
         """Store decision in database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_decisions
             (decision_id, controller_id, decision_type, context, options,
              selected_option, reasoning, confidence, execution_time_ms, decided_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-        ''',
+        """,
             decision_id,
             self.id,
             decision.get("type", "general"),
@@ -956,7 +1034,7 @@ class MetacognitiveController:
             json.dumps(result.get("selected_option", {})),
             result.get("reasoning", ""),
             result.get("confidence", 0),
-            execution_time
+            execution_time,
         )
 
     # =========================================================================
@@ -992,21 +1070,24 @@ class MetacognitiveController:
         }
 
         # Analyze recent decisions
-        recent_decisions = await self._db_fetch_with_retry('''
+        recent_decisions = await self._db_fetch_with_retry(
+            """
             SELECT decision_type, confidence, success
             FROM brainops_decisions
             WHERE controller_id = $1
             AND created_at > NOW() - INTERVAL '1 hour'
-        ''', self.id)
+        """,
+            self.id,
+        )
 
         if recent_decisions:
-            success_rate = sum(
-                1 for d in recent_decisions if d['success']
-            ) / len(recent_decisions)
+            success_rate = sum(1 for d in recent_decisions if d["success"]) / len(
+                recent_decisions
+            )
 
-            avg_confidence = sum(
-                d['confidence'] or 0 for d in recent_decisions
-            ) / len(recent_decisions)
+            avg_confidence = sum(d["confidence"] or 0 for d in recent_decisions) / len(
+                recent_decisions
+            )
 
             reflection["observations"]["decision_success_rate"] = success_rate
             reflection["observations"]["average_confidence"] = avg_confidence
@@ -1015,10 +1096,12 @@ class MetacognitiveController:
                 reflection["insights"].append(
                     "Decision success rate below threshold - need improvement"
                 )
-                reflection["actions"].append({
-                    "action": "trigger_learning",
-                    "focus": "decision_making",
-                })
+                reflection["actions"].append(
+                    {
+                        "action": "trigger_learning",
+                        "focus": "decision_making",
+                    }
+                )
 
         # Analyze system performance
         reflection["observations"]["metrics"] = self.metrics.copy()
@@ -1038,16 +1121,17 @@ class MetacognitiveController:
 
     async def _store_reflection(self, reflection: Dict[str, Any]):
         """Store reflection in database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_reflections
             (controller_id, reflection_type, observations, insights, actions_taken)
             VALUES ($1, $2, $3, $4, $5)
-        ''',
+        """,
             self.id,
             "periodic",
             json.dumps(reflection["observations"]),
             json.dumps(reflection["insights"]),
-            json.dumps(reflection["actions"])
+            json.dumps(reflection["actions"]),
         )
 
     async def _execute_reflection_action(self, action: Dict[str, Any]):
@@ -1083,17 +1167,23 @@ class MetacognitiveController:
         """Persist current state to database"""
         system_state = await self.get_system_state()
 
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_metacognitive_state
             (controller_id, consciousness_state, attention_focus,
              system_state, metrics)
             VALUES ($1, $2, $3, $4, $5)
-        ''',
+        """,
             self.id,
             self.state.value,
             self.attention_focus,
-            json.dumps(system_state.__dict__ if hasattr(system_state, '__dict__') else system_state, cls=DateTimeEncoder),
-            json.dumps(self.metrics, cls=DateTimeEncoder)
+            json.dumps(
+                system_state.__dict__
+                if hasattr(system_state, "__dict__")
+                else system_state,
+                cls=DateTimeEncoder,
+            ),
+            json.dumps(self.metrics, cls=DateTimeEncoder),
         )
 
     # =========================================================================
@@ -1123,7 +1213,11 @@ class MetacognitiveController:
     # PUBLIC API
     # =========================================================================
 
-    async def think(self, thought: Dict[str, Any], priority: AttentionPriority = AttentionPriority.NORMAL) -> str:
+    async def think(
+        self,
+        thought: Dict[str, Any],
+        priority: AttentionPriority = AttentionPriority.NORMAL,
+    ) -> str:
         """
         Submit a thought for processing.
 
@@ -1136,7 +1230,9 @@ class MetacognitiveController:
         """
         return await self._record_thought(thought, priority, "external")
 
-    async def decide(self, context: Dict[str, Any], options: List[Any], urgency: str = "normal") -> Dict[str, Any]:
+    async def decide(
+        self, context: Dict[str, Any], options: List[Any], urgency: str = "normal"
+    ) -> Dict[str, Any]:
         """
         Make a decision based on context and options.
 
@@ -1223,22 +1319,26 @@ class MetacognitiveController:
             timestamp=datetime.now(),
             consciousness_state=self.state,
             attention_focus=self.attention_focus,
-            active_goals=await self._get_active_goals() if self.goal_architecture else [],
-            active_agents={aid: a['status'] for aid, a in self.agents.items()},
+            active_goals=await self._get_active_goals()
+            if self.goal_architecture
+            else [],
+            active_agents={aid: a["status"] for aid, a in self.agents.items()},
             memory_usage=await self._get_memory_usage() if self.unified_memory else {},
-            neural_activity=await self._get_neural_activity() if self.neural_network else 0,
+            neural_activity=await self._get_neural_activity()
+            if self.neural_network
+            else 0,
             pending_decisions=len(self.pending_decisions),
             active_tasks=len(self.current_thoughts),
             system_health=await self._calculate_system_health(),
             last_reflection=None,  # Would track actual last reflection
-            uptime_seconds=(datetime.now() - self.start_time).total_seconds()
+            uptime_seconds=(datetime.now() - self.start_time).total_seconds(),
         )
 
     async def _get_active_goals(self) -> List[str]:
         """Get list of active goal IDs"""
         if self.goal_architecture:
             goals = await self.goal_architecture.get_active_goals()
-            return [g['id'] for g in goals]
+            return [g["id"] for g in goals]
         return []
 
     async def _get_memory_usage(self) -> Dict[str, int]:
@@ -1285,10 +1385,7 @@ class MetacognitiveController:
     # =========================================================================
 
     async def _record_thought(
-        self,
-        content: Dict[str, Any],
-        priority: AttentionPriority,
-        source: str
+        self, content: Dict[str, Any], priority: AttentionPriority, source: str
     ) -> str:
         """Record a thought in the thought stream"""
         thought_id = str(uuid.uuid4())
@@ -1308,7 +1405,8 @@ class MetacognitiveController:
 
     async def _persist_thought(self, thought: ThoughtUnit):
         """Persist thought to database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_thought_stream
             (thought_id, controller_id, content, source, priority,
              processed, outcome, processed_at)
@@ -1317,15 +1415,17 @@ class MetacognitiveController:
                 processed = EXCLUDED.processed,
                 outcome = EXCLUDED.outcome,
                 processed_at = EXCLUDED.processed_at
-        ''',
+        """,
             thought.id,
             self.id,
             json.dumps(thought.content, cls=DateTimeEncoder),
             thought.source,
             thought.priority.value,
             thought.processed,
-            json.dumps(thought.outcome, cls=DateTimeEncoder) if thought.outcome else None,
-            datetime.now() if thought.processed else None
+            json.dumps(thought.outcome, cls=DateTimeEncoder)
+            if thought.outcome
+            else None,
+            datetime.now() if thought.processed else None,
         )
 
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
@@ -1408,14 +1508,15 @@ class MetacognitiveController:
 
         # Calculate overall health
         healthy_count = sum(
-            1 for s in subsystems.values()
-            if s.get("status") == "healthy"
+            1 for s in subsystems.values() if s.get("status") == "healthy"
         )
         total_count = len(subsystems)
         health_score = healthy_count / total_count if total_count > 0 else 0
 
-        overall_status = "healthy" if health_score >= 0.8 else (
-            "degraded" if health_score >= 0.5 else "unhealthy"
+        overall_status = (
+            "healthy"
+            if health_score >= 0.8
+            else ("degraded" if health_score >= 0.5 else "unhealthy")
         )
 
         return {
@@ -1431,9 +1532,7 @@ class MetacognitiveController:
         }
 
     async def process(
-        self,
-        input_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
+        self, input_data: Dict[str, Any], context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Process input through the metacognitive system
@@ -1450,7 +1549,7 @@ class MetacognitiveController:
                 timestamp=datetime.now(),
                 content=input_data,
                 source="external",
-                priority=AttentionPriority.NORMAL
+                priority=AttentionPriority.NORMAL,
             )
 
             # Determine priority based on content
@@ -1483,8 +1582,7 @@ class MetacognitiveController:
             # Reasoning if needed
             if self.reasoning_engine and input_data.get("requires_reasoning"):
                 reasoning = await self.reasoning_engine.reason(
-                    query=str(input_data),
-                    context=context
+                    query=str(input_data), context=context
                 )
                 result["reasoning"] = reasoning
 
@@ -1520,7 +1618,9 @@ class MetacognitiveController:
             reflection["recent_activity"] = {
                 "thoughts_count": len(recent_thoughts),
                 "processed_count": processed_count,
-                "processing_rate": processed_count / len(recent_thoughts) if recent_thoughts else 0
+                "processing_rate": processed_count / len(recent_thoughts)
+                if recent_thoughts
+                else 0,
             }
 
             # Get learning insights
@@ -1547,7 +1647,7 @@ class MetacognitiveController:
                 "subsystem_status": {
                     name: info.get("status")
                     for name, info in health.get("subsystems", {}).items()
-                }
+                },
             }
 
             # Record reflection in database
@@ -1560,14 +1660,15 @@ class MetacognitiveController:
 
     async def _record_reflection(self, reflection: Dict[str, Any]):
         """Record a reflection to the database"""
-        await self._db_execute_with_retry('''
+        await self._db_execute_with_retry(
+            """
             INSERT INTO brainops_reflections
             (topic, content, insights, created_at)
             VALUES ($1, $2, $3, NOW())
-        ''',
+        """,
             reflection.get("topic"),
             json.dumps(reflection, cls=DateTimeEncoder),
-            json.dumps(reflection.get("insights", []), cls=DateTimeEncoder)
+            json.dumps(reflection.get("insights", []), cls=DateTimeEncoder),
         )
 
     async def reset(self):
@@ -1653,7 +1754,9 @@ def get_metacognitive_controller() -> MetacognitiveController:
     return _metacognitive_controller
 
 
-async def initialize_brainops_ai_os(db_pool: Optional[asyncpg.Pool] = None) -> MetacognitiveController:
+async def initialize_brainops_ai_os(
+    db_pool: Optional[asyncpg.Pool] = None
+) -> MetacognitiveController:
     """Initialize the complete BrainOps AI OS"""
     controller = get_metacognitive_controller()
     await controller.initialize(db_pool)
