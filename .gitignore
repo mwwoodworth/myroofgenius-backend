@@ -27,3 +27,6 @@ venv/
 .venv/
 CLAUDE.md
 node_modules/
+
+# OS_XRAY evidence packs (live in ~/dev/reports/)
+reports/

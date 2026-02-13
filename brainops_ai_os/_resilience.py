@@ -4,15 +4,58 @@ BrainOps AI OS - Resilient Subsystem Mixin
 Provides common reliability patterns for all AI OS subsystems:
 - Safe asyncio task creation (prevents 'Task exception was never retrieved')
 - Database operations with automatic retry on PgBouncer connection drops
+- DDL kill-switch: blocks runtime DDL in production/staging (V7)
 """
 
 import asyncio
 import logging
+import os
+import re
 from typing import Any, Optional
 
 import asyncpg
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# V7 DDL Kill-Switch
+# ---------------------------------------------------------------------------
+_DDL_PATTERN = re.compile(
+    r"^\s*"
+    r"(?:--[^\n]*\n\s*|/\*.*?\*/\s*)*"  # strip leading SQL comments
+    r"(CREATE|ALTER|DROP|GRANT|REVOKE|TRUNCATE)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_ENVIRONMENT = os.getenv("ENVIRONMENT", "").lower()
+_ENABLE_RUNTIME_DDL = os.getenv("ENABLE_RUNTIME_DDL", "").strip() == "1"
+
+
+def _is_ddl(query: str) -> bool:
+    """Return True if *query* starts with a DDL/DCL keyword (after stripping
+    whitespace and SQL comments).  Does NOT match DML (INSERT/UPDATE/DELETE/SELECT)."""
+    return bool(_DDL_PATTERN.match(query))
+
+
+def assert_no_runtime_ddl(query: str) -> None:
+    """Raise ``RuntimeError`` if *query* is DDL and the environment forbids it.
+
+    In **production** and **staging** DDL is always blocked.
+    In all other environments DDL is blocked unless ``ENABLE_RUNTIME_DDL=1``.
+    """
+    if not _is_ddl(query):
+        return
+    if _ENVIRONMENT in ("production", "staging"):
+        raise RuntimeError(
+            f"BLOCKED_RUNTIME_DDL: DDL is forbidden in {_ENVIRONMENT!r}. "
+            f"Query starts with: {query[:120]!r}"
+        )
+    if not _ENABLE_RUNTIME_DDL:
+        raise RuntimeError(
+            "BLOCKED_RUNTIME_DDL: DDL is disabled by default. "
+            "Set ENABLE_RUNTIME_DDL=1 to opt in. "
+            f"Query starts with: {query[:120]!r}"
+        )
 
 
 class ResilientSubsystem:
@@ -48,7 +91,9 @@ class ResilientSubsystem:
             if exc is not None:
                 logger.error(
                     "Background task %s failed: %s",
-                    t.get_name(), exc, exc_info=exc,
+                    t.get_name(),
+                    exc,
+                    exc_info=exc,
                 )
 
         task.add_done_callback(_on_done)
@@ -66,6 +111,7 @@ class ResilientSubsystem:
     async def _db_execute_with_retry(
         self, query: str, *args, max_retries: int = 2
     ) -> Any:
+        assert_no_runtime_ddl(query)
         last_error = None
         for attempt in range(max_retries + 1):
             try:
