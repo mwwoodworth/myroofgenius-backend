@@ -183,3 +183,28 @@ ON CONFLICT (workflow_name) DO NOTHING;
 -- Grant permissions (adjust as needed)
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres;
+
+-- SYSTEM STATE SECURITY HARDENING (V8)
+-- Revoke insecure defaults
+REVOKE ALL ON TABLE system_state FROM anon;
+REVOKE ALL ON TABLE system_state FROM authenticated;
+REVOKE ALL ON TABLE system_state FROM app_agent_role;
+
+-- Grant secure access
+GRANT ALL ON TABLE system_state TO service_role;
+GRANT SELECT ON TABLE system_state TO app_backend_role;
+GRANT SELECT ON TABLE system_state TO app_mcp_role;
+
+-- Enable RLS
+ALTER TABLE system_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_state FORCE ROW LEVEL SECURITY;
+
+-- Apply Policies
+DROP POLICY IF EXISTS "service_role_all" ON system_state;
+CREATE POLICY "service_role_all" ON system_state FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "backend_role_read" ON system_state;
+CREATE POLICY "backend_role_read" ON system_state FOR SELECT TO app_backend_role USING (true);
+
+DROP POLICY IF EXISTS "mcp_role_read" ON system_state;
+CREATE POLICY "mcp_role_read" ON system_state FOR SELECT TO app_mcp_role USING (true);

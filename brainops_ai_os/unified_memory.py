@@ -190,6 +190,39 @@ class UnifiedMemorySubstrate(ResilientSubsystem):
                 embedding vector(1536),
                 created_at TIMESTAMP DEFAULT NOW()
             );
+
+            -- V8 SECURITY HARDENING
+            -- brainops_memory_consolidation
+            REVOKE ALL ON TABLE brainops_memory_consolidation FROM anon, authenticated, app_agent_role;
+            GRANT ALL ON TABLE brainops_memory_consolidation TO service_role;
+            GRANT SELECT ON TABLE brainops_memory_consolidation TO app_backend_role, app_mcp_role;
+            ALTER TABLE brainops_memory_consolidation ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE brainops_memory_consolidation FORCE ROW LEVEL SECURITY;
+            
+            DROP POLICY IF EXISTS "service_role_all" ON brainops_memory_consolidation;
+            CREATE POLICY "service_role_all" ON brainops_memory_consolidation FOR ALL TO service_role USING (true) WITH CHECK (true);
+            
+            DROP POLICY IF EXISTS "backend_role_read" ON brainops_memory_consolidation;
+            CREATE POLICY "backend_role_read" ON brainops_memory_consolidation FOR SELECT TO app_backend_role USING (true);
+            
+            DROP POLICY IF EXISTS "mcp_role_read" ON brainops_memory_consolidation;
+            CREATE POLICY "mcp_role_read" ON brainops_memory_consolidation FOR SELECT TO app_mcp_role USING (true);
+
+            -- brainops_synthesized_knowledge
+            REVOKE ALL ON TABLE brainops_synthesized_knowledge FROM anon, authenticated, app_agent_role;
+            GRANT ALL ON TABLE brainops_synthesized_knowledge TO service_role;
+            GRANT SELECT ON TABLE brainops_synthesized_knowledge TO app_backend_role, app_mcp_role;
+            ALTER TABLE brainops_synthesized_knowledge ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE brainops_synthesized_knowledge FORCE ROW LEVEL SECURITY;
+            
+            DROP POLICY IF EXISTS "service_role_all" ON brainops_synthesized_knowledge;
+            CREATE POLICY "service_role_all" ON brainops_synthesized_knowledge FOR ALL TO service_role USING (true) WITH CHECK (true);
+            
+            DROP POLICY IF EXISTS "backend_role_read" ON brainops_synthesized_knowledge;
+            CREATE POLICY "backend_role_read" ON brainops_synthesized_knowledge FOR SELECT TO app_backend_role USING (true);
+            
+            DROP POLICY IF EXISTS "mcp_role_read" ON brainops_synthesized_knowledge;
+            CREATE POLICY "mcp_role_read" ON brainops_synthesized_knowledge FOR SELECT TO app_mcp_role USING (true);
         """
         )
 

@@ -178,6 +178,22 @@ class PersistentMemoryBrain:
                     anomalies JSONB,
                     timestamp TIMESTAMP DEFAULT NOW()
                 );
+
+                -- V8 SECURITY HARDENING
+                REVOKE ALL ON TABLE system_state FROM anon, authenticated, app_agent_role;
+                GRANT ALL ON TABLE system_state TO service_role;
+                GRANT SELECT ON TABLE system_state TO app_backend_role, app_mcp_role;
+                ALTER TABLE system_state ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE system_state FORCE ROW LEVEL SECURITY;
+                
+                DROP POLICY IF EXISTS "service_role_all" ON system_state;
+                CREATE POLICY "service_role_all" ON system_state FOR ALL TO service_role USING (true) WITH CHECK (true);
+                
+                DROP POLICY IF EXISTS "backend_role_read" ON system_state;
+                CREATE POLICY "backend_role_read" ON system_state FOR SELECT TO app_backend_role USING (true);
+                
+                DROP POLICY IF EXISTS "mcp_role_read" ON system_state;
+                CREATE POLICY "mcp_role_read" ON system_state FOR SELECT TO app_mcp_role USING (true);
             """
             )
 
