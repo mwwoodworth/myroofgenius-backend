@@ -368,6 +368,14 @@ class AwarenessSystem:
 
                 await self._store_reading(reading)
 
+                # Auto-resolve database_error alert if DB is healthy again
+                db_error_key = 'database_error_critical'
+                if db_error_key in self.alerts and not self.alerts[db_error_key].resolved:
+                    self.alerts[db_error_key].resolved = True
+                    self.alerts[db_error_key].resolution = f'Database recovered. Query time: {query_time:.0f}ms'
+                    self.metrics['alerts_resolved'] += 1
+                    logger.info(f'Auto-resolved database_error alert after successful DB query ({query_time:.0f}ms)')
+
                 # Alert on slow queries
                 if query_time > 1000:
                     await self._generate_alert(

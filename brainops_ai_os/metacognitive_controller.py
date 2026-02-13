@@ -164,6 +164,11 @@ class MetacognitiveController:
         self._background_tasks: List[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
 
+        # Alert dedup: track processed alert IDs and rate-limit repeated alerts
+        self._processed_alert_ids: set = set()
+        self._alert_last_recorded: Dict[str, datetime] = {}  # alert_type -> last recorded time
+        self._alert_record_interval = timedelta(minutes=5)  # min interval between recording same alert type
+
         # Callbacks for event handling
         self._event_handlers: Dict[str, List[Callable]] = {}
 
@@ -712,7 +717,14 @@ class MetacognitiveController:
         if self.awareness_system:
             alerts = await self.awareness_system.get_critical_alerts()
             for alert in alerts:
+                alert_id = alert.get('id', '')
+                if alert_id in self._processed_alert_ids:
+                    continue  # Skip already-processed alerts to prevent flooding
                 await self._handle_critical_alert(alert)
+                self._processed_alert_ids.add(alert_id)
+                # Cap set size to prevent memory leak
+                if len(self._processed_alert_ids) > 10000:
+                    self._processed_alert_ids = set(list(self._processed_alert_ids)[-5000:])
 
     async def _handle_critical_alert(self, alert: Dict[str, Any]):
         """Handle a critical alert with immediate action"""
@@ -765,7 +777,15 @@ class MetacognitiveController:
             }, AttentionPriority.URGENT, "metacognitive_controller")
 
     async def _handle_generic_alert(self, alert: Dict[str, Any]):
-        """Handle generic alerts"""
+        """Handle generic alerts with rate limiting to prevent thought stream flooding"""
+        alert_type = alert.get('type', 'unknown')
+        now = datetime.now()
+        last_recorded = self._alert_last_recorded.get(alert_type)
+
+        if last_recorded and (now - last_recorded) < self._alert_record_interval:
+            return  # Rate limited: same alert type recorded too recently
+
+        self._alert_last_recorded[alert_type] = now
         await self._record_thought({
             "type": "alert_processed",
             "alert": alert,
