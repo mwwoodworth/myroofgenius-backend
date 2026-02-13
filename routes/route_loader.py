@@ -15,7 +15,6 @@ ROUTE_MAPPINGS = {
     # Core business routes
     "products_api": "/api/v1/products",
     "products_public": "/api/v1/products/public",
-
     # Tasks 61-70: Sales & CRM
     "lead_management": "/api/v1/leads",
     "opportunity_tracking": "/api/v1/opportunities",
@@ -27,7 +26,6 @@ ROUTE_MAPPINGS = {
     "sales_forecasting": "/api/v1/forecasts",
     "territory_management": "/api/v1/territories",
     "sales_analytics": "/api/v1/sales/analytics",
-
     # Tasks 71-80: Marketing
     "campaign_management": "/api/v1/campaigns",
     "email_marketing": "/api/v1/email-marketing",
@@ -39,7 +37,6 @@ ROUTE_MAPPINGS = {
     "ab_testing": "/api/v1/ab-testing",
     "marketing_automation": "/api/v1/marketing-automation",
     "landing_page_management": "/api/v1/landing-pages",
-
     # Tasks 81-90: Customer Service
     "ticket_management": "/api/v1/tickets",
     "knowledge_base": "/api/v1/knowledge-base",
@@ -51,7 +48,6 @@ ROUTE_MAPPINGS = {
     "faq_management": "/api/v1/faq",
     "support_analytics": "/api/v1/support/analytics",
     "escalation_management": "/api/v1/escalations",
-
     # Tasks 91-100: Analytics & BI
     "business_intelligence": "/api/v1/analytics/bi",
     "data_warehouse": "/api/v1/data-warehouse",
@@ -63,7 +59,6 @@ ROUTE_MAPPINGS = {
     "data_governance": "/api/v1/data-governance",
     "executive_dashboards": "/api/v1/executive-dashboards",
     "analytics_api": "/api/v1/analytics-api",
-
     # Tasks 101-110: Advanced Operations
     "vendor_management": "/api/v1/vendors",
     "procurement_system": "/api/v1/procurement",
@@ -89,14 +84,26 @@ EXCLUDED_MODULES = {
     # Archived routes (moved to archive/deprecated_routes/ on 2025-12-15)
     # - complete_erp: No prefix defined, caused routing conflicts with weathercraft alias
     # Note: erp_complete.py is the active ERP implementation
+    # V9 SECURITY: Redundant/unverified webhook endpoints (P0-WEBHOOK-002..004)
+    # Only routes/stripe_webhooks.py is the canonical Stripe webhook handler.
+    # These modules have unauthenticated or signature-bypass webhook endpoints:
+    "stripe_automation_enhanced",  # uses construct_from (no sig verify)
+    "stripe_checkout",  # pre-parsed Dict body (sig impossible)
+    "stripe_revenue",  # redundant, already handled by canonical
+    "stripe_automation",  # redundant, already handled by canonical
+    "webhooks",  # /revenue/webhook has zero auth
+    "payment_processing",  # /webhook/stripe uses Dict body (sig impossible)
 }
+
 
 def load_all_routes(app: FastAPI):
     """
     Dynamically load all route files from the routes directory
     """
     if os.getenv("SKIP_ROUTE_LOADING") == "1":
-        logger.info("SKIP_ROUTE_LOADING set; skipping dynamic route loading for this process")
+        logger.info(
+            "SKIP_ROUTE_LOADING set; skipping dynamic route loading for this process"
+        )
         return 0, 0
     routes_dir = os.path.dirname(__file__)
     loaded_count = 0
@@ -108,11 +115,11 @@ def load_all_routes(app: FastAPI):
     route_files = []
     for filename in os.listdir(routes_dir):
         file_path = os.path.join(routes_dir, filename)
-        
+
         # Skip directories and non-python files
         if os.path.isdir(file_path):
             continue
-            
+
         if filename.endswith(".py") and filename not in skipped_files:
             module_name = filename[:-3]  # Remove .py extension
             route_files.append(module_name)
@@ -129,7 +136,7 @@ def load_all_routes(app: FastAPI):
             module = importlib.import_module(f"routes.{module_name}")
 
             # Check if module has a router
-            if hasattr(module, 'router'):
+            if hasattr(module, "router"):
                 router = module.router
 
                 # Create tag from module name
@@ -137,12 +144,14 @@ def load_all_routes(app: FastAPI):
 
                 # FIX v148: Check if router already has a prefix
                 # If it does, use it directly (don't add another prefix)
-                if hasattr(router, 'prefix') and router.prefix:
+                if hasattr(router, "prefix") and router.prefix:
                     # Router already has its own prefix, use it as-is
                     app.include_router(router, tags=[tag])
                     loaded_count += 1
                     if loaded_count <= 10 or loaded_count % 50 == 0:
-                        logger.debug(f"Loaded route: {module_name} (using router prefix: {router.prefix})")
+                        logger.debug(
+                            f"Loaded route: {module_name} (using router prefix: {router.prefix})"
+                        )
                 else:
                     # Router has no prefix, we need to provide one
                     if module_name in ROUTE_MAPPINGS:

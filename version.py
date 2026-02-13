@@ -2,9 +2,11 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.7.0"
-__build__ = "2026-02-13T19:30:00Z"
+__version__ = "163.8.0"
+__build__ = "2026-02-13T21:30:00Z"
 __status__ = "production"
+# v163.8.0: V9 security - exclude 6 unverified webhook endpoints from route loader,
+#   delete dead webhook_processor.py. Only stripe_webhooks.py is canonical.
 # v163.7.0: V7 security hardening - DDL kill-switch, memory convergence,
 #   tenant isolation in webhooks/integrations, legacy brain disabled
 # v163.5.9: Version alignment for dominance maintenance plan
