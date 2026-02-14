@@ -10,6 +10,7 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       can_docker: ${{ steps.check.outputs.can_docker }}
     steps:
@@ -24,6 +25,7 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: preflight
     if: ${{ needs.preflight.outputs.can_docker == 'true' }}
     steps:
