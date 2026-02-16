@@ -206,7 +206,7 @@ async def handle_stripe_webhook(
                 await handle_payment_intent_succeeded(db, data, stripe_event_id)
 
             elif event_type == "payment_method.attached":
-                await handle_payment_method_attached(db, data)
+                await handle_payment_method_attached(db, data, stripe_event_id)
 
             else:
                 logger.info(f"Unhandled event type: {event_type}")
@@ -728,33 +728,48 @@ async def handle_payment_intent_succeeded(
         db.rollback()
 
 
-async def handle_payment_method_attached(db: Session, data: dict):
+async def handle_payment_method_attached(db: Session, data: dict, stripe_event_id: str):
     """Handle payment method attachment"""
     try:
         payment_method_id = data.get("id")
         customer_id = data.get("customer")
         card_info = data.get("card", {})
+        metadata = data.get("metadata", {})
+
+        # SECURITY: Strict tenant resolution — no default fallback
+        tenant_id = _resolve_tenant_id(db, metadata=metadata, customer_id=customer_id)
+        if not tenant_id:
+            _quarantine_webhook_event(
+                db,
+                stripe_event_id,
+                "payment_method.attached",
+                f"Cannot resolve tenant for customer {customer_id}",
+            )
+            return
 
         # Store payment method info
         db.execute(
             text(
                 """
-            INSERT INTO payment_methods (id, customer_id, type, last4, brand, created_at)
-            VALUES (:id, :customer_id, :type, :last4, :brand, NOW())
+            INSERT INTO payment_methods (id, customer_id, tenant_id, type, last4, brand, created_at)
+            VALUES (:id, :customer_id, :tenant_id, :type, :last4, :brand, NOW())
             ON CONFLICT (id) DO UPDATE
-            SET customer_id = :customer_id
+            SET customer_id = :customer_id, tenant_id = :tenant_id
         """
             ),
             {
                 "id": payment_method_id,
                 "customer_id": customer_id,
+                "tenant_id": tenant_id,
                 "type": data.get("type", "card"),
                 "last4": card_info.get("last4"),
                 "brand": card_info.get("brand"),
             },
         )
         db.commit()
-        logger.info(f"Payment method attached: {payment_method_id}")
+        logger.info(
+            f"Payment method attached: {payment_method_id} (tenant: {tenant_id})"
+        )
 
     except Exception as e:
         logger.error(f"Error attaching payment method: {str(e)}")
