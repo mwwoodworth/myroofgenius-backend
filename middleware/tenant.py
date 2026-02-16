@@ -1,12 +1,47 @@
-"""Multi-tenant middleware for request isolation"""
+"""Multi-tenant middleware for request isolation.
+
+SECURITY (F-002 fix): get_tenant_filter() and get_tenant_filter_unsafe() now
+REJECT requests when tenant_id is missing instead of falling back to the
+dangerous ``1=1`` unscoped WHERE clause that allowed cross-tenant reads/writes.
+
+Paths that legitimately operate without a tenant (health checks, Stripe
+webhooks, public docs, etc.) are listed in TENANT_EXEMPT_PREFIXES.
+"""
 from fastapi import Request, HTTPException
 from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Paths that legitimately do NOT require a tenant context.
+# The TenantMiddleware will allow these through without a tenant_id, and the
+# get_tenant_filter* helpers will never be called for them (they use their own
+# auth/scoping logic).
+# ---------------------------------------------------------------------------
+TENANT_EXEMPT_PREFIXES = (
+    "/health",
+    "/ready",
+    "/capabilities",
+    "/diagnostics",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/api/v1/health",
+    "/api/v1/ready",
+    "/api/v1/stripe/webhook",   # Stripe webhooks resolve tenant internally
+    "/api/v1/cns",              # CNS system endpoints (API-key authed)
+)
+
+
 class TenantMiddleware:
-    """Middleware to handle multi-tenant request isolation"""
+    """Middleware to handle multi-tenant request isolation.
+
+    For non-exempt paths, a missing tenant_id is logged as a warning.
+    The hard enforcement happens in the ``get_tenant_filter`` helpers so
+    that every SQL-building callsite is protected regardless of whether
+    this middleware is registered.
+    """
 
     def __init__(self, app):
         self.app = app
@@ -21,6 +56,8 @@ class TenantMiddleware:
         from starlette.requests import Request
         request = Request(scope, receive, send)
 
+        path = request.url.path
+
         # Extract tenant from various sources
         tenant_id = await self.get_tenant_id(request)
 
@@ -30,6 +67,10 @@ class TenantMiddleware:
         # Log tenant access
         if tenant_id:
             logger.debug(f"Request from tenant: {tenant_id}")
+        elif not _is_exempt_path(path):
+            logger.warning(
+                "Request to tenant-scoped path %s without tenant_id", path
+            )
 
         # Process request through the app
         await self.app(scope, receive, send)
@@ -69,6 +110,17 @@ class TenantMiddleware:
         return None
 
 
+def _is_exempt_path(path: str) -> bool:
+    """Return True if *path* does not require tenant scoping."""
+    for prefix in TENANT_EXEMPT_PREFIXES:
+        if path == prefix or path.startswith(prefix + "/"):
+            return True
+    # Root path
+    if path == "/":
+        return True
+    return False
+
+
 def get_tenant_id(request: Request) -> Optional[str]:
     """Helper function to get tenant ID from request scope"""
     # Try to get from scope first (set by middleware)
@@ -83,7 +135,7 @@ def require_tenant(request: Request) -> str:
     tenant_id = get_tenant_id(request)
     if not tenant_id:
         raise HTTPException(
-            status_code=400,
+            status_code=403,
             detail="Tenant ID is required for this operation"
         )
     return tenant_id
@@ -96,10 +148,21 @@ def get_tenant_filter(request: Request, table_alias: str = "") -> tuple:
     Usage: clause, params = get_tenant_filter(request)
            query = f"SELECT * FROM table WHERE {clause}"
            db.execute(query, params)
+
+    SECURITY (F-002): Raises HTTP 403 when tenant_id is missing.
+    Previously returned ``("1=1", {})`` which disabled tenant isolation.
     """
     tenant_id = get_tenant_id(request)
     if not tenant_id:
-        return "1=1", {}  # No filtering for public/default
+        logger.error(
+            "SECURITY: get_tenant_filter() called without tenant_id — "
+            "rejecting to prevent cross-tenant data leak (path=%s)",
+            request.url.path,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Tenant context is required. Cannot execute unscoped query.",
+        )
 
     prefix = f"{table_alias}." if table_alias else ""
     # Return parameterized query to prevent SQL injection
@@ -111,6 +174,9 @@ def get_tenant_filter_unsafe(request: Request, table_alias: str = "") -> str:
 
     This function is kept for backwards compatibility but should NOT be used
     for any user-controlled tenant_id values.
+
+    SECURITY (F-002): Raises HTTP 403 when tenant_id is missing.
+    Previously returned ``"1=1"`` which disabled tenant isolation.
     """
     import warnings
     warnings.warn(
@@ -120,7 +186,15 @@ def get_tenant_filter_unsafe(request: Request, table_alias: str = "") -> str:
     )
     tenant_id = get_tenant_id(request)
     if not tenant_id:
-        return "1=1"
+        logger.error(
+            "SECURITY: get_tenant_filter_unsafe() called without tenant_id — "
+            "rejecting to prevent cross-tenant data leak (path=%s)",
+            request.url.path,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Tenant context is required. Cannot execute unscoped query.",
+        )
 
     # Validate tenant_id is a valid UUID to prevent injection
     import re

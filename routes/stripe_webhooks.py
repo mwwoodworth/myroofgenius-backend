@@ -188,10 +188,10 @@ async def handle_stripe_webhook(
                 await handle_subscription_created(db, data, stripe_event_id)
 
             elif event_type == "customer.subscription.updated":
-                await handle_subscription_updated(db, data)
+                await handle_subscription_updated(db, data, stripe_event_id)
 
             elif event_type == "customer.subscription.deleted":
-                await handle_subscription_deleted(db, data)
+                await handle_subscription_deleted(db, data, stripe_event_id)
 
             elif event_type == "invoice.payment_succeeded":
                 await handle_payment_succeeded(db, data, stripe_event_id)
@@ -393,47 +393,117 @@ async def handle_subscription_created(
         db.rollback()
 
 
-async def handle_subscription_updated(db: Session, data: dict):
-    """Handle subscription updates"""
+async def handle_subscription_updated(db: Session, data: dict, stripe_event_id: str = ""):
+    """Handle subscription updates.
+
+    SECURITY FIX (F-009): Previously updated by stripe_subscription_id only,
+    without a tenant predicate. A subscription ID collision or replay attack
+    could update the wrong tenant's subscription. Now resolves tenant_id first
+    and includes it in the WHERE clause.
+    """
     try:
         subscription_id = data.get("id")
+        customer_id = data.get("customer")
         status = data.get("status")
+        metadata = data.get("metadata", {})
 
-        db.execute(
+        # SECURITY (F-009): Resolve tenant to scope the UPDATE
+        tenant_id = _resolve_tenant_id(
+            db,
+            metadata=metadata,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+        )
+        if not tenant_id:
+            _quarantine_webhook_event(
+                db,
+                stripe_event_id,
+                "customer.subscription.updated",
+                "tenant_id unresolvable from metadata/subscription/customer",
+            )
+            return
+
+        result = db.execute(
             text(
                 """
             UPDATE subscriptions
             SET status = :status, updated_at = NOW()
             WHERE stripe_subscription_id = :subscription_id
+              AND tenant_id = :tenant_id
         """
             ),
-            {"subscription_id": subscription_id, "status": status},
+            {
+                "subscription_id": subscription_id,
+                "status": status,
+                "tenant_id": tenant_id,
+            },
         )
+        if result.rowcount == 0:
+            logger.warning(
+                "subscription.updated: no rows matched for subscription_id=%s tenant_id=%s "
+                "— possible tenant mismatch or missing row",
+                subscription_id,
+                tenant_id,
+            )
         db.commit()
-        logger.info(f"Subscription updated: {subscription_id} to {status}")
+        logger.info(f"Subscription updated: {subscription_id} to {status} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error updating subscription: {str(e)}")
         db.rollback()
 
 
-async def handle_subscription_deleted(db: Session, data: dict):
-    """Handle subscription cancellation"""
+async def handle_subscription_deleted(db: Session, data: dict, stripe_event_id: str = ""):
+    """Handle subscription cancellation.
+
+    SECURITY FIX (F-009): Previously updated by stripe_subscription_id only,
+    without a tenant predicate. Now resolves tenant_id first and includes it
+    in the WHERE clause to prevent cross-tenant writes.
+    """
     try:
         subscription_id = data.get("id")
+        customer_id = data.get("customer")
+        metadata = data.get("metadata", {})
 
-        db.execute(
+        # SECURITY (F-009): Resolve tenant to scope the UPDATE
+        tenant_id = _resolve_tenant_id(
+            db,
+            metadata=metadata,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+        )
+        if not tenant_id:
+            _quarantine_webhook_event(
+                db,
+                stripe_event_id,
+                "customer.subscription.deleted",
+                "tenant_id unresolvable from metadata/subscription/customer",
+            )
+            return
+
+        result = db.execute(
             text(
                 """
             UPDATE subscriptions
             SET status = 'canceled', canceled_at = NOW()
             WHERE stripe_subscription_id = :subscription_id
+              AND tenant_id = :tenant_id
         """
             ),
-            {"subscription_id": subscription_id},
+            {
+                "subscription_id": subscription_id,
+                "tenant_id": tenant_id,
+            },
         )
+        if result.rowcount == 0:
+            logger.warning(
+                "subscription.deleted: no rows matched for subscription_id=%s tenant_id=%s "
+                "— possible tenant mismatch or missing row",
+                subscription_id,
+                tenant_id,
+            )
         db.commit()
-        logger.info(f"Subscription canceled: {subscription_id}")
+        logger.info(f"Subscription canceled: {subscription_id} (tenant: {tenant_id})")
 
     except Exception as e:
         logger.error(f"Error canceling subscription: {str(e)}")
@@ -487,7 +557,7 @@ async def handle_payment_succeeded(db: Session, data: dict, stripe_event_id: str
             },
         )
 
-        # Update subscription payment date
+        # Update subscription payment date — now tenant-scoped
         if subscription_id:
             db.execute(
                 text(
@@ -495,9 +565,10 @@ async def handle_payment_succeeded(db: Session, data: dict, stripe_event_id: str
                 UPDATE subscriptions
                 SET last_payment_at = NOW()
                 WHERE stripe_subscription_id = :subscription_id
+                  AND tenant_id = :tenant_id
             """
                 ),
-                {"subscription_id": subscription_id},
+                {"subscription_id": subscription_id, "tenant_id": tenant_id},
             )
 
         # Track revenue for recurring subscription payments in mrg_revenue
@@ -582,7 +653,7 @@ async def handle_payment_failed(db: Session, data: dict, stripe_event_id: str = 
             },
         )
 
-        # Mark subscription as past_due
+        # Mark subscription as past_due — now tenant-scoped
         if subscription_id:
             db.execute(
                 text(
@@ -590,9 +661,10 @@ async def handle_payment_failed(db: Session, data: dict, stripe_event_id: str = 
                 UPDATE subscriptions
                 SET status = 'past_due'
                 WHERE stripe_subscription_id = :subscription_id
+                  AND tenant_id = :tenant_id
             """
                 ),
-                {"subscription_id": subscription_id},
+                {"subscription_id": subscription_id, "tenant_id": tenant_id},
             )
 
         db.commit()
