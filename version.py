@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.9.0"
-__build__ = "2026-02-18T16:30:00Z"
+__version__ = "163.10.0"
+__build__ = "2026-02-18T17:30:00Z"
 __status__ = "production"
+# v163.10.0: Dead route/duplicate cleanup
+#   - 7 dead/duplicate routes moved to routes/_dead/ (-2,903 lines)
+#   - Fixed erp_complete.py + complete_erp_alias.py: self-contained customer CRUD
+#   - Removed stale fallback import of routes.customers from main.py
+#   - 15 total files now in routes/_dead/
 # v163.9.0: Brain integration + dead route cleanup
 #   - core/brain_store.py: non-blocking brain store helper (fire-and-forget)
 #   - Brain integration added to 5 key routes (ai_brain, alert_automation,
