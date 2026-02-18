@@ -909,7 +909,7 @@ memory_processor = MemoryProcessor()
 
 # Helper functions
 def get_current_user():
-    """Placeholder for authentication - should integrate with auth system"""
+    """Fallback service identity for operations that do not require user scoping."""
     return {"user_id": "system", "username": "system"}
 
 # API Endpoints

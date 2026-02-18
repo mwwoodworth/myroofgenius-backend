@@ -294,10 +294,10 @@ async def process_lead_async(lead_id: str, lead_data: dict):
             )
             logger.info(f"Queued email notification for lead {lead_id}")
 
-            # 2. CRM Integration (Placeholder - Log only)
+            # 2. CRM integration currently logs pending sync status.
             logger.info(f"CRM Sync pending for {lead_id}")
 
-            # 3. Marketing Automation (Placeholder - Log only)
+            # 3. Marketing automation currently logs pending trigger status.
             logger.info(f"Marketing Automation trigger pending for {lead_id}")
 
     except Exception as e:

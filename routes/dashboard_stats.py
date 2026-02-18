@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 import asyncpg
 
-from core.brain_store import build_brain_key, dispatch_brain_store
+from core.brain_store import build_brain_key, dispatch_brain_store, recall_context
 from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
@@ -307,11 +307,25 @@ async def get_dashboard_stats(
             priority="low",
         )
 
+        operational_context = await recall_context(
+            query=(
+                f"dashboard insights for tenant {resolved_tenant}; "
+                f"revenue={stats['revenue']['total']}; "
+                f"active_jobs={stats['jobs']['active']}; "
+                f"open_requests={stats['leads']['open_service_requests']}"
+            ),
+            limit=5,
+        )
+
         return {
             "success": True,
             "tenant_id": resolved_tenant,
             "stats": stats,
             "generated_at": now.isoformat(),
+            "metadata": {
+                "brain_context": operational_context,
+                "brain_context_count": len(operational_context),
+            },
         }
 
     except HTTPException:

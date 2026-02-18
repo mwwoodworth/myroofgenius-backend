@@ -1,6 +1,4 @@
-"""
-Shared helpers for non-blocking writes to the AI Agents brain store.
-"""
+"""Operational brain client helpers for non-blocking telemetry and context recall."""
 
 from __future__ import annotations
 
@@ -9,13 +7,72 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Coroutine, Dict, List, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_AI_AGENTS_URL = "https://brainops-ai-agents.onrender.com"
+DEFAULT_BRAIN_BASE_URL = "https://brainops-ai-agents.onrender.com/brain/"
+DEFAULT_TIMEOUT_SECONDS = float(os.getenv("BRAINOPS_BRAIN_TIMEOUT_SECS", "8"))
+
+_last_brain_store_timestamp: Optional[str] = None
+
+
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_brain_base_url() -> str:
+    """Resolve a normalized /brain base URL from environment or defaults."""
+    base_url = (
+        os.getenv("BRAINOPS_AI_AGENTS_URL")
+        or os.getenv("BRAINOPS_AGENTS_URL")
+        or DEFAULT_BRAIN_BASE_URL
+    ).strip()
+    if not base_url:
+        base_url = DEFAULT_BRAIN_BASE_URL
+
+    normalized = base_url.rstrip("/")
+    if not normalized.endswith("/brain"):
+        normalized = f"{normalized}/brain"
+    return normalized
+
+
+def _brain_headers() -> Dict[str, str]:
+    api_key = (os.getenv("BRAINOPS_API_KEY") or "").strip()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key
+    return headers
+
+
+def _create_task(coro: Coroutine[Any, Any, Any]) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(coro)
+
+
+def _normalize_context_items(payload: Any, limit: int) -> List[Dict[str, Any]]:
+    def _coerce(item: Any) -> Dict[str, Any]:
+        if isinstance(item, dict):
+            return item
+        return {"value": item}
+
+    if isinstance(payload, list):
+        return [_coerce(item) for item in payload[:limit]]
+
+    if isinstance(payload, dict):
+        for key in ("results", "memories", "items", "matches", "context", "data"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [_coerce(item) for item in value[:limit]]
+        if payload:
+            return [_coerce(payload)]
+
+    return []
 
 
 def build_brain_key(scope: str, action: str, tenant_id: Optional[str] = None) -> str:
@@ -23,6 +80,11 @@ def build_brain_key(scope: str, action: str, tenant_id: Optional[str] = None) ->
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     tenant_scope = tenant_id or "global"
     return f"{scope}:{action}:{tenant_scope}:{ts}:{uuid.uuid4().hex[:8]}"
+
+
+def get_last_brain_store_timestamp() -> Optional[str]:
+    """Return the last successful write timestamp to the external brain store."""
+    return _last_brain_store_timestamp
 
 
 async def store_to_brain(
@@ -33,21 +95,30 @@ async def store_to_brain(
     source: str = "backend_api",
 ) -> None:
     """Write a memory record to the AI Agents brain API."""
-    base_url = os.getenv("BRAINOPS_AI_AGENTS_URL", DEFAULT_AI_AGENTS_URL).rstrip("/")
-    url = f"{base_url}/brain/store"
-    api_key = os.getenv("BRAINOPS_API_KEY", "")
+    global _last_brain_store_timestamp
 
+    url = f"{_resolve_brain_base_url()}/store"
     payload = {
         "key": key,
         "value": value,
         "category": category,
         "source": source,
         "priority": priority,
+        "timestamp": _now_utc_iso(),
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(url, json=payload, headers={"X-API-Key": api_key})
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
+            response = await client.post(url, json=payload, headers=_brain_headers())
+            if response.is_success:
+                _last_brain_store_timestamp = _now_utc_iso()
+            else:
+                logger.debug(
+                    "Brain store write failed status=%s key=%s body=%s",
+                    response.status_code,
+                    key,
+                    response.text[:500],
+                )
     except Exception as exc:  # pragma: no cover - non-blocking telemetry path
         logger.debug("Brain store write failed for key=%s: %s", key, exc)
 
@@ -59,15 +130,8 @@ def dispatch_brain_store(
     priority: str = "medium",
     source: str = "backend_api",
 ) -> None:
-    """
-    Fire-and-forget wrapper so route handlers never block on memory persistence.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-
-    loop.create_task(
+    """Fire-and-forget wrapper so route handlers never block on persistence."""
+    _create_task(
         store_to_brain(
             key=key,
             value=value,
@@ -75,4 +139,80 @@ def dispatch_brain_store(
             priority=priority,
             source=source,
         )
+    )
+
+
+def store_event(event_type: str, data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> None:
+    """Store an operational event in the brain using fire-and-forget dispatch."""
+    safe_action = (event_type or "event").strip().lower().replace(" ", "_")
+    tenant_id = None
+    if metadata and isinstance(metadata, dict):
+        tenant_id = str(metadata.get("tenant_id")) if metadata.get("tenant_id") else None
+
+    dispatch_brain_store(
+        key=build_brain_key(scope="event", action=safe_action, tenant_id=tenant_id),
+        value={
+            "event_type": event_type,
+            "data": data or {},
+            "metadata": metadata or {},
+            "recorded_at": _now_utc_iso(),
+        },
+        category="operational_event",
+        priority="high" if safe_action in {"error", "failure", "critical"} else "medium",
+        source="backend_api",
+    )
+
+
+async def recall_context(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """Recall relevant operational context from the brain service."""
+    if not query:
+        return []
+
+    normalized_limit = max(1, min(int(limit or 5), 25))
+    base_url = _resolve_brain_base_url()
+    headers = _brain_headers()
+    payload = {"query": query, "limit": normalized_limit}
+
+    endpoints = [f"{base_url}/recall", f"{base_url}/query", f"{base_url}/search"]
+    try:
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
+            for endpoint in endpoints:
+                try:
+                    response = await client.post(endpoint, json=payload, headers=headers)
+                    if response.status_code == 404:
+                        continue
+                    response.raise_for_status()
+                    return _normalize_context_items(response.json(), normalized_limit)
+                except httpx.HTTPStatusError:
+                    continue
+                except Exception as exc:
+                    logger.debug("Brain recall call failed for %s: %s", endpoint, exc)
+                    continue
+    except Exception as exc:
+        logger.debug("Brain recall context failed: %s", exc)
+
+    return []
+
+
+def store_api_insight(route: str, method: str, status_code: int, response_time_ms: float) -> None:
+    """Store API performance insight records in the brain service."""
+    safe_route = route or "/unknown"
+    safe_method = (method or "GET").upper()
+    safe_status = int(status_code or 0)
+    safe_response_time = float(response_time_ms or 0.0)
+
+    priority = "high" if safe_status >= 500 or safe_response_time >= 2000 else "medium"
+    dispatch_brain_store(
+        key=build_brain_key(scope="api", action="performance"),
+        value={
+            "route": safe_route,
+            "method": safe_method,
+            "status_code": safe_status,
+            "response_time_ms": round(safe_response_time, 2),
+            "insight_type": "api_performance",
+            "recorded_at": _now_utc_iso(),
+        },
+        category="api_performance",
+        priority=priority,
+        source="backend_api",
     )

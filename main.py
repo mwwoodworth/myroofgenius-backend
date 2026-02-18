@@ -34,6 +34,7 @@ from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.security import APIKeyMiddleware
+from core.brain_store import get_last_brain_store_timestamp, store_api_insight, store_event
 from database import get_db  # Legacy import path used by many route modules
 
 # Configure logging
@@ -166,6 +167,15 @@ async def lifespan(app: FastAPI):
     print("=" * 80)
 
     app.state.offline_mode = OFFLINE_MODE
+    app.state.started_at = datetime.now(timezone.utc)
+    app.state.total_requests_served = 0
+    app.state.api_insight_window = {
+        "count": 0,
+        "total_response_time_ms": 0.0,
+        "status_counts": {},
+    }
+    app.state.api_route_metrics = {}
+    app.state.last_api_summary_at = None
 
     if FAST_TEST_MODE:
         print("🚀 FAST_TEST_MODE enabled - skipping heavy startup (DB, credential manager, CNS)")
@@ -454,6 +464,96 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
         },
     )
 
+
+@app.middleware("http")
+async def api_performance_tracking_middleware(request: Request, call_next):
+    """Track request performance and periodically persist summarized usage insights."""
+    start = time.perf_counter()
+    status_code = 500
+    method = request.method.upper()
+    route_signature = request.url.path
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        route_obj = request.scope.get("route")
+        if route_obj and getattr(route_obj, "path", None):
+            route_signature = str(route_obj.path)
+        return response
+    finally:
+        response_time_ms = max((time.perf_counter() - start) * 1000.0, 0.0)
+
+        total_requests = int(getattr(app.state, "total_requests_served", 0)) + 1
+        app.state.total_requests_served = total_requests
+
+        per_route = getattr(app.state, "api_route_metrics", {})
+        route_key = f"{method} {route_signature}"
+        route_metric = per_route.get(route_key) or {
+            "count": 0,
+            "total_response_time_ms": 0.0,
+            "last_status_code": 0,
+            "last_response_time_ms": 0.0,
+            "average_response_time_ms": 0.0,
+        }
+        route_metric["count"] += 1
+        route_metric["total_response_time_ms"] += response_time_ms
+        route_metric["last_status_code"] = status_code
+        route_metric["last_response_time_ms"] = round(response_time_ms, 2)
+        route_metric["average_response_time_ms"] = round(
+            route_metric["total_response_time_ms"] / max(route_metric["count"], 1),
+            2,
+        )
+        per_route[route_key] = route_metric
+        app.state.api_route_metrics = per_route
+
+        window = getattr(app.state, "api_insight_window", None)
+        if not isinstance(window, dict):
+            window = {"count": 0, "total_response_time_ms": 0.0, "status_counts": {}}
+
+        window["count"] = int(window.get("count", 0)) + 1
+        window["total_response_time_ms"] = float(window.get("total_response_time_ms", 0.0)) + response_time_ms
+        window["last_route"] = route_signature
+        window["last_method"] = method
+        window["last_status_code"] = status_code
+        status_bucket = f"{max(int(status_code), 0) // 100}xx"
+        status_counts = window.get("status_counts")
+        if not isinstance(status_counts, dict):
+            status_counts = {}
+        status_counts[status_bucket] = int(status_counts.get(status_bucket, 0)) + 1
+        window["status_counts"] = status_counts
+
+        if window["count"] >= 100:
+            avg_response_time_ms = round(window["total_response_time_ms"] / window["count"], 2)
+
+            store_api_insight(
+                route=f"summary:{route_signature}",
+                method=method,
+                status_code=status_code,
+                response_time_ms=avg_response_time_ms,
+            )
+            store_event(
+                event_type="api_usage_summary",
+                data={
+                    "window_size": window["count"],
+                    "average_response_time_ms": avg_response_time_ms,
+                    "status_distribution": status_counts,
+                    "last_route": route_signature,
+                    "last_method": method,
+                    "last_status_code": status_code,
+                    "total_requests_served": total_requests,
+                },
+                metadata={"source": "api_performance_middleware"},
+            )
+
+            app.state.api_insight_window = {
+                "count": 0,
+                "total_response_time_ms": 0.0,
+                "status_counts": {},
+            }
+            app.state.last_api_summary_at = datetime.now(timezone.utc).isoformat()
+        else:
+            app.state.api_insight_window = window
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -615,6 +715,40 @@ try:
 except Exception as e:
     logger.error(f"⚠️  Failed to load MCP Bridge routes: {e}")
 
+
+def _database_connection_snapshot() -> Dict[str, int]:
+    """Return pool size/idle/active metrics without opening new DB connections."""
+    if not db_pool:
+        return {"size": 0, "idle": 0, "active": 0}
+
+    try:
+        size = int(db_pool.get_size())
+        idle = int(db_pool.get_idle_size())
+        return {
+            "size": size,
+            "idle": idle,
+            "active": max(size - idle, 0),
+        }
+    except Exception:
+        return {"size": 0, "idle": 0, "active": 0}
+
+
+def _runtime_health_metadata() -> Dict[str, Any]:
+    started_at = getattr(app.state, "started_at", None)
+    uptime_seconds = 0
+    if isinstance(started_at, datetime):
+        uptime_seconds = max(int((datetime.now(timezone.utc) - started_at).total_seconds()), 0)
+
+    db_connections = _database_connection_snapshot()
+    return {
+        "uptime_seconds": uptime_seconds,
+        "total_requests_served": int(getattr(app.state, "total_requests_served", 0)),
+        "active_database_connections": db_connections["active"],
+        "database_connections": db_connections,
+        "last_brain_store_timestamp": get_last_brain_store_timestamp(),
+    }
+
+
 # Health check endpoints
 @app.get("/health")
 async def health_check():
@@ -626,6 +760,7 @@ async def health_check():
             "database": "skipped",
             "offline_mode": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            **_runtime_health_metadata(),
         }
 
     if OFFLINE_MODE:
@@ -635,6 +770,7 @@ async def health_check():
             "database": "offline",
             "offline_mode": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            **_runtime_health_metadata(),
         }
 
     probe = await _probe_database(timeout=1.0)
@@ -645,6 +781,7 @@ async def health_check():
         "database_latency_ms": probe["latency_ms"],
         "offline_mode": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        **_runtime_health_metadata(),
     }
 
 
@@ -671,6 +808,7 @@ async def api_health_check():
             "cns_info": {},
             "pool_active": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            **_runtime_health_metadata(),
         }
 
     offline = OFFLINE_MODE
@@ -766,6 +904,7 @@ async def api_health_check():
         "cns_info": cns_info,
         "pool_active": pool_exists,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        **_runtime_health_metadata(),
     }
 
     # Return appropriate HTTP status based on health

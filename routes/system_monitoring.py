@@ -10,7 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
-from core.brain_store import build_brain_key, dispatch_brain_store
+from core.brain_store import build_brain_key, dispatch_brain_store, recall_context
 from core.supabase_auth import get_current_user
 
 router = APIRouter()
@@ -250,6 +250,13 @@ async def get_system_monitoring_stats(
 
     result = await conn.fetchrow(query, tenant_id)
     summary = dict(result)
+    monitoring_context = await recall_context(
+        query=(
+            f"system monitoring events tenant {tenant_id}; "
+            f"active={summary.get('active', 0)}; recent={summary.get('recent', 0)}"
+        ),
+        limit=5,
+    )
 
     dispatch_brain_store(
         key=build_brain_key(
@@ -262,4 +269,10 @@ async def get_system_monitoring_stats(
         priority="low",
     )
 
-    return summary
+    return {
+        **summary,
+        "metadata": {
+            "brain_context": monitoring_context,
+            "brain_context_count": len(monitoring_context),
+        },
+    }

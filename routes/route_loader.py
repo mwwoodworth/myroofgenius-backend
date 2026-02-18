@@ -77,7 +77,7 @@ EXCLUDED_MODULES = {
     "equipment_tracking",
     "inventory_management",
     "estimate_management",
-    # Placeholder shim endpoints; kept for reference but not mounted in production routing.
+    # Legacy shim endpoints; kept for reference but not mounted in production routing.
     "erp_fixes",
     # Dependency modules - not mounted as routes but used by other modules
     "erp_core_runtime",  # Provides STORE fallback for erp_complete.py

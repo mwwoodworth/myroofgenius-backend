@@ -10,7 +10,7 @@ import logging
 import asyncio
 import json
 
-from core.brain_store import build_brain_key, dispatch_brain_store
+from core.brain_store import build_brain_key, dispatch_brain_store, recall_context
 
 # Import the AI Brain Core
 try:
@@ -42,6 +42,10 @@ async def get_brain_status():
     """Get current AI Brain status and statistics"""
     try:
         brain = await get_ai_brain()
+        recalled_context = await recall_context(
+            query="ai brain status operational context and recent memory health",
+            limit=5,
+        )
 
         short_term = getattr(brain, "short_term_memory", None)
         if short_term is None:
@@ -82,7 +86,11 @@ async def get_brain_status():
                 "uptime_hours": (datetime.now() - brain.start_time).total_seconds() / 3600 if hasattr(brain, 'start_time') else 0,
                 "api_calls": getattr(brain, "api_calls", getattr(brain, "tasks_executed", 0)),
                 "success_rate": brain.success_rate if hasattr(brain, 'success_rate') else 100.0
-            }
+            },
+            "metadata": {
+                "brain_context": recalled_context,
+                "brain_context_count": len(recalled_context),
+            },
         }
     except Exception as e:
         logger.error(f"Error getting brain status: {str(e)}")
