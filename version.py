@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.8.0"
-__build__ = "2026-02-13T21:30:00Z"
+__version__ = "163.9.0"
+__build__ = "2026-02-18T16:30:00Z"
 __status__ = "production"
+# v163.9.0: Brain integration + dead route cleanup
+#   - core/brain_store.py: non-blocking brain store helper (fire-and-forget)
+#   - Brain integration added to 5 key routes (ai_brain, alert_automation,
+#     brainops_ai_os, dashboard_stats, system_monitoring)
+#   - 8 dead routes moved to routes/_dead/ (-5,180 lines)
 # v163.8.0: V9 security - exclude 6 unverified webhook endpoints from route loader,
 #   delete dead webhook_processor.py. Only stripe_webhooks.py is canonical.
 # v163.7.0: V7 security hardening - DDL kill-switch, memory convergence,
