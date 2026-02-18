@@ -34,7 +34,7 @@ from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.security import APIKeyMiddleware
-from core.brain_store import get_last_brain_store_timestamp, store_api_insight, store_event
+from core.brain_store import get_effective_brain_timestamp, store_api_insight, store_event
 from database import get_db  # Legacy import path used by many route modules
 
 # Configure logging
@@ -733,19 +733,20 @@ def _database_connection_snapshot() -> Dict[str, int]:
         return {"size": 0, "idle": 0, "active": 0}
 
 
-def _runtime_health_metadata() -> Dict[str, Any]:
+async def _runtime_health_metadata() -> Dict[str, Any]:
     started_at = getattr(app.state, "started_at", None)
     uptime_seconds = 0
     if isinstance(started_at, datetime):
         uptime_seconds = max(int((datetime.now(timezone.utc) - started_at).total_seconds()), 0)
 
     db_connections = _database_connection_snapshot()
+    effective_brain_timestamp = await get_effective_brain_timestamp()
     return {
         "uptime_seconds": uptime_seconds,
         "total_requests_served": int(getattr(app.state, "total_requests_served", 0)),
         "active_database_connections": db_connections["active"],
         "database_connections": db_connections,
-        "last_brain_store_timestamp": get_last_brain_store_timestamp(),
+        "last_brain_store_timestamp": effective_brain_timestamp,
     }
 
 
@@ -760,7 +761,7 @@ async def health_check():
             "database": "skipped",
             "offline_mode": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **_runtime_health_metadata(),
+            **(await _runtime_health_metadata()),
         }
 
     if OFFLINE_MODE:
@@ -770,7 +771,7 @@ async def health_check():
             "database": "offline",
             "offline_mode": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **_runtime_health_metadata(),
+            **(await _runtime_health_metadata()),
         }
 
     probe = await _probe_database(timeout=1.0)
@@ -781,7 +782,7 @@ async def health_check():
         "database_latency_ms": probe["latency_ms"],
         "offline_mode": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        **_runtime_health_metadata(),
+        **(await _runtime_health_metadata()),
     }
 
 
@@ -808,7 +809,7 @@ async def api_health_check():
             "cns_info": {},
             "pool_active": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **_runtime_health_metadata(),
+            **(await _runtime_health_metadata()),
         }
 
     offline = OFFLINE_MODE
@@ -904,7 +905,7 @@ async def api_health_check():
         "cns_info": cns_info,
         "pool_active": pool_exists,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        **_runtime_health_metadata(),
+        **(await _runtime_health_metadata()),
     }
 
     # Return appropriate HTTP status based on health
