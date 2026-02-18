@@ -100,9 +100,9 @@ class RLSMiddleware(BaseHTTPMiddleware):
         if user_id and hasattr(request.app.state, "db"):
             try:
                 db = request.app.state.db
-                db.execute(text("SELECT set_config('app.current_user_id', '', false)"))
-                db.execute(text("SELECT set_config('app.current_user_role', '', false)"))
-                db.execute(text("SELECT set_config('app.current_tenant_id', '', false)"))
+                db.execute(text("RESET app.current_user_id"))
+                db.execute(text("RESET app.current_user_role"))
+                db.execute(text("RESET app.current_tenant_id"))
             except:
                 pass
 
@@ -135,8 +135,8 @@ class RLSContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Clear RLS context on exit"""
         try:
-            self.db.execute(text("SELECT set_config('app.current_user_id', '', false)"))
-            self.db.execute(text("SELECT set_config('app.current_user_role', '', false)"))
+            self.db.execute(text("RESET app.current_user_id"))
+            self.db.execute(text("RESET app.current_user_role"))
         except:
             pass
 
@@ -161,8 +161,8 @@ def set_rls_context(db_session, user_id: str, user_role: str = "user"):
 def clear_rls_context(db_session):
     """Helper function to clear RLS context"""
     try:
-        db_session.execute(text("SELECT set_config('app.current_user_id', '', false)"))
-        db_session.execute(text("SELECT set_config('app.current_user_role', '', false)"))
+        db_session.execute(text("RESET app.current_user_id"))
+        db_session.execute(text("RESET app.current_user_role"))
         return True
     except Exception as e:
         logger.error(f"Failed to clear RLS context: {e}")

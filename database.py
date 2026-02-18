@@ -115,8 +115,8 @@ async def get_tenant_connection(pool: asyncpg.Pool, tenant_id: Optional[str] = N
             yield conn
         finally:
             # Clear context after use
-            await conn.execute("SELECT set_config('app.current_tenant_id', '', false)")
-            await conn.execute("SELECT set_config('app.current_user_id', '', false)")
+            await conn.execute("RESET app.current_tenant_id")
+            await conn.execute("RESET app.current_user_id")
 
 
 # Simple database wrapper for compatibility
@@ -207,8 +207,8 @@ def get_db(request=None):
         yield db
     finally:
         try:
-            db.execute(text("SELECT set_config('app.current_tenant_id', '', false)"))
-            db.execute(text("SELECT set_config('app.current_user_id', '', false)"))
+            db.execute(text("RESET app.current_tenant_id"))
+            db.execute(text("RESET app.current_user_id"))
         except Exception:
             pass
         db.close()
