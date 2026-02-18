@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=100, alias="RATE_LIMIT_PER_MINUTE")
     rate_limit_per_hour: int = Field(default=1000, alias="RATE_LIMIT_PER_HOUR")
     rate_limit_per_day: int = Field(default=1000000, alias="RATE_LIMIT_PER_DAY")  # 1M requests/day for production
+    public_rate_limit_per_minute: int = Field(default=60, alias="PUBLIC_RATE_LIMIT_PER_MINUTE")
+    public_rate_limit_per_hour: int = Field(default=600, alias="PUBLIC_RATE_LIMIT_PER_HOUR")
+    webhook_rate_limit_per_minute: int = Field(default=300, alias="WEBHOOK_RATE_LIMIT_PER_MINUTE")
+    webhook_rate_limit_per_hour: int = Field(default=4000, alias="WEBHOOK_RATE_LIMIT_PER_HOUR")
 
     # ============================================================================
     # API PAGINATION

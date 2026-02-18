@@ -487,6 +487,10 @@ app.add_middleware(
     requests_per_minute=settings.rate_limit_per_minute,
     requests_per_hour=settings.rate_limit_per_hour,
     requests_per_day=settings.rate_limit_per_day,
+    public_requests_per_minute=settings.public_rate_limit_per_minute,
+    public_requests_per_hour=settings.public_rate_limit_per_hour,
+    webhook_requests_per_minute=settings.webhook_rate_limit_per_minute,
+    webhook_requests_per_hour=settings.webhook_rate_limit_per_hour,
     use_redis=bool(settings.redis_url),
     redis_url=settings.redis_url,
 )

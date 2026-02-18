@@ -181,7 +181,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, **kwargs):
         super().__init__(app)
-        self.limiter = RateLimiter(**kwargs)
+        limiter_kwargs = {
+            "requests_per_minute": kwargs.get("requests_per_minute", 1000),
+            "requests_per_hour": kwargs.get("requests_per_hour", 60000),
+            "requests_per_day": kwargs.get("requests_per_day", 1000000),
+            "use_redis": kwargs.get("use_redis", False),
+            "redis_url": kwargs.get("redis_url"),
+        }
+        self.limiter = RateLimiter(**limiter_kwargs)
         self.public_requests_per_minute = int(kwargs.get("public_requests_per_minute", 60))
         self.public_requests_per_hour = int(kwargs.get("public_requests_per_hour", 600))
         self.webhook_requests_per_minute = int(kwargs.get("webhook_requests_per_minute", 300))

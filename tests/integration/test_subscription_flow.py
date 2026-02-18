@@ -1,34 +1,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
+class _Result:
+    def __init__(self, *, first=None, scalar=None, mappings_first=None):
+        self._first = first
+        self._scalar = scalar
+        self._mappings_first = mappings_first
 
-def _mk_result(
-    *,
-    first: Any = None,
-    scalar: Any = None,
-    mappings_first: Any = None,
-):
-    class _Result:
-        def first(self):
-            return first
+    def first(self):
+        return self._first
 
-        def scalar(self):
-            return scalar
+    def scalar(self):
+        return self._scalar
 
-        def mappings(self):
-            class _Map:
-                def first(self_inner):
-                    return mappings_first
+    def mappings(self):
+        class _Mappings:
+            def __init__(self, row):
+                self._row = row
 
-            return _Map()
+            def first(self):
+                return self._row
 
-    return _Result()
+        return _Mappings(self._mappings_first)
 
 
 @dataclass
@@ -46,21 +42,20 @@ class _FakeDB:
         if "SELECT *" in sql and "FROM subscriptions" in sql:
             sub = self.subscriptions.get(params.get("subscription_id"))
             if sub and sub.get("tenant_id") == params.get("tenant_id"):
-                return _mk_result(mappings_first=sub)
-            return _mk_result(mappings_first=None)
+                return _Result(mappings_first=sub)
+            return _Result(mappings_first=None)
 
         if "SELECT status" in sql and "FROM subscriptions" in sql:
             sub = self.subscriptions.get(params.get("subscription_id"))
             if sub and sub.get("tenant_id") == params.get("tenant_id"):
-                return _mk_result(scalar=sub.get("status"))
-            return _mk_result(scalar=None)
+                return _Result(scalar=sub.get("status"))
+            return _Result(scalar=None)
 
         if "INSERT INTO subscription_usage_events" in sql:
             self.usage_events.append(dict(params))
-            return _mk_result()
+            return _Result()
 
-        # DDL and all other statements are no-ops in this fake.
-        return _mk_result()
+        return _Result()
 
     def commit(self):
         return None
@@ -71,7 +66,6 @@ class _FakeDB:
 
 def test_signup_subscribe_use_flow(monkeypatch):
     from routes import subscriptions as mod
-    from core.supabase_auth import get_authenticated_user
 
     fake_db = _FakeDB()
 
@@ -98,9 +92,6 @@ def test_signup_subscribe_use_flow(monkeypatch):
         }
         return {"change_type": "upgrade" if previous else None, "grace_until": None}
 
-    def _mark_trial_started(*_args, **_kwargs):
-        return None
-
     monkeypatch.setattr(
         mod.subscription_lifecycle_service,
         "upsert_subscription_state",
@@ -109,56 +100,43 @@ def test_signup_subscribe_use_flow(monkeypatch):
     monkeypatch.setattr(
         mod.subscription_lifecycle_service,
         "mark_trial_started",
-        _mark_trial_started,
+        lambda *_args, **_kwargs: None,
     )
 
-    app = FastAPI()
-    app.include_router(mod.router)
+    user = {"id": "user-1", "tenant_id": "tenant-1", "role": "admin"}
 
-    def _override_db():
-        yield fake_db
-
-    app.dependency_overrides[mod.get_db] = _override_db
-    app.dependency_overrides[get_authenticated_user] = lambda: {
-        "id": "user-1",
-        "tenant_id": "tenant-1",
-        "role": "admin",
-    }
-
-    client = TestClient(app)
-
-    signup = client.post(
-        "/api/v1/subscriptions/signup-trial",
-        json={
-            "tier": "professional",
-            "stripe_subscription_id": "sub_123",
-            "customer_id": "cus_123",
-            "trial_days": 14,
-        },
+    signup = mod.signup_trial(
+        mod.TrialSignupRequest(
+            tier=mod.SubscriptionTier.PROFESSIONAL,
+            stripe_subscription_id="sub_123",
+            customer_id="cus_123",
+            trial_days=14,
+        ),
+        db=fake_db,
+        current_user=user,
     )
-    assert signup.status_code == 200
-    assert signup.json()["status"] == "trialing"
+    assert signup["status"] == "trialing"
 
-    subscribe = client.post(
-        "/api/v1/subscriptions/change-plan",
-        json={
-            "stripe_subscription_id": "sub_123",
-            "target_tier": "business",
-            "effective_immediately": True,
-        },
+    subscribe = mod.change_plan(
+        mod.PlanChangeRequest(
+            stripe_subscription_id="sub_123",
+            target_tier=mod.SubscriptionTier.BUSINESS,
+            effective_immediately=True,
+        ),
+        db=fake_db,
+        current_user=user,
     )
-    assert subscribe.status_code == 200
-    assert subscribe.json()["status"] == "active"
+    assert subscribe["status"] == "active"
 
-    usage = client.post(
-        "/api/v1/subscriptions/usage",
-        json={
-            "stripe_subscription_id": "sub_123",
-            "feature_key": "ai_analysis",
-            "units": 3,
-            "metadata": {"source": "test"},
-        },
+    usage = mod.record_usage(
+        mod.UsageEventRequest(
+            stripe_subscription_id="sub_123",
+            feature_key="ai_analysis",
+            units=3,
+            metadata={"source": "test"},
+        ),
+        db=fake_db,
+        current_user=user,
     )
-    assert usage.status_code == 200
-    assert usage.json()["status"] == "recorded"
+    assert usage["status"] == "recorded"
     assert len(fake_db.usage_events) == 1
