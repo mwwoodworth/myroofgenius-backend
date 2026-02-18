@@ -204,8 +204,8 @@ async def stripe_webhook(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Webhook error", exc_info=e)
+        raise HTTPException(status_code=400, detail="Webhook processing failed")
 
 # Customer endpoints
 @router.post("/customers/create")
@@ -218,7 +218,8 @@ async def create_customer(email: str, name: Optional[str] = None):
         )
         return {"customer_id": customer.id, "email": email}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Stripe customer creation failed", exc_info=e)
+        raise HTTPException(status_code=400, detail="Customer creation failed")
 
 # Additional endpoints for completeness
 @router.post("/checkout/create")
@@ -241,4 +242,5 @@ async def create_checkout_session(price: int, success_url: str, cancel_url: str)
         )
         return {"checkout_url": session.url, "session_id": session.id}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("Checkout session creation failed", exc_info=e)
+        raise HTTPException(status_code=400, detail="Checkout session creation failed")

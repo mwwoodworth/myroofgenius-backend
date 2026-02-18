@@ -245,8 +245,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return None
 
         now = time.time()
-        internal_key = os.getenv("BACKEND_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
-        if internal_key and hmac.compare_digest(api_key, internal_key):
+        internal_keys = self._get_internal_keys()
+        if any(hmac.compare_digest(api_key, candidate) for candidate in internal_keys):
             internal_tenant = os.getenv("BACKEND_INTERNAL_TENANT_ID") or os.getenv("OFFLINE_TENANT_ID")
             return _CachedAPIKey(
                 key_id="internal",
@@ -294,6 +294,31 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return refreshed_entry
 
         return None
+
+    def _get_internal_keys(self) -> Sequence[str]:
+        """Support key rotation by accepting active + previous internal keys."""
+        candidates = [
+            os.getenv("BACKEND_INTERNAL_API_KEY"),
+            os.getenv("BACKEND_INTERNAL_API_KEY_PREVIOUS"),
+            os.getenv("INTERNAL_API_KEY"),
+            os.getenv("INTERNAL_API_KEY_PREVIOUS"),
+        ]
+        csv_keys = os.getenv("BACKEND_INTERNAL_API_KEYS")
+        if csv_keys:
+            candidates.extend(part.strip() for part in csv_keys.split(","))
+
+        # Keep non-empty values in order, removing duplicates.
+        seen = set()
+        normalized: list[str] = []
+        for candidate in candidates:
+            if not candidate:
+                continue
+            key = candidate.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            normalized.append(key)
+        return normalized
 
     async def _touch_cached_entry(
         self,

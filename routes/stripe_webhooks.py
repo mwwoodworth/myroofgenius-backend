@@ -1,6 +1,6 @@
-"""Stripe Webhook Handler for MyRoofGenius"""
+"""Stripe Webhook Handler for MyRoofGenius."""
 from fastapi import APIRouter, Request, HTTPException, Header
-from typing import Optional
+from typing import Optional, Dict, Any
 import stripe
 import os
 import json
@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import SessionLocal as _SessionLocal
+from services.subscription_lifecycle import subscription_lifecycle_service
 
 if _SessionLocal is None:  # pragma: no cover
 
@@ -22,6 +23,27 @@ else:
     SessionLocal = _SessionLocal
 
 logger = logging.getLogger(__name__)
+
+
+def _timestamp_to_datetime(value: Optional[Any]) -> Optional[datetime]:
+    if value in (None, 0, "0", ""):
+        return None
+    try:
+        return datetime.fromtimestamp(float(value))
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _extract_subscription_plan_and_amount(payload: Dict[str, Any]) -> tuple[Optional[str], Optional[float]]:
+    price = (
+        payload.get("items", {})
+        .get("data", [{}])[0]
+        .get("price", {})
+    )
+    plan_id = price.get("id")
+    unit_amount = price.get("unit_amount")
+    amount = (float(unit_amount) / 100.0) if unit_amount is not None else None
+    return plan_id, amount
 
 
 def _resolve_tenant_id(
@@ -112,6 +134,89 @@ def _quarantine_webhook_event(
     db.commit()
 
 
+_webhook_attempt_tables_ready = False
+
+
+def _ensure_webhook_attempts_table(db: "Session") -> None:
+    """Create retry/audit table for webhook attempts if needed."""
+    global _webhook_attempt_tables_ready
+    if _webhook_attempt_tables_ready:
+        return
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS webhook_event_attempts (
+                id UUID PRIMARY KEY,
+                stripe_event_id VARCHAR(255) NOT NULL,
+                event_type VARCHAR(255) NOT NULL,
+                attempt_no INTEGER NOT NULL,
+                status VARCHAR(50) NOT NULL,
+                error_message TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_webhook_event_attempts_lookup
+            ON webhook_event_attempts (stripe_event_id, created_at DESC)
+            """
+        )
+    )
+    db.commit()
+    _webhook_attempt_tables_ready = True
+
+
+def _next_attempt_number(db: "Session", stripe_event_id: str) -> int:
+    row = db.execute(
+        text(
+            """
+            SELECT COALESCE(MAX(attempt_no), 0) AS last_attempt
+            FROM webhook_event_attempts
+            WHERE stripe_event_id = :stripe_event_id
+            """
+        ),
+        {"stripe_event_id": stripe_event_id},
+    ).first()
+    return int((row.last_attempt if row and row.last_attempt is not None else 0) + 1)
+
+
+def _record_webhook_attempt(
+    db: "Session",
+    *,
+    stripe_event_id: str,
+    event_type: str,
+    status: str,
+    error_message: Optional[str] = None,
+) -> int:
+    _ensure_webhook_attempts_table(db)
+    attempt_no = _next_attempt_number(db, stripe_event_id)
+    db.execute(
+        text(
+            """
+            INSERT INTO webhook_event_attempts (
+                id, stripe_event_id, event_type, attempt_no, status, error_message, created_at
+            ) VALUES (
+                :id, :stripe_event_id, :event_type, :attempt_no, :status, :error_message, NOW()
+            )
+            """
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "stripe_event_id": stripe_event_id,
+            "event_type": event_type,
+            "attempt_no": attempt_no,
+            "status": status,
+            "error_message": error_message,
+        },
+    )
+    db.commit()
+    return attempt_no
+
+
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 if not stripe.api_key:
@@ -156,69 +261,136 @@ async def handle_stripe_webhook(
         # Handle the event
         event_type = event.get("type", "")
         data = event.get("data", {}).get("object", {})
+        stripe_event_id = event.get("id", "")
+        if not stripe_event_id:
+            raise HTTPException(status_code=400, detail="Invalid event ID")
 
-        logger.info(f"Processing webhook event: {event_type}")
+        logger.info("Processing webhook event: %s (%s)", event_type, stripe_event_id)
 
         with SessionLocal() as db:
-            # Log the webhook event
-            db.execute(
+            # Insert canonical webhook event row. We intentionally keep a single row
+            # per Stripe event ID and track retries in webhook_event_attempts.
+            inserted = db.execute(
                 text(
                     """
                 INSERT INTO webhook_events (id, event_type, stripe_event_id, data, created_at)
                 VALUES (:id, :event_type, :stripe_event_id, :data, NOW())
                 ON CONFLICT (stripe_event_id) DO NOTHING
+                RETURNING stripe_event_id
             """
                 ),
                 {
                     "id": str(uuid.uuid4()),
                     "event_type": event_type,
-                    "stripe_event_id": event.get("id", ""),
+                    "stripe_event_id": stripe_event_id,
                     "data": json.dumps(event),
                 },
-            )
+            ).first()
             db.commit()
 
-            stripe_event_id = event.get("id", "")
+            is_retry = False
+            if not inserted:
+                _ensure_webhook_attempts_table(db)
+                # Event already seen. Only short-circuit when last attempt succeeded.
+                last_attempt = db.execute(
+                    text(
+                        """
+                        SELECT status
+                        FROM webhook_event_attempts
+                        WHERE stripe_event_id = :stripe_event_id
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"stripe_event_id": stripe_event_id},
+                ).first()
+                if last_attempt and last_attempt.status == "processed":
+                    _record_webhook_attempt(
+                        db,
+                        stripe_event_id=stripe_event_id,
+                        event_type=event_type,
+                        status="duplicate",
+                    )
+                    return {
+                        "received": True,
+                        "type": event_type,
+                        "duplicate": True,
+                    }
+                is_retry = True
 
-            # Process specific events
-            if event_type == "checkout.session.completed":
-                await handle_checkout_completed(db, data, stripe_event_id)
+            attempt_no = _record_webhook_attempt(
+                db,
+                stripe_event_id=stripe_event_id,
+                event_type=event_type,
+                status="processing",
+            )
 
-            elif event_type == "customer.subscription.created":
-                await handle_subscription_created(db, data, stripe_event_id)
+            try:
+                # Process specific events
+                if event_type == "checkout.session.completed":
+                    await handle_checkout_completed(db, data, stripe_event_id)
 
-            elif event_type == "customer.subscription.updated":
-                await handle_subscription_updated(db, data, stripe_event_id)
+                elif event_type == "customer.subscription.created":
+                    await handle_subscription_created(db, data, stripe_event_id)
 
-            elif event_type == "customer.subscription.deleted":
-                await handle_subscription_deleted(db, data, stripe_event_id)
+                elif event_type == "customer.subscription.updated":
+                    await handle_subscription_updated(db, data, stripe_event_id)
 
-            elif event_type == "invoice.payment_succeeded":
-                await handle_payment_succeeded(db, data, stripe_event_id)
+                elif event_type == "customer.subscription.deleted":
+                    await handle_subscription_deleted(db, data, stripe_event_id)
 
-            elif event_type == "invoice.payment_failed":
-                await handle_payment_failed(db, data, stripe_event_id)
+                elif event_type == "invoice.payment_succeeded":
+                    await handle_payment_succeeded(db, data, stripe_event_id)
 
-            elif event_type == "customer.created":
-                await handle_customer_created(db, data, stripe_event_id)
+                elif event_type == "invoice.payment_failed":
+                    await handle_payment_failed(db, data, stripe_event_id)
 
-            elif event_type == "payment_intent.succeeded":
-                await handle_payment_intent_succeeded(db, data, stripe_event_id)
+                elif event_type == "customer.created":
+                    await handle_customer_created(db, data, stripe_event_id)
 
-            elif event_type == "payment_method.attached":
-                await handle_payment_method_attached(db, data, stripe_event_id)
+                elif event_type == "payment_intent.succeeded":
+                    await handle_payment_intent_succeeded(db, data, stripe_event_id)
 
-            else:
-                logger.info(f"Unhandled event type: {event_type}")
+                elif event_type == "payment_method.attached":
+                    await handle_payment_method_attached(db, data, stripe_event_id)
 
-        return {"received": True, "type": event_type}
+                else:
+                    logger.info("Unhandled event type: %s", event_type)
+
+                _record_webhook_attempt(
+                    db,
+                    stripe_event_id=stripe_event_id,
+                    event_type=event_type,
+                    status="processed",
+                )
+            except Exception as event_exc:
+                _record_webhook_attempt(
+                    db,
+                    stripe_event_id=stripe_event_id,
+                    event_type=event_type,
+                    status="failed",
+                    error_message=str(event_exc),
+                )
+                logger.exception(
+                    "Webhook processing failed for event %s (attempt %s)",
+                    stripe_event_id,
+                    attempt_no,
+                    exc_info=event_exc,
+                )
+                # Return non-2xx to let Stripe retry this event.
+                raise HTTPException(status_code=500, detail="Webhook processing failed")
+
+        return {
+            "received": True,
+            "type": event_type,
+            "retry": is_retry,
+        }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Webhook processing error: {str(e)}")
-        # Return success to prevent Stripe retries on non-critical errors
-        return {"received": True, "error": str(e)}
+        logger.exception("Webhook processing error", exc_info=e)
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 
 async def handle_checkout_completed(db: Session, data: dict, stripe_event_id: str = ""):
@@ -233,7 +405,6 @@ async def handle_checkout_completed(db: Session, data: dict, stripe_event_id: st
         metadata = data.get("metadata", {})
         product_key = metadata.get("product_key")
         plan = metadata.get("plan")
-        user_id = metadata.get("user_id")
 
         # SECURITY: Strict tenant resolution — no default fallback (removed MRG_DEFAULT_TENANT_ID)
         tenant_id = _resolve_tenant_id(
@@ -273,22 +444,15 @@ async def handle_checkout_completed(db: Session, data: dict, stripe_event_id: st
 
             # Create subscription record with tenant_id
             if subscription_id:
-                db.execute(
-                    text(
-                        """
-                    INSERT INTO subscriptions (id, customer_id, stripe_subscription_id, status, amount, tenant_id, created_at)
-                    VALUES (:id, :customer_id, :subscription_id, 'active', :amount, :tenant_id, NOW())
-                    ON CONFLICT (stripe_subscription_id) DO UPDATE
-                    SET status = 'active', amount = :amount, tenant_id = COALESCE(subscriptions.tenant_id, :tenant_id)
-                """
-                    ),
-                    {
-                        "id": str(uuid.uuid4()),
-                        "customer_id": customer_id,
-                        "subscription_id": subscription_id,
-                        "amount": amount_total,
-                        "tenant_id": tenant_id,
-                    },
+                subscription_lifecycle_service.upsert_subscription_state(
+                    db,
+                    tenant_id=tenant_id,
+                    subscription_id=subscription_id,
+                    customer_id=customer_id,
+                    plan_id=plan,
+                    status="active",
+                    amount=amount_total,
+                    trial_end=None,
                 )
 
             # CRITICAL: Track revenue in mrg_revenue table for MRR/ARR calculations
@@ -338,15 +502,9 @@ async def handle_subscription_created(
     try:
         subscription_id = data.get("id")
         customer_id = data.get("customer")
-        status = data.get("status")
-        plan_id = data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
-        amount = (
-            data.get("items", {})
-            .get("data", [{}])[0]
-            .get("price", {})
-            .get("unit_amount", 0)
-            / 100
-        )
+        status = data.get("status") or "active"
+        plan_id, amount = _extract_subscription_plan_and_amount(data)
+        trial_end = _timestamp_to_datetime(data.get("trial_end"))
 
         metadata = data.get("metadata", {})
 
@@ -366,30 +524,33 @@ async def handle_subscription_created(
             )
             return
 
-        db.execute(
-            text(
-                """
-            INSERT INTO subscriptions (id, stripe_subscription_id, customer_id, plan_id, status, amount, tenant_id, created_at)
-            VALUES (:id, :subscription_id, :customer_id, :plan_id, :status, :amount, :tenant_id, NOW())
-            ON CONFLICT (stripe_subscription_id) DO UPDATE
-            SET status = :status, amount = :amount, tenant_id = COALESCE(subscriptions.tenant_id, :tenant_id)
-        """
-            ),
-            {
-                "id": str(uuid.uuid4()),
-                "subscription_id": subscription_id,
-                "customer_id": customer_id,
-                "plan_id": plan_id,
-                "status": status,
-                "amount": amount,
-                "tenant_id": tenant_id,
-            },
+        lifecycle = subscription_lifecycle_service.upsert_subscription_state(
+            db,
+            tenant_id=tenant_id,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+            plan_id=plan_id,
+            status=status,
+            amount=amount,
+            trial_end=trial_end,
         )
+        if status == "trialing":
+            subscription_lifecycle_service.mark_trial_started(
+                db,
+                tenant_id=tenant_id,
+                subscription_id=subscription_id,
+                trial_end=trial_end,
+            )
         db.commit()
-        logger.info(f"Subscription created: {subscription_id} (tenant: {tenant_id})")
+        logger.info(
+            "Subscription created: %s (tenant: %s, lifecycle=%s)",
+            subscription_id,
+            tenant_id,
+            lifecycle.get("change_type"),
+        )
 
     except Exception as e:
-        logger.error(f"Error handling subscription creation: {str(e)}")
+        logger.error("Error handling subscription creation: %s", str(e))
         db.rollback()
 
 
@@ -404,7 +565,9 @@ async def handle_subscription_updated(db: Session, data: dict, stripe_event_id: 
     try:
         subscription_id = data.get("id")
         customer_id = data.get("customer")
-        status = data.get("status")
+        status = data.get("status") or "active"
+        plan_id, amount = _extract_subscription_plan_and_amount(data)
+        trial_end = _timestamp_to_datetime(data.get("trial_end"))
         metadata = data.get("metadata", {})
 
         # SECURITY (F-009): Resolve tenant to scope the UPDATE
@@ -423,33 +586,27 @@ async def handle_subscription_updated(db: Session, data: dict, stripe_event_id: 
             )
             return
 
-        result = db.execute(
-            text(
-                """
-            UPDATE subscriptions
-            SET status = :status, updated_at = NOW()
-            WHERE stripe_subscription_id = :subscription_id
-              AND tenant_id = :tenant_id
-        """
-            ),
-            {
-                "subscription_id": subscription_id,
-                "status": status,
-                "tenant_id": tenant_id,
-            },
+        lifecycle = subscription_lifecycle_service.upsert_subscription_state(
+            db,
+            tenant_id=tenant_id,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+            plan_id=plan_id,
+            status=status,
+            amount=amount,
+            trial_end=trial_end,
         )
-        if result.rowcount == 0:
-            logger.warning(
-                "subscription.updated: no rows matched for subscription_id=%s tenant_id=%s "
-                "— possible tenant mismatch or missing row",
-                subscription_id,
-                tenant_id,
-            )
         db.commit()
-        logger.info(f"Subscription updated: {subscription_id} to {status} (tenant: {tenant_id})")
+        logger.info(
+            "Subscription updated: %s to %s (tenant: %s, change=%s)",
+            subscription_id,
+            status,
+            tenant_id,
+            lifecycle.get("change_type"),
+        )
 
     except Exception as e:
-        logger.error(f"Error updating subscription: {str(e)}")
+        logger.error("Error updating subscription: %s", str(e))
         db.rollback()
 
 
@@ -463,6 +620,7 @@ async def handle_subscription_deleted(db: Session, data: dict, stripe_event_id: 
     try:
         subscription_id = data.get("id")
         customer_id = data.get("customer")
+        plan_id, amount = _extract_subscription_plan_and_amount(data)
         metadata = data.get("metadata", {})
 
         # SECURITY (F-009): Resolve tenant to scope the UPDATE
@@ -481,32 +639,26 @@ async def handle_subscription_deleted(db: Session, data: dict, stripe_event_id: 
             )
             return
 
-        result = db.execute(
-            text(
-                """
-            UPDATE subscriptions
-            SET status = 'canceled', canceled_at = NOW()
-            WHERE stripe_subscription_id = :subscription_id
-              AND tenant_id = :tenant_id
-        """
-            ),
-            {
-                "subscription_id": subscription_id,
-                "tenant_id": tenant_id,
-            },
+        lifecycle = subscription_lifecycle_service.upsert_subscription_state(
+            db,
+            tenant_id=tenant_id,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+            plan_id=plan_id,
+            status="canceled",
+            amount=amount,
+            trial_end=None,
         )
-        if result.rowcount == 0:
-            logger.warning(
-                "subscription.deleted: no rows matched for subscription_id=%s tenant_id=%s "
-                "— possible tenant mismatch or missing row",
-                subscription_id,
-                tenant_id,
-            )
         db.commit()
-        logger.info(f"Subscription canceled: {subscription_id} (tenant: {tenant_id})")
+        logger.info(
+            "Subscription canceled: %s (tenant: %s, change=%s)",
+            subscription_id,
+            tenant_id,
+            lifecycle.get("change_type"),
+        )
 
     except Exception as e:
-        logger.error(f"Error canceling subscription: {str(e)}")
+        logger.error("Error canceling subscription: %s", str(e))
         db.rollback()
 
 
@@ -562,13 +714,25 @@ async def handle_payment_succeeded(db: Session, data: dict, stripe_event_id: str
             db.execute(
                 text(
                     """
-                UPDATE subscriptions
-                SET last_payment_at = NOW()
-                WHERE stripe_subscription_id = :subscription_id
-                  AND tenant_id = :tenant_id
-            """
+                    UPDATE subscriptions
+                    SET last_payment_at = NOW()
+                    WHERE stripe_subscription_id = :subscription_id
+                      AND tenant_id = :tenant_id
+                    """
                 ),
                 {"subscription_id": subscription_id, "tenant_id": tenant_id},
+            )
+
+            # Recover accounts from grace period after successful payment.
+            subscription_lifecycle_service.upsert_subscription_state(
+                db,
+                tenant_id=tenant_id,
+                subscription_id=subscription_id,
+                customer_id=customer_id,
+                plan_id=None,
+                status="active",
+                amount=amount_paid,
+                trial_end=None,
             )
 
         # Track revenue for recurring subscription payments in mrg_revenue
@@ -603,7 +767,7 @@ async def handle_payment_succeeded(db: Session, data: dict, stripe_event_id: str
         )
 
     except Exception as e:
-        logger.error(f"Error handling payment success: {str(e)}")
+        logger.error("Error handling payment success: %s", str(e))
         db.rollback()
 
 
@@ -658,20 +822,31 @@ async def handle_payment_failed(db: Session, data: dict, stripe_event_id: str = 
             db.execute(
                 text(
                     """
-                UPDATE subscriptions
-                SET status = 'past_due'
-                WHERE stripe_subscription_id = :subscription_id
-                  AND tenant_id = :tenant_id
-            """
+                    UPDATE subscriptions
+                    SET status = 'past_due'
+                    WHERE stripe_subscription_id = :subscription_id
+                      AND tenant_id = :tenant_id
+                    """
                 ),
                 {"subscription_id": subscription_id, "tenant_id": tenant_id},
+            )
+
+            subscription_lifecycle_service.upsert_subscription_state(
+                db,
+                tenant_id=tenant_id,
+                subscription_id=subscription_id,
+                customer_id=customer_id,
+                plan_id=None,
+                status="past_due",
+                amount=None,
+                trial_end=None,
             )
 
         db.commit()
         logger.warning(f"Payment failed: {invoice_id}")
 
     except Exception as e:
-        logger.error(f"Error handling payment failure: {str(e)}")
+        logger.error("Error handling payment failure: %s", str(e))
         db.rollback()
 
 

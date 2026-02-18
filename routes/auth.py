@@ -1,9 +1,9 @@
-"""
-Auth compatibility endpoints backed by Supabase Auth.
-"""
+"""Auth compatibility endpoints backed by Supabase Auth."""
+
+import logging
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from core.supabase_auth import (
     SUPABASE_URL,
@@ -12,14 +12,16 @@ from core.supabase_auth import (
     SUPABASE_SERVICE_AVAILABLE,
     supabase_anon,
 )
+from core.request_safety import sanitize_text
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
+logger = logging.getLogger(__name__)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8, max_length=256)
 
 
 @router.get("/health")
@@ -42,12 +44,18 @@ def login(payload: LoginRequest):
             detail="Supabase auth is not configured (SUPABASE_URL/SUPABASE_ANON_KEY missing).",
         )
 
+    clean_email = sanitize_text(str(payload.email), max_length=255)
+    clean_password = sanitize_text(payload.password, max_length=256)
+    if not clean_email or not clean_password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
     try:
         response = supabase_anon.auth.sign_in_with_password(
-            {"email": payload.email, "password": payload.password}
+            {"email": clean_email, "password": clean_password}
         )
     except Exception as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        logger.warning("Auth login failed for %s", clean_email)
+        raise HTTPException(status_code=401, detail="Invalid credentials") from exc
 
     session = getattr(response, "session", None)
     user = getattr(response, "user", None)

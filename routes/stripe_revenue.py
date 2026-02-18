@@ -207,7 +207,8 @@ async def create_checkout_session(
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("create_checkout_session failed", exc_info=e)
+        raise HTTPException(status_code=400, detail="Checkout session creation failed")
 
 @router.post("/create-subscription")
 async def create_subscription(
@@ -291,7 +292,8 @@ async def create_subscription(
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("create_subscription failed", exc_info=e)
+        raise HTTPException(status_code=400, detail="Subscription creation failed")
 
 @router.post("/webhook")
 async def stripe_webhook(
@@ -518,7 +520,8 @@ async def get_revenue_metrics(
             "targets": None,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("revenue_analytics failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/cancel-subscription")
 async def cancel_subscription(
@@ -582,4 +585,5 @@ async def cancel_subscription(
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("cancel_subscription failed", exc_info=e)
+        raise HTTPException(status_code=400, detail="Subscription cancellation failed")

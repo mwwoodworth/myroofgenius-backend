@@ -1,22 +1,21 @@
-"""
-Lead scoring Module - Auto-generated
-Part of complete ERP implementation
-"""
+"""Lead scoring configuration and preview routes."""
 
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Request
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime, date
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import asyncpg
-import uuid
-import json
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+
+from core.request_safety import parse_uuid, require_tenant_id, sanitize_payload, sanitize_text
 from core.supabase_auth import get_current_user
 
 router = APIRouter()
 
-# Database connection
+
 async def get_db(request: Request):
-    """Yield a database connection from the shared asyncpg pool."""
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
         raise HTTPException(status_code=503, detail="Database connection not available")
@@ -25,50 +24,130 @@ async def get_db(request: Request):
         yield conn
 
 
-# Models
 class LeadScoringBase(BaseModel):
-    name: str = Field(..., description="Name")
-    description: Optional[str] = None
-    status: str = "active"
-    data: Optional[Dict[str, Any]] = {}
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    status: str = Field(default="active", min_length=2, max_length=40)
+    data: Dict[str, Any] = Field(default_factory=dict)
+
 
 class LeadScoringCreate(LeadScoringBase):
     pass
+
+
+class LeadScoringUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    status: Optional[str] = Field(default=None, min_length=2, max_length=40)
+    data: Optional[Dict[str, Any]] = None
+
 
 class LeadScoringResponse(LeadScoringBase):
     id: str
     created_at: datetime
     updated_at: datetime
 
-# Endpoints
+
+class LeadScorePreviewRequest(BaseModel):
+    rating: Optional[str] = Field(default=None, max_length=20)
+    company_size: Optional[str] = Field(default=None, max_length=50)
+    annual_revenue: Optional[float] = Field(default=None, ge=0)
+    lead_source: Optional[str] = Field(default=None, max_length=50)
+    lead_status: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    mobile: Optional[str] = Field(default=None, max_length=50)
+    website: Optional[str] = Field(default=None, max_length=500)
+    city: Optional[str] = Field(default=None, max_length=120)
+    state: Optional[str] = Field(default=None, max_length=120)
+    country: Optional[str] = Field(default=None, max_length=120)
+
+
+def calculate_lead_score(lead: Dict[str, Any]) -> int:
+    score = 0
+
+    rating = (lead.get("rating") or "").lower()
+    if rating == "hot":
+        score += 30
+    elif rating == "warm":
+        score += 20
+    elif rating == "cold":
+        score += 10
+
+    company_size = (lead.get("company_size") or "").lower()
+    if "enterprise" in company_size or "1000+" in company_size:
+        score += 25
+    elif "mid" in company_size or "100-999" in company_size:
+        score += 15
+    elif "small" in company_size or "10-99" in company_size:
+        score += 10
+
+    revenue = lead.get("annual_revenue", 0) or 0
+    if revenue >= 10000000:
+        score += 25
+    elif revenue >= 1000000:
+        score += 15
+    elif revenue >= 100000:
+        score += 10
+
+    source = (lead.get("lead_source") or "").lower()
+    if source in {"referral", "partner"}:
+        score += 20
+    elif source in {"website", "event"}:
+        score += 15
+    elif source in {"email", "social_media"}:
+        score += 10
+    elif source in {"cold_outreach", "advertisement"}:
+        score += 5
+
+    status = (lead.get("lead_status") or "").lower()
+    if status in {"qualified", "proposal", "negotiation"}:
+        score += 20
+    elif status in {"qualifying", "contacted"}:
+        score += 10
+    elif status == "new":
+        score += 5
+
+    if lead.get("email"):
+        score += 5
+    if lead.get("phone") or lead.get("mobile"):
+        score += 5
+    if lead.get("website"):
+        score += 3
+    if all([lead.get("city"), lead.get("state"), lead.get("country")]):
+        score += 7
+
+    return min(score, 100)
+
+
 @router.post("/", response_model=LeadScoringResponse)
 async def create_lead_scoring(
     item: LeadScoringCreate,
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Create new lead scoring record"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
 
-    query = """
+    row = await conn.fetchrow(
+        """
         INSERT INTO lead_scoring (tenant_id, name, description, status, data)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, updated_at
-    """
-
-    result = await conn.fetchrow(
-        query, tenant_id, item.name, item.description, item.status,
-        json.dumps(item.data) if item.data else None
+        """,
+        tenant_id,
+        sanitize_text(item.name, max_length=200),
+        sanitize_text(item.description, max_length=1000),
+        sanitize_text(item.status, max_length=40),
+        sanitize_payload(item.data),
     )
 
     return {
-        **item.dict(),
-        "id": str(result['id']),
-        "created_at": result['created_at'],
-        "updated_at": result['updated_at']
+        **item.model_dump(),
+        "id": str(row["id"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
     }
+
 
 @router.get("/", response_model=List[LeadScoringResponse])
 async def list_lead_scoring(
@@ -76,133 +155,147 @@ async def list_lead_scoring(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """List lead scoring records"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
 
     query = "SELECT * FROM lead_scoring WHERE tenant_id = $1"
-    params = [tenant_id]
-    param_count = 1
+    params: List[Any] = [tenant_id]
 
     if status:
-        param_count += 1
-        query += f" AND status = ${param_count}"
-        params.append(status)
+        params.append(sanitize_text(status, max_length=40))
+        query += f" AND status = ${len(params)}"
 
-    query += f" ORDER BY created_at DESC LIMIT ${param_count + 1} OFFSET ${param_count + 2}"
     params.extend([limit, skip])
+    query += f" ORDER BY created_at DESC LIMIT ${len(params)-1} OFFSET ${len(params)}"
 
     rows = await conn.fetch(query, *params)
-
     return [
         {
             **dict(row),
-            "id": str(row['id']),
-            "data": json.loads(row['data']) if row['data'] else {}
+            "id": str(row["id"]),
+            "data": row["data"] if row["data"] else {},
         }
         for row in rows
     ]
+
 
 @router.get("/{item_id}", response_model=LeadScoringResponse)
 async def get_lead_scoring(
     item_id: str,
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Get specific lead scoring record"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
+    item_uuid = parse_uuid(item_id, field_name="item_id")
 
-    query = "SELECT * FROM lead_scoring WHERE tenant_id = $1 AND id = $2"
-
-    row = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
+    row = await conn.fetchrow(
+        "SELECT * FROM lead_scoring WHERE tenant_id = $1 AND id = $2",
+        tenant_id,
+        item_uuid,
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Lead scoring not found")
 
     return {
         **dict(row),
-        "id": str(row['id']),
-        "data": json.loads(row['data']) if row['data'] else {}
+        "id": str(row["id"]),
+        "data": row["data"] if row["data"] else {},
     }
+
 
 @router.put("/{item_id}")
 async def update_lead_scoring(
     item_id: str,
-    updates: Dict[str, Any],
+    updates: LeadScoringUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Update lead scoring record"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
+    item_uuid = parse_uuid(item_id, field_name="item_id")
 
-    if 'data' in updates:
-        updates['data'] = json.dumps(updates['data'])
+    update_data = updates.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No updates provided")
 
-    set_clauses = []
-    params = [tenant_id]
-    param_count = 1
-    for field, value in updates.items():
-        param_count += 1
-        set_clauses.append(f"{field} = ${param_count}")
+    if "name" in update_data:
+        update_data["name"] = sanitize_text(update_data["name"], max_length=200)
+    if "description" in update_data:
+        update_data["description"] = sanitize_text(update_data["description"], max_length=1000)
+    if "status" in update_data:
+        update_data["status"] = sanitize_text(update_data["status"], max_length=40)
+    if "data" in update_data:
+        update_data["data"] = sanitize_payload(update_data["data"] or {})
+
+    params: List[Any] = [tenant_id]
+    set_clauses: List[str] = []
+    for field, value in update_data.items():
         params.append(value)
+        set_clauses.append(f"{field} = ${len(params)}")
 
-    params.append(uuid.UUID(item_id))
-    query = f"""
+    params.append(item_uuid)
+    row = await conn.fetchrow(
+        f"""
         UPDATE lead_scoring
         SET {', '.join(set_clauses)}, updated_at = NOW()
         WHERE tenant_id = $1 AND id = ${len(params)}
         RETURNING id
-    """
+        """,
+        *params,
+    )
 
-    result = await conn.fetchrow(query, *params)
-    if not result:
+    if not row:
         raise HTTPException(status_code=404, detail="Lead scoring not found")
 
-    return {"message": "Lead scoring updated", "id": str(result['id'])}
+    return {"message": "Lead scoring updated", "id": str(row["id"])}
+
 
 @router.delete("/{item_id}")
 async def delete_lead_scoring(
     item_id: str,
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Delete lead scoring record"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
+    item_uuid = parse_uuid(item_id, field_name="item_id")
 
-    query = "DELETE FROM lead_scoring WHERE tenant_id = $1 AND id = $2 RETURNING id"
-
-    result = await conn.fetchrow(query, tenant_id, uuid.UUID(item_id))
-    if not result:
+    row = await conn.fetchrow(
+        "DELETE FROM lead_scoring WHERE tenant_id = $1 AND id = $2 RETURNING id",
+        tenant_id,
+        item_uuid,
+    )
+    if not row:
         raise HTTPException(status_code=404, detail="Lead scoring not found")
 
-    return {"message": "Lead scoring deleted", "id": str(result['id'])}
+    return {"message": "Lead scoring deleted", "id": str(row["id"])}
+
 
 @router.get("/stats/summary")
 async def get_lead_scoring_stats(
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Get lead scoring statistics"""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = require_tenant_id(current_user)
 
-    query = """
+    result = await conn.fetchrow(
+        """
         SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
             COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recent
         FROM lead_scoring
         WHERE tenant_id = $1
-    """
-
-    result = await conn.fetchrow(query, tenant_id)
+        """,
+        tenant_id,
+    )
     return dict(result)
+
+
+@router.post("/calculate")
+async def calculate_score_preview(
+    payload: LeadScorePreviewRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    require_tenant_id(current_user)
+    score = calculate_lead_score(payload.model_dump())
+    return {"score": score}

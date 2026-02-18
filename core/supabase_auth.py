@@ -219,10 +219,10 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Supabase auth error: {str(e)}")
+        logger.error("Supabase auth error: %s", str(e))
         raise HTTPException(
             status_code=401,
-            detail=f"Authentication failed: {str(e)}"
+            detail="Authentication failed"
         )
 
 

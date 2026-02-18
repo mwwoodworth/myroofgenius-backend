@@ -378,13 +378,38 @@ app = FastAPI(
 # Consistent error envelope while preserving FastAPI's `detail` shape for compatibility.
 @app.exception_handler(HTTPException)
 async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    def _looks_internal(detail_value: Any) -> bool:
+        if not isinstance(detail_value, str):
+            return False
+        markers = (
+            "traceback",
+            "sqlalchemy",
+            "asyncpg",
+            "psycopg",
+            "operationalerror",
+            "programmingerror",
+            "attributeerror",
+            "keyerror",
+            "typeerror",
+            "valueerror",
+            "exception",
+        )
+        lowered = detail_value.lower()
+        return any(marker in lowered for marker in markers)
+
+    safe_detail = exc.detail
+    if exc.status_code >= 500:
+        safe_detail = "Internal server error"
+    elif exc.status_code == 400 and _looks_internal(exc.detail):
+        safe_detail = "Bad request"
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "detail": exc.detail,
+            "detail": safe_detail,
             "error": {
                 "type": "HTTPException",
-                "message": exc.detail,
+                "message": safe_detail,
                 "status_code": exc.status_code,
                 "path": request.url.path,
             },
@@ -414,11 +439,7 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled exception for %s %s: %s", request.method, request.url.path, exc)
-    # Do not leak internal exception details outside dev environments.
-    if settings.environment.lower() in {"production", "prod"}:
-        detail: Any = "Internal server error"
-    else:
-        detail = str(exc)
+    detail: Any = "Internal server error"
     return JSONResponse(
         status_code=500,
         content={
@@ -438,8 +459,25 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "X-API-Key",
+        "X-Tenant-ID",
+        "X-Request-Id",
+        "Stripe-Signature",
+    ],
+    expose_headers=[
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+        "X-Request-Id",
+    ],
+    max_age=3600,
 )
 
 # Apply rate limiting to protect public APIs

@@ -175,7 +175,7 @@ class Database:
                 return await conn.execute(query)
 
 # Sync get_db for SQLAlchemy Session routes
-def get_db():
+def get_db(request=None):
     """
     Synchronous database session for SQLAlchemy routes
     """
@@ -183,9 +183,34 @@ def get_db():
         raise RuntimeError("DATABASE_URL is not configured.")
 
     db = SessionLocal()
+    tenant_id = None
+    user_id = None
+    if request is not None:
+        try:
+            tenant_id = getattr(request.state, "tenant_id", None)
+            user_id = getattr(request.state, "user_id", None)
+        except Exception:
+            tenant_id = None
+            user_id = None
+
     try:
+        if tenant_id:
+            db.execute(
+                text("SELECT set_config('app.current_tenant_id', :tenant_id, false)"),
+                {"tenant_id": str(tenant_id)},
+            )
+        if user_id:
+            db.execute(
+                text("SELECT set_config('app.current_user_id', :user_id, false)"),
+                {"user_id": str(user_id)},
+            )
         yield db
     finally:
+        try:
+            db.execute(text("SELECT set_config('app.current_tenant_id', '', false)"))
+            db.execute(text("SELECT set_config('app.current_user_id', '', false)"))
+        except Exception:
+            pass
         db.close()
 
 # Async get_db for asyncpg routes

@@ -15,6 +15,7 @@ from core.agent_execution_manager import agent_manager
 from core.lead_automation import lead_automation
 from core.workflow_engine import workflow_engine
 from core.revenue_automation import revenue_automation, SubscriptionTier
+from core.supabase_auth import get_authenticated_user
 
 router = APIRouter(prefix="/api/v1/automation", tags=["automation"])
 logger = logging.getLogger(__name__)
@@ -68,8 +69,8 @@ async def execute_agent(request: AgentExecutionRequest):
         )
         return result
     except Exception as e:
-        logger.error(f"Agent execution failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Agent execution failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/agents/fix-stuck")
@@ -81,8 +82,8 @@ async def fix_stuck_agents():
         result = await agent_manager.fix_stuck_agents()
         return result
     except Exception as e:
-        logger.error(f"Failed to fix stuck agents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to fix stuck agents", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/agents/stats")
@@ -94,23 +95,28 @@ async def get_agent_stats():
         stats = await agent_manager.get_execution_stats()
         return stats
     except Exception as e:
-        logger.error(f"Failed to get agent stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get agent stats", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Lead Management Endpoints
 @router.post("/leads/capture")
-async def capture_lead(request: LeadCaptureRequest):
+async def capture_lead(
+    request: LeadCaptureRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """
     Capture and process a new lead
     """
     try:
         lead_data = request.dict()
+        lead_data["tenant_id"] = current_user.get("tenant_id")
+        lead_data["captured_by"] = current_user.get("id")
         result = await lead_automation.capture_lead(lead_data)
         return result
     except Exception as e:
-        logger.error(f"Lead capture failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Lead capture failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/leads/{lead_id}/activity")
@@ -130,8 +136,8 @@ async def track_lead_activity(
         )
         return {"status": "tracked"}
     except Exception as e:
-        logger.error(f"Failed to track lead activity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to track lead activity", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/leads/analytics")
@@ -143,8 +149,8 @@ async def get_lead_analytics():
         analytics = await lead_automation.get_lead_analytics()
         return analytics
     except Exception as e:
-        logger.error(f"Failed to get lead analytics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get lead analytics", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Workflow Automation Endpoints
@@ -160,8 +166,8 @@ async def execute_workflow(request: WorkflowExecutionRequest):
         )
         return result
     except Exception as e:
-        logger.error(f"Workflow execution failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Workflow execution failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/workflows/available")
@@ -177,7 +183,10 @@ async def list_available_workflows():
 
 # Revenue Automation Endpoints
 @router.post("/revenue/checkout")
-async def create_checkout_session(request: CheckoutSessionRequest):
+async def create_checkout_session(
+    request: CheckoutSessionRequest,
+    current_user: Dict[str, Any] = Depends(get_authenticated_user),
+):
     """
     Create Stripe checkout session for subscription
     """
@@ -187,12 +196,16 @@ async def create_checkout_session(request: CheckoutSessionRequest):
             subscription_tier=request.subscription_tier,
             success_url=request.success_url,
             cancel_url=request.cancel_url,
-            metadata=request.metadata
+            metadata={
+                **(request.metadata or {}),
+                "tenant_id": current_user.get("tenant_id"),
+                "requested_by": current_user.get("id"),
+            },
         )
         return result
     except Exception as e:
-        logger.error(f"Failed to create checkout session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to create checkout session", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/revenue/webhook")
@@ -211,9 +224,8 @@ async def handle_stripe_webhook(
         )
         return result
     except Exception as e:
-        logger.error(f"Webhook processing failed: {e}")
-        # Return 200 to prevent Stripe retries on our errors
-        return {"status": "error", "message": str(e)}
+        logger.exception("Webhook processing failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 
 @router.post("/revenue/retry-payments")
@@ -225,8 +237,8 @@ async def process_payment_retries():
         result = await revenue_automation.process_payment_retries()
         return result
     except Exception as e:
-        logger.error(f"Payment retry processing failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Payment retry processing failed", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/revenue/metrics")
@@ -238,8 +250,8 @@ async def get_revenue_metrics():
         metrics = await revenue_automation.get_revenue_metrics()
         return metrics
     except Exception as e:
-        logger.error(f"Failed to get revenue metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to get revenue metrics", exc_info=e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Health Check

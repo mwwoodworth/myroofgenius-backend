@@ -4,15 +4,13 @@ Prevents API abuse and ensures fair resource usage
 """
 
 from fastapi import Request, HTTPException, status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from collections import defaultdict
 from datetime import datetime, timedelta
 import time
 import logging
-from typing import Dict, Tuple
-import redis
-import json
-import hashlib
+from typing import Dict, Tuple, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +100,12 @@ class RateLimiter:
         self.requests[client_id].append(now)
         return True
 
-    def check_limit(self, request: Request) -> Tuple[bool, str]:
+    def check_limit(
+        self,
+        request: Request,
+        *,
+        checks: Optional[List[Tuple[int, int, str]]] = None,
+    ) -> Tuple[bool, str]:
         """Check if request is within rate limits"""
         client_id = self._get_client_id(request)
 
@@ -112,7 +115,7 @@ class RateLimiter:
                 return False, "IP temporarily blocked due to rate limit violations"
 
         # Check different time windows
-        checks = [
+        checks = checks or [
             (self.requests_per_minute, 60, "minute"),
             (self.requests_per_hour, 3600, "hour"),
             (self.requests_per_day, 86400, "day"),
@@ -179,6 +182,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, **kwargs):
         super().__init__(app)
         self.limiter = RateLimiter(**kwargs)
+        self.public_requests_per_minute = int(kwargs.get("public_requests_per_minute", 60))
+        self.public_requests_per_hour = int(kwargs.get("public_requests_per_hour", 600))
+        self.webhook_requests_per_minute = int(kwargs.get("webhook_requests_per_minute", 300))
+        self.webhook_requests_per_hour = int(kwargs.get("webhook_requests_per_hour", 4000))
 
         # Paths to exclude from rate limiting
         self.excluded_paths = {
@@ -190,22 +197,45 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/v1/products/public",
             "/api/v1/products/public/"
         }
+        self.webhook_prefixes = (
+            "/api/v1/stripe/webhook",
+            "/api/v1/webhooks/stripe",
+            "/api/v1/revenue/webhook",
+            "/api/v1/gumroad-revenue/webhook",
+        )
 
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for excluded paths
         if any(request.url.path.startswith(path) for path in self.excluded_paths):
             return await call_next(request)
 
+        path = request.url.path
+        is_authenticated = bool(getattr(request.state, "authenticated", False) or getattr(request.state, "user", None))
+        is_webhook = any(path.startswith(prefix) for prefix in self.webhook_prefixes)
+
+        checks = None
+        if is_webhook:
+            checks = [
+                (self.webhook_requests_per_minute, 60, "minute"),
+                (self.webhook_requests_per_hour, 3600, "hour"),
+                (self.limiter.requests_per_day, 86400, "day"),
+            ]
+        elif not is_authenticated:
+            checks = [
+                (self.public_requests_per_minute, 60, "minute"),
+                (self.public_requests_per_hour, 3600, "hour"),
+                (self.limiter.requests_per_day, 86400, "day"),
+            ]
+
         # Check rate limit
-        allowed, message = self.limiter.check_limit(request)
+        allowed, message = self.limiter.check_limit(request, checks=checks)
 
         if not allowed:
             # Get limit info for headers
             limits = self.limiter.get_limits_for_client(request)
-
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=message,
+                content={"detail": message},
                 headers={
                     "X-RateLimit-Limit": str(limits["limits"]["minute"]),
                     "X-RateLimit-Remaining": str(limits["remaining"]["minute"]),
