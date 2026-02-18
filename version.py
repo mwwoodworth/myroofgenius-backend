@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.10.0"
-__build__ = "2026-02-18T17:30:00Z"
+__version__ = "163.11.0"
+__build__ = "2026-02-18T18:50:00Z"
 __status__ = "production"
+# v163.11.0: Brain integration throughout + API performance tracking
+#   - Enhanced brain_store.py: store_event(), recall_context(), store_api_insight()
+#   - API performance tracking middleware (every 100th request → brain)
+#   - Enriched /health: uptime, total_requests, db_connections, brain_timestamp
+#   - Brain recall context in ai_brain, dashboard_stats, system_monitoring routes
 # v163.10.0: Dead route/duplicate cleanup
 #   - 7 dead/duplicate routes moved to routes/_dead/ (-2,903 lines)
 #   - Fixed erp_complete.py + complete_erp_alias.py: self-contained customer CRUD
