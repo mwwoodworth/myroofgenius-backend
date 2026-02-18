@@ -10,6 +10,7 @@ from datetime import datetime, date
 import asyncpg
 import uuid
 import json
+from core.brain_store import build_brain_key, dispatch_brain_store
 from core.supabase_auth import get_current_user
 
 router = APIRouter()
@@ -62,10 +63,27 @@ async def create_system_monitoring(
         query, tenant_id, item.name, item.description, item.status,
         json.dumps(item.data) if item.data else None
     )
+    monitoring_id = str(result["id"])
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="system_monitoring",
+            action="created",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "monitoring_id": monitoring_id,
+            "name": item.name,
+            "status": item.status,
+            "has_data": bool(item.data),
+        },
+        category="system_state",
+        priority="medium",
+    )
 
     return {
         **item.dict(),
-        "id": str(result['id']),
+        "id": monitoring_id,
         "created_at": result['created_at'],
         "updated_at": result['updated_at']
     }
@@ -163,6 +181,20 @@ async def update_system_monitoring(
     if not result:
         raise HTTPException(status_code=404, detail="System monitoring not found")
 
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="system_monitoring",
+            action="updated",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "monitoring_id": str(result["id"]),
+            "updated_fields": sorted(updates.keys()),
+        },
+        category="system_state",
+        priority="medium",
+    )
+
     return {"message": "System monitoring updated", "id": str(result['id'])}
 
 @router.delete("/{item_id}")
@@ -181,6 +213,19 @@ async def delete_system_monitoring(
     result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="System monitoring not found")
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="system_monitoring",
+            action="deleted",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "monitoring_id": str(result["id"]),
+        },
+        category="system_state",
+        priority="high",
+    )
 
     return {"message": "System monitoring deleted", "id": str(result['id'])}
 
@@ -204,4 +249,17 @@ async def get_system_monitoring_stats(
     """
 
     result = await conn.fetchrow(query, tenant_id)
-    return dict(result)
+    summary = dict(result)
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="system_monitoring",
+            action="stats_accessed",
+            tenant_id=str(tenant_id),
+        ),
+        value=summary,
+        category="analytics",
+        priority="low",
+    )
+
+    return summary

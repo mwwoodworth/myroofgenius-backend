@@ -12,6 +12,7 @@ import asyncpg
 import uuid
 import json
 
+from core.brain_store import build_brain_key, dispatch_brain_store
 from core.supabase_auth import get_authenticated_user
 
 router = APIRouter()
@@ -65,10 +66,27 @@ async def create_alert_automation(
         json.dumps(item.data) if item.data else None,
         tenant_id
     )
+    alert_id = str(result["id"])
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="alert_automation",
+            action="created",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "alert_id": alert_id,
+            "name": item.name,
+            "status": item.status,
+            "has_data": bool(item.data),
+        },
+        category="alerts",
+        priority="medium",
+    )
 
     return {
         **item.dict(),
-        "id": str(result['id']),
+        "id": alert_id,
         "created_at": result['created_at'],
         "updated_at": result['updated_at']
     }
@@ -169,6 +187,20 @@ async def update_alert_automation(
     if not result:
         raise HTTPException(status_code=404, detail="Alert automation not found")
 
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="alert_automation",
+            action="updated",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "alert_id": str(result["id"]),
+            "updated_fields": sorted(updates.keys()),
+        },
+        category="alerts",
+        priority="medium",
+    )
+
     return {"message": "Alert automation updated", "id": str(result['id'])}
 
 @router.delete("/{item_id}")
@@ -187,6 +219,19 @@ async def delete_alert_automation(
     result = await conn.fetchrow(query, uuid.UUID(item_id), tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Alert automation not found")
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="alert_automation",
+            action="deleted",
+            tenant_id=str(tenant_id),
+        ),
+        value={
+            "alert_id": str(result["id"]),
+        },
+        category="alerts",
+        priority="high",
+    )
 
     return {"message": "Alert automation deleted", "id": str(result['id'])}
 
@@ -210,4 +255,17 @@ async def get_alert_automation_stats(
     """
 
     result = await conn.fetchrow(query, tenant_id)
-    return dict(result)
+    summary = dict(result)
+
+    dispatch_brain_store(
+        key=build_brain_key(
+            scope="alert_automation",
+            action="stats_accessed",
+            tenant_id=str(tenant_id),
+        ),
+        value=summary,
+        category="analytics",
+        priority="low",
+    )
+
+    return summary

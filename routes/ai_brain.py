@@ -10,6 +10,8 @@ import logging
 import asyncio
 import json
 
+from core.brain_store import build_brain_key, dispatch_brain_store
+
 # Import the AI Brain Core
 try:
     from ai_brain_production import AIBrainProduction
@@ -93,12 +95,30 @@ async def make_decision(request: Dict[str, Any]):
         brain = await get_ai_brain()
         
         context = request.get("context", {})
+        if not isinstance(context, dict):
+            context = {}
         options = request.get("options", [])
         urgency = request.get("urgency", "normal")
         
         # Get decision from brain
         decision = await brain.make_decision(context, options, urgency)
         
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="ai_brain",
+                action="decision",
+                tenant_id=context.get("tenant_id"),
+            ),
+            value={
+                "urgency": urgency,
+                "options_count": len(options) if isinstance(options, list) else 0,
+                "context_keys": sorted(context.keys())[:12],
+                "confidence": decision.get("confidence", 0.8),
+            },
+            category="decisioning",
+            priority="high" if urgency in {"urgent", "high", "critical"} else "medium",
+        )
+
         return {
             "decision": decision,
             "confidence": decision.get("confidence", 0.8),
@@ -123,6 +143,20 @@ async def execute_task(request: Dict[str, Any], background_tasks: BackgroundTask
             # Execute in background
             task_id = f"task_{datetime.now().timestamp()}"
             background_tasks.add_task(brain.execute_task, task_type, parameters)
+            dispatch_brain_store(
+                key=build_brain_key(
+                    scope="ai_brain",
+                    action="task_queued",
+                    tenant_id=str(request.get("tenant_id") or "global"),
+                ),
+                value={
+                    "task_type": task_type,
+                    "async": True,
+                    "parameter_keys": sorted(parameters.keys())[:12] if isinstance(parameters, dict) else [],
+                },
+                category="execution",
+                priority="medium",
+            )
             return {
                 "task_id": task_id,
                 "status": "queued",
@@ -131,6 +165,21 @@ async def execute_task(request: Dict[str, Any], background_tasks: BackgroundTask
         else:
             # Execute synchronously
             result = await brain.execute_task(task_type, parameters)
+            dispatch_brain_store(
+                key=build_brain_key(
+                    scope="ai_brain",
+                    action="task_executed",
+                    tenant_id=str(request.get("tenant_id") or "global"),
+                ),
+                value={
+                    "task_type": task_type,
+                    "async": False,
+                    "success": bool(result.get("success", True)) if isinstance(result, dict) else True,
+                    "parameter_keys": sorted(parameters.keys())[:12] if isinstance(parameters, dict) else [],
+                },
+                category="execution",
+                priority="medium",
+            )
             return {
                 "result": result,
                 "status": "completed",
@@ -205,15 +254,33 @@ async def orchestrate_workflow(request: Dict[str, Any]):
                 if not result.get("success", True) and not workflow.get("continue_on_error", False):
                     break
         
+        workflow_id = f"wf_{datetime.now().timestamp()}"
+        summary = {
+            "total_steps": len(steps),
+            "completed_steps": len(results),
+            "success_rate": sum(1 for r in results if r.get("success", True)) / len(results) * 100 if results else 0,
+        }
+
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="ai_brain",
+                action="workflow_orchestrated",
+                tenant_id=str(request.get("tenant_id") or "global"),
+            ),
+            value={
+                "parallel": bool(parallel),
+                "summary": summary,
+                "continue_on_error": bool(workflow.get("continue_on_error", False)),
+            },
+            category="orchestration",
+            priority="high" if summary["success_rate"] < 100 else "medium",
+        )
+
         return {
-            "workflow_id": f"wf_{datetime.now().timestamp()}",
+            "workflow_id": workflow_id,
             "status": "completed",
             "results": results,
-            "summary": {
-                "total_steps": len(steps),
-                "completed_steps": len(results),
-                "success_rate": sum(1 for r in results if r.get("success", True)) / len(results) * 100 if results else 0
-            }
+            "summary": summary
         }
     except Exception as e:
         logger.error(f"Error orchestrating workflow: {str(e)}")
@@ -277,6 +344,22 @@ async def learn_from_experience(request: Dict[str, Any]):
             brain.learning_rate = min(brain.learning_rate * 1.01, 1.0)
         else:
             brain.learning_rate = max(brain.learning_rate * 0.99, 0.1)
+
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="ai_brain",
+                action="learning_outcome",
+                tenant_id=str(request.get("tenant_id") or "global"),
+            ),
+            value={
+                "experience_keys": sorted(experience.keys())[:12] if isinstance(experience, dict) else [],
+                "outcome_success": bool(outcome.get("success", False)) if isinstance(outcome, dict) else False,
+                "memory_size": len(memory_store),
+                "learning_rate": brain.learning_rate,
+            },
+            category="learning",
+            priority="medium",
+        )
 
         return {
             "status": "learned",
@@ -375,6 +458,16 @@ async def optimize_brain():
         await brain.consolidate_memory()
         after_memory = len(getattr(brain, "short_term_memory", brain.memory.get("short_term", []) if hasattr(brain, "memory") else []))
         
+        dispatch_brain_store(
+            key=build_brain_key(scope="ai_brain", action="optimized"),
+            value={
+                "pathways_optimized": after_pathways - before_pathways,
+                "memory_consolidated": before_memory - after_memory,
+            },
+            category="optimization",
+            priority="medium",
+        )
+
         return {
             "status": "optimized",
             "improvements": {

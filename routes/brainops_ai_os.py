@@ -22,6 +22,8 @@ from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Request, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, Field
 
+from core.brain_store import build_brain_key, dispatch_brain_store
+
 logger = logging.getLogger(__name__)
 
 # Create router with prefix
@@ -203,6 +205,21 @@ async def process_input(
             request_data.input_data,
             context=request_data.context or {}
         )
+        context = request_data.context or {}
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="brainops_ai_os",
+                action="process_input",
+                tenant_id=str(context.get("tenant_id")) if isinstance(context, dict) else None,
+            ),
+            value={
+                "processing_type": request_data.processing_type,
+                "input_keys": sorted(request_data.input_data.keys())[:12],
+                "context_keys": sorted(context.keys())[:12] if isinstance(context, dict) else [],
+            },
+            category="decisioning",
+            priority="high" if request_data.processing_type == "urgent" else "medium",
+        )
         return {
             "status": "processed",
             "result": result,
@@ -247,6 +264,15 @@ async def trigger_reflection(
     """
     try:
         reflection = await controller.reflect(topic=topic)
+        dispatch_brain_store(
+            key=build_brain_key(scope="brainops_ai_os", action="reflection"),
+            value={
+                "topic": topic or "general",
+                "reflection_type": "manual_trigger",
+            },
+            category="learning",
+            priority="medium",
+        )
         return {
             "status": "reflected",
             "reflection": reflection,
@@ -281,6 +307,24 @@ async def store_memory(
             importance=memory_request.importance,
             context=memory_request.context,
             tags=memory_request.tags
+        )
+
+        context = memory_request.context or {}
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="brainops_ai_os",
+                action="memory_stored",
+                tenant_id=str(context.get("tenant_id")) if isinstance(context, dict) else None,
+            ),
+            value={
+                "memory_id": memory_id,
+                "memory_type": memory_request.memory_type,
+                "importance": memory_request.importance,
+                "tag_count": len(memory_request.tags or []),
+                "content_keys": sorted(memory_request.content.keys())[:12],
+            },
+            category="memory",
+            priority="high" if memory_request.importance >= 0.8 else "medium",
         )
 
         return {
@@ -644,6 +688,19 @@ async def create_goal(
             deadline=goal_request.deadline
         )
 
+        dispatch_brain_store(
+            key=build_brain_key(scope="brainops_ai_os", action="goal_created"),
+            value={
+                "goal_id": goal_id,
+                "goal_name": goal_request.name,
+                "goal_type": goal_request.goal_type,
+                "has_parent": goal_request.parent_id is not None,
+                "has_deadline": goal_request.deadline is not None,
+            },
+            category="planning",
+            priority="high" if goal_request.goal_type == "strategic" else "medium",
+        )
+
         return {
             "status": "created",
             "goal_id": goal_id,
@@ -837,6 +894,21 @@ async def analyze_decision(
             decision=decision,
             options=options,
             context=context
+        )
+
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="brainops_ai_os",
+                action="decision_analyzed",
+                tenant_id=str(context.get("tenant_id")) if isinstance(context, dict) else None,
+            ),
+            value={
+                "decision": decision,
+                "option_count": len(options),
+                "context_keys": sorted(context.keys())[:12] if isinstance(context, dict) else [],
+            },
+            category="decisioning",
+            priority="high" if len(options) > 3 else "medium",
         )
 
         return {
@@ -1162,6 +1234,16 @@ async def trigger_optimization(
             component
         )
 
+        dispatch_brain_store(
+            key=build_brain_key(scope="brainops_ai_os", action="optimization_started"),
+            value={
+                "component": component,
+                "trigger": "manual",
+            },
+            category="optimization",
+            priority="high" if component in {"performance", "database"} else "medium",
+        )
+
         return {
             "status": "optimization_started",
             "component": component,
@@ -1276,6 +1358,16 @@ async def reset_system(
         else:
             await controller.reset()
             message = "Full system reset completed"
+
+        dispatch_brain_store(
+            key=build_brain_key(scope="brainops_ai_os", action="system_reset"),
+            value={
+                "component": component or "all",
+                "message": message,
+            },
+            category="operational",
+            priority="high",
+        )
 
         return {
             "status": "reset",

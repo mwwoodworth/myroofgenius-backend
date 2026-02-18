@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 import asyncpg
 
+from core.brain_store import build_brain_key, dispatch_brain_store
 from core.supabase_auth import get_authenticated_user
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,27 @@ async def get_dashboard_stats(
                 "open_service_requests": service_tickets["open_requests"] or 0,
             },
         }
+
+        dispatch_brain_store(
+            key=build_brain_key(
+                scope="dashboard",
+                action="stats_accessed",
+                tenant_id=str(resolved_tenant),
+            ),
+            value={
+                "requested_tenant": tenant_id,
+                "requester_tenant": requester_tenant,
+                "requester_role": requester_role,
+                "cross_tenant_request": bool(tenant_id and tenant_id != requester_tenant),
+                "summary": {
+                    "revenue_total": stats["revenue"]["total"],
+                    "jobs_active": stats["jobs"]["active"],
+                    "open_service_requests": stats["leads"]["open_service_requests"],
+                },
+            },
+            category="analytics",
+            priority="low",
+        )
 
         return {
             "success": True,
