@@ -547,12 +547,8 @@ if not dynamic_routes_loaded:
     except Exception as e:
         logger.error(f"⚠️ Failed to load credits routes (fallback): {e}")
 
-    try:
-        from routes.customers import router as customers_router
-        app.include_router(customers_router)
-        logger.info("✅ Customers routes loaded (fallback)")
-    except Exception as e:
-        logger.error(f"⚠️ Failed to load customers routes (fallback): {e}")
+    # NOTE: customers routes are loaded via the dynamic route_loader (customers_full_crud.py)
+    # No fallback import needed here.
 
     try:
         from routes.workflows_langgraph import router as workflows_router
@@ -986,7 +982,7 @@ class Customer(BaseModel):
 # Previous GET-only stubs in main.py blocked the complete implementations
 #
 # Removed endpoints (now in route files):
-# - /api/v1/customers    → routes/customers_complete.py (full CRUD)
+# - /api/v1/customers    → routes/customers_full_crud.py (full CRUD)
 # - /api/v1/jobs         → routes/jobs_*.py (full CRUD)
 # - /api/v1/employees    → routes/employees_*.py (full CRUD)
 # - /api/v1/estimates    → routes/estimates_*.py (full CRUD)

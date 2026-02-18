@@ -79,10 +79,27 @@ async def get_complete_erp_customer(
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get single customer by ID."""
+    scoped_user = _with_tenant_context(current_user, tenant_id)
+    tid = scoped_user.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
     try:
-        from routes.customers import get_customer as get_customer_impl
-        scoped_user = _with_tenant_context(current_user, tenant_id)
-        return await get_customer_impl(request=request, customer_id=customer_id, current_user=scoped_user)
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, name, email, phone, company, status, address, city, state, zip_code, notes, created_at, updated_at "
+                "FROM customers WHERE id = $1 AND tenant_id = $2",
+                customer_id, tid,
+            )
+        if not row:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer = dict(row)
+        customer["id"] = str(customer["id"])
+        return {"customer": customer, "status": "operational"}
     except HTTPException:
         raise
     except Exception as e:
@@ -96,10 +113,29 @@ async def create_complete_erp_customer(
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Create a new customer."""
+    tid = current_user.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
     try:
-        from routes.customers import create_customer as create_customer_impl
         body = await request.json()
-        return await create_customer_impl(request=request, customer=body, current_user=current_user)
+        import uuid
+        customer_id = str(uuid.uuid4())
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO customers (id, tenant_id, name, email, phone, company, address, city, state, zip_code, notes, status, created_at, updated_at) "
+                "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())",
+                customer_id, tid,
+                body.get("name", ""), body.get("email"), body.get("phone"),
+                body.get("company"), body.get("address"), body.get("city"),
+                body.get("state"), body.get("zip_code"), body.get("notes"),
+                body.get("status", "active"),
+            )
+        return {"id": customer_id, "message": "Customer created", "status": "operational"}
     except HTTPException:
         raise
     except Exception as e:
@@ -114,10 +150,34 @@ async def update_complete_erp_customer(
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Update a customer."""
+    tid = current_user.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
     try:
-        from routes.customers import update_customer as update_customer_impl
         body = await request.json()
-        return await update_customer_impl(request=request, customer_id=customer_id, customer=body, current_user=current_user)
+        set_parts = []
+        params = []
+        idx = 1
+        for field in ("name", "email", "phone", "company", "address", "city", "state", "zip_code", "notes", "status"):
+            if field in body:
+                set_parts.append(f"{field} = ${idx}")
+                params.append(body[field])
+                idx += 1
+        if not set_parts:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        set_parts.append(f"updated_at = NOW()")
+        params.extend([customer_id, tid])
+        query = f"UPDATE customers SET {', '.join(set_parts)} WHERE id = ${idx} AND tenant_id = ${idx + 1}"
+        async with db_pool.acquire() as conn:
+            result = await conn.execute(query, *params)
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return {"id": customer_id, "message": "Customer updated", "status": "operational"}
     except HTTPException:
         raise
     except Exception as e:
@@ -132,9 +192,23 @@ async def delete_complete_erp_customer(
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Delete a customer."""
+    tid = current_user.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
     try:
-        from routes.customers import delete_customer as delete_customer_impl
-        return await delete_customer_impl(request=request, customer_id=customer_id, current_user=current_user)
+        async with db_pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM customers WHERE id = $1 AND tenant_id = $2",
+                customer_id, tid,
+            )
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return {"message": "Customer deleted", "status": "operational"}
     except HTTPException:
         raise
     except Exception as e:

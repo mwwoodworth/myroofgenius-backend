@@ -44,26 +44,52 @@ async def get_erp_customers(
     current_user: Dict[str, Any] = Depends(get_authenticated_user),
 ):
     """Get ERP customers (tenant-scoped)."""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database connection not available")
+
     try:
-        from routes.customers import list_customers as list_customers_impl
+        query_parts = ["SELECT id, name, email, phone, company, status, created_at, updated_at FROM customers WHERE tenant_id = $1"]
+        count_parts = ["SELECT COUNT(*) FROM customers WHERE tenant_id = $1"]
+        params: list = [tenant_id]
+        count_params: list = [tenant_id]
+        idx = 2
 
-        resp = await list_customers_impl(
-            request=request,
-            limit=limit,
-            offset=skip,
-            status=status,
-            search=search,
-            current_user=current_user,
-        )
-        customers = resp.get("data") or []
-        total = resp.get("total", len(customers))
+        if status:
+            query_parts.append(f"AND status = ${idx}")
+            count_parts.append(f"AND status = ${idx}")
+            params.append(status)
+            count_params.append(status)
+            idx += 1
 
-        return {"customers": customers, "total": total, "skip": skip, "limit": limit, "status": "operational"}
-    except HTTPException as exc:
-        if _should_fallback(exc):
-            logger.error("ERP customers query failed with 5xx - returning 503")
-            raise HTTPException(status_code=503, detail="Database temporarily unavailable")
-        raise
+        if search:
+            query_parts.append(f"AND (LOWER(name) LIKE LOWER(${idx}) OR LOWER(email) LIKE LOWER(${idx}) OR LOWER(company) LIKE LOWER(${idx}))")
+            count_parts.append(f"AND (LOWER(name) LIKE LOWER(${idx}) OR LOWER(email) LIKE LOWER(${idx}) OR LOWER(company) LIKE LOWER(${idx}))")
+            params.append(f"%{search}%")
+            count_params.append(f"%{search}%")
+            idx += 1
+
+        query_parts.append(f"ORDER BY created_at DESC LIMIT ${idx} OFFSET ${idx + 1}")
+        params.extend([limit, skip])
+
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(" ".join(query_parts), *params)
+            total = await conn.fetchval(" ".join(count_parts), *count_params)
+
+        customers = [dict(row) for row in rows]
+        for c in customers:
+            c["id"] = str(c["id"])
+            for k in ("created_at", "updated_at"):
+                c[k] = _iso(c.get(k))
+
+        return {"customers": customers, "total": total or 0, "skip": skip, "limit": limit, "status": "operational"}
+    except Exception as exc:
+        logger.error("ERP customers query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable") from exc
 
 
 @router.get("/jobs")
