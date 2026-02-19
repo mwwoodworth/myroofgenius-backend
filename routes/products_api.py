@@ -5,7 +5,7 @@ Manages product catalog and pricing
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
 from decimal import Decimal
 from datetime import datetime
 import logging

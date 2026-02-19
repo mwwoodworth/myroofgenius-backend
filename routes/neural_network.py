@@ -642,14 +642,18 @@ class MemoryProcessor:
         
         # Store memory
         with engine.connect() as conn:
+            memory_key = f"neural:{memory_data.memory_type}:{memory_id}"
             conn.execute(text("""
                 INSERT INTO ai_memories 
-                (id, memory_type, content, importance_score, tags, associations, 
+                (id, agent_id, key, value, memory_type, content, importance_score, tags, associations, 
                  content_embedding, created_at)
-                VALUES (:id, :type, :content, :importance, :tags, :associations, 
+                VALUES (:id, :agent_id, :key, :value, :type, :content, :importance, :tags, :associations, 
                         :embedding, CURRENT_TIMESTAMP)
             """), {
                 "id": memory_id,
+                "agent_id": "neural_memory_processor",
+                "key": memory_key,
+                "value": json.dumps(memory_data.content),
                 "type": memory_data.memory_type,
                 "content": json.dumps(memory_data.content),
                 "importance": memory_data.importance_score,
@@ -975,7 +979,7 @@ async def list_neurons(
             neurons = []
             for row in result:
                 neurons.append({
-                    "id": row.id,
+                    "id": str(row.id),
                     "neuron_type": row.neuron_type,
                     "layer_id": row.layer_id,
                     "activation_function": row.activation_function,
@@ -1057,9 +1061,9 @@ async def list_synapses(
             synapses = []
             for row in result:
                 synapses.append({
-                    "id": row.id,
-                    "source_neuron_id": row.source_neuron_id,
-                    "target_neuron_id": row.target_neuron_id,
+                    "id": str(row.id),
+                    "source_neuron_id": str(row.source_neuron_id),
+                    "target_neuron_id": str(row.target_neuron_id),
                     "weight": row.weight,
                     "synapse_type": row.synapse_type,
                     "learning_rate": row.learning_rate,
@@ -1165,7 +1169,7 @@ async def list_neural_pathways(limit: int = 50):
             pathways = []
             for row in result:
                 pathways.append({
-                    "id": row.id,
+                    "id": str(row.id),
                     "pathway_name": row.pathway_name,
                     "neuron_sequence": _parse_json_field(row.neuron_sequence, []),
                     "activation_pattern": _parse_json_field(row.activation_pattern, []),
@@ -1253,7 +1257,7 @@ async def list_board_sessions(
             sessions = []
             for row in result:
                 sessions.append({
-                    "id": row.id,
+                    "id": str(row.id),
                     "session_name": row.session_name,
                     "participants": _parse_json_field(row.participants, []),
                     "decision_topic": row.decision_topic,
@@ -1323,8 +1327,8 @@ async def list_decisions(
             decisions = []
             for row in result:
                 decisions.append({
-                    "id": row.id,
-                    "session_id": row.session_id,
+                    "id": str(row.id),
+                    "session_id": str(row.session_id) if row.session_id is not None else None,
                     "decision_data": _parse_json_field(row.decision_data, {}),
                     "confidence_score": row.confidence_score,
                     "supporting_evidence": _parse_json_field(row.supporting_evidence, []),

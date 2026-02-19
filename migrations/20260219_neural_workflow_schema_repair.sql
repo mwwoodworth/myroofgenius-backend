@@ -204,4 +204,82 @@ UPDATE public.ai_memories
 SET content_embedding = COALESCE(to_json(vector_data)::text, '[]')
 WHERE content_embedding IS NULL;
 
+-- ============================================================================
+-- Internal service role grants/policies (prevents backend/agent RLS regressions)
+-- ============================================================================
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+    public.agent_calls,
+    public.ai_neurons,
+    public.ai_synapses,
+    public.ai_neural_pathways,
+    public.ai_board_sessions,
+    public.ai_board_logs,
+    public.ai_consensus_decisions,
+    public.ai_memory_clusters,
+    public.ai_patterns,
+    public.ai_memory_relationships
+TO app_backend_role, brainops_backend;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+    public.ai_autonomous_tasks
+TO app_agent_role, app_backend_role, brainops_backend;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'ai_memories'
+          AND policyname = 'backend_service_bypass_ai_memories'
+    ) THEN
+        EXECUTE $sql$
+            CREATE POLICY backend_service_bypass_ai_memories
+            ON public.ai_memories
+            FOR ALL
+            TO app_backend_role, brainops_backend
+            USING (true)
+            WITH CHECK (true)
+        $sql$;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'ai_autonomous_tasks'
+          AND policyname = 'backend_service_bypass_ai_autonomous_tasks'
+    ) THEN
+        EXECUTE $sql$
+            CREATE POLICY backend_service_bypass_ai_autonomous_tasks
+            ON public.ai_autonomous_tasks
+            FOR ALL
+            TO app_backend_role, app_agent_role, brainops_backend
+            USING (true)
+            WITH CHECK (true)
+        $sql$;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'neural_pathways'
+          AND policyname = 'brainops_backend_all_neural_pathways'
+    ) THEN
+        EXECUTE $sql$
+            CREATE POLICY brainops_backend_all_neural_pathways
+            ON public.neural_pathways
+            FOR ALL
+            TO brainops_backend
+            USING (true)
+            WITH CHECK (true)
+        $sql$;
+    END IF;
+END $$;
+
 COMMIT;
