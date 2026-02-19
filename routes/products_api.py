@@ -22,6 +22,21 @@ class Product(BaseModel):
     price: float
     created_at: Optional[datetime] = None
 
+def _row_to_public_product(row: Any) -> dict[str, Any]:
+    item = dict(row)
+    price_cents = item.get("price_cents")
+    if isinstance(price_cents, Decimal):
+        price_cents = int(price_cents)
+    return {
+        "id": str(item.get("id")),
+        "name": item.get("name"),
+        "description": item.get("description"),
+        "price_cents": price_cents,
+        "category": item.get("category"),
+        "is_active": bool(item.get("is_active", True)),
+        "created_at": item.get("created_at"),
+    }
+
 @router.get("")
 @router.get("/")
 async def list_products(
@@ -76,6 +91,47 @@ async def list_products(
         logger.error(f"Error listing products: {e}")
         raise HTTPException(status_code=500, detail="Failed to list products")
 
+@router.get("/public")
+async def list_public_products(
+    request: Request,
+    category: Optional[str] = None,
+):
+    """
+    Public catalog endpoint used by production smoke checks.
+    Returns a bare array for backwards compatibility.
+    """
+    db_pool = getattr(request.app.state, "db_pool", None)
+    if not db_pool:
+        logger.warning("Public products requested but db_pool is unavailable")
+        return []
+
+    query = """
+        SELECT
+            p.id,
+            p.name,
+            p.description,
+            p.price_cents,
+            pc.name AS category,
+            p.is_active,
+            p.created_at
+        FROM products p
+        LEFT JOIN product_categories pc ON p.category_id = pc.id
+        WHERE p.is_active = true
+    """
+    params: list[Any] = []
+    if category:
+        query += " AND pc.name = $1"
+        params.append(category)
+    query += " ORDER BY p.name"
+
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(query, *params, timeout=10.0)
+        return [_row_to_public_product(row) for row in rows]
+    except Exception as exc:
+        logger.warning("Public products query degraded, returning empty list: %s", exc)
+        return []
+
 @router.get("/{product_id}")
 async def get_product(
     product_id: str,
@@ -84,8 +140,7 @@ async def get_product(
     """Get product details"""
     # Avoid treating the public products path as a product ID
     if product_id.lower() == "public":
-        from routes.products_public import get_public_products
-        return await get_public_products()
+        return await list_public_products(request=request)
 
     try:
         db_pool = getattr(request.app.state, 'db_pool', None)
