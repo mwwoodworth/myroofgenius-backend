@@ -72,19 +72,19 @@ echo ""
 echo "Step 4: Wait for Render deploy to go live..."
 for i in {1..30}; do
   sleep 10
-  STATUS_RESPONSE="$(curl -s \"https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}\" \
-    -H \"Authorization: Bearer ${RENDER_API_KEY}\" \
-    -H \"Content-Type: application/json\" || true)"
-  LIVE_STATUS="$(echo \"$STATUS_RESPONSE\" | jq -r '.status // \"unknown\"' 2>/dev/null || echo unknown)"
-  if [ \"$LIVE_STATUS\" = \"live\" ]; then
+  STATUS_RESPONSE="$(curl -s "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
+    -H "Authorization: Bearer ${RENDER_API_KEY}" \
+    -H "Content-Type: application/json" || true)"
+  LIVE_STATUS="$(echo "$STATUS_RESPONSE" | jq -r '.status // "unknown"' 2>/dev/null || echo unknown)"
+  if [ "$LIVE_STATUS" = "live" ]; then
     break
   fi
-  if [ \"$LIVE_STATUS\" = \"failed\" ] || [ \"$LIVE_STATUS\" = \"canceled\" ]; then
-    echo \"ERROR: Render deploy status: $LIVE_STATUS\" >&2
-    echo \"$STATUS_RESPONSE\" | jq . 2>/dev/null || echo \"$STATUS_RESPONSE\" >&2
+  if [ "$LIVE_STATUS" = "failed" ] || [ "$LIVE_STATUS" = "build_failed" ] || [ "$LIVE_STATUS" = "canceled" ]; then
+    echo "ERROR: Render deploy status: $LIVE_STATUS" >&2
+    echo "$STATUS_RESPONSE" | jq . 2>/dev/null || echo "$STATUS_RESPONSE" >&2
     exit 1
   fi
-  echo \"  Render status: $LIVE_STATUS\"
+  echo "  Render status: $LIVE_STATUS"
 done
 
 echo ""
@@ -100,11 +100,10 @@ for j in {1..24}; do
 done
 
 echo "Post-deploy version: ${POST_VERSION:-unknown}"
-if [ \"$POST_VERSION\" = \"$VERSION\" ]; then
-  echo \"✅ SUCCESS: v$VERSION deployed\"
+if [ "$POST_VERSION" = "$VERSION" ]; then
+  echo "✅ SUCCESS: v$VERSION deployed"
 else
-  echo \"⚠️  Could not confirm version changed to v$VERSION via /health\" >&2
-  echo \"   Expected: $VERSION\" >&2
-  echo \"   Current:  ${POST_VERSION:-unknown}\" >&2
+  echo "⚠️  Could not confirm version changed to v$VERSION via /health" >&2
+  echo "   Expected: $VERSION" >&2
+  echo "   Current:  ${POST_VERSION:-unknown}" >&2
 fi
-
