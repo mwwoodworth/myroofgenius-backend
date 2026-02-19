@@ -1660,16 +1660,48 @@ class MetacognitiveController:
 
     async def _record_reflection(self, reflection: Dict[str, Any]):
         """Record a reflection to the database"""
-        await self._db_execute_with_retry(
-            """
-            INSERT INTO brainops_reflections
-            (topic, content, insights, created_at)
-            VALUES ($1, $2, $3, NOW())
-        """,
-            reflection.get("topic"),
-            json.dumps(reflection, cls=DateTimeEncoder),
-            json.dumps(reflection.get("insights", []), cls=DateTimeEncoder),
-        )
+        insights_payload = reflection.get("insights")
+        if not insights_payload:
+            insights_payload = reflection.get("learning_insights", [])
+
+        observations_payload = {
+            "recent_activity": reflection.get("recent_activity", {}),
+            "metrics_summary": reflection.get("metrics_summary", {}),
+        }
+        actions_payload = {
+            "proactive_insights": reflection.get("proactive_insights", []),
+            "self_assessment": reflection.get("self_assessment", {}),
+        }
+
+        # Live prod schema uses controller_id/reflection_type/trigger/observations/actions_taken.
+        # Keep a fallback for legacy schemas that still use topic/content.
+        try:
+            await self._db_execute_with_retry(
+                """
+                INSERT INTO brainops_reflections
+                (controller_id, reflection_type, trigger, observations, insights, actions_taken, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            """,
+                self.id,
+                "periodic",
+                reflection.get("topic"),
+                json.dumps(observations_payload, cls=DateTimeEncoder),
+                json.dumps(insights_payload, cls=DateTimeEncoder),
+                json.dumps(actions_payload, cls=DateTimeEncoder),
+            )
+        except Exception as e:
+            if "column" not in str(e).lower():
+                raise
+            await self._db_execute_with_retry(
+                """
+                INSERT INTO brainops_reflections
+                (topic, content, insights, created_at)
+                VALUES ($1, $2, $3, NOW())
+            """,
+                reflection.get("topic"),
+                json.dumps(reflection, cls=DateTimeEncoder),
+                json.dumps(insights_payload, cls=DateTimeEncoder),
+            )
 
     async def reset(self):
         """Reset the entire system (use with caution)"""
