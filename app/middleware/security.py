@@ -298,6 +298,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     def _get_internal_keys(self) -> Sequence[str]:
         """Support key rotation by accepting active + previous internal keys."""
         candidates = [
+            os.getenv("MASTER_API_KEY"),
+            os.getenv("MASTER_API_KEY_PREVIOUS"),
+            os.getenv("BRAINOPS_API_KEY"),
+            os.getenv("BRAINOPS_API_KEY_PREVIOUS"),
             os.getenv("BACKEND_INTERNAL_API_KEY"),
             os.getenv("BACKEND_INTERNAL_API_KEY_PREVIOUS"),
             os.getenv("INTERNAL_API_KEY"),
@@ -331,16 +335,32 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             async with db_pool.acquire() as conn:
                 record = await conn.fetchrow(
                     """
-                    UPDATE api_keys
-                    SET last_used_at = NOW(),
-                        usage_count = COALESCE(usage_count, 0) + 1
+                    SELECT expires_at, tenant_id
+                    FROM api_keys
                     WHERE id = $1
                       AND (is_active IS NULL OR is_active = TRUE)
                       AND (expires_at IS NULL OR expires_at > NOW())
-                    RETURNING expires_at, tenant_id
                     """,
                     cache_entry.key_id,
                 )
+
+                if record:
+                    # Best-effort telemetry update; do not fail auth if write
+                    # privileges are intentionally restricted.
+                    try:
+                        await conn.execute(
+                            """
+                            UPDATE api_keys
+                            SET last_used_at = NOW(),
+                                usage_count = COALESCE(usage_count, 0) + 1
+                            WHERE id = $1
+                            """,
+                            cache_entry.key_id,
+                        )
+                    except Exception as usage_error:
+                        logger.debug(
+                            "API key usage telemetry update skipped: %s", usage_error
+                        )
         except Exception as error:
             logger.error("API key usage update error: %s", error)
             return False
@@ -368,16 +388,33 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             async with db_pool.acquire() as conn:
                 record = await conn.fetchrow(
                     """
-                    UPDATE api_keys
-                    SET last_used_at = NOW(),
-                        usage_count = COALESCE(usage_count, 0) + 1
+                    SELECT id, expires_at, tenant_id
+                    FROM api_keys
                     WHERE key_hash = $1
                       AND (is_active IS NULL OR is_active = TRUE)
                       AND (expires_at IS NULL OR expires_at > NOW())
-                    RETURNING id, expires_at, tenant_id
+                    LIMIT 1
                     """,
                     key_hash,
                 )
+
+                if record:
+                    # Best-effort telemetry update; avoid auth failures on
+                    # restricted write paths.
+                    try:
+                        await conn.execute(
+                            """
+                            UPDATE api_keys
+                            SET last_used_at = NOW(),
+                                usage_count = COALESCE(usage_count, 0) + 1
+                            WHERE id = $1
+                            """,
+                            record["id"],
+                        )
+                    except Exception as usage_error:
+                        logger.debug(
+                            "API key usage telemetry update skipped: %s", usage_error
+                        )
         except Exception as error:
             logger.error("API key validation error: %s", error)
             return None
