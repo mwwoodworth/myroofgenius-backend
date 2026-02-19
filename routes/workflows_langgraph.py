@@ -5,6 +5,7 @@ Endpoints for executing and monitoring AI-powered workflows
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
+from uuid import UUID
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ async def execute_estimate_workflow(
 
 @router.get("/status/{workflow_id}")
 async def get_workflow_status(
-    workflow_id: str,
+    workflow_id: UUID,
     db_pool = Depends(get_db_pool)
 ):
     """
@@ -86,7 +87,7 @@ async def get_workflow_status(
             ) from import_error
 
         state_manager = WorkflowStateManager(db_pool)
-        status = await state_manager.get_workflow_status(workflow_id)
+        status = await state_manager.get_workflow_status(str(workflow_id))
         return status
 
     except ValueError as e:
