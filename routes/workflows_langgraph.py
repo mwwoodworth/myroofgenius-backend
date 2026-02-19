@@ -87,7 +87,12 @@ async def get_workflow_status(
             ) from import_error
 
         state_manager = WorkflowStateManager(db_pool)
-        status = await state_manager.get_workflow_status(str(workflow_id))
+        try:
+            normalized_workflow_id = str(UUID(str(workflow_id)))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid workflow_id format. Expected UUID.")
+
+        status = await state_manager.get_workflow_status(normalized_workflow_id)
         return status
 
     except ValueError as e:
