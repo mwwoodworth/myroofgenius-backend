@@ -670,24 +670,230 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     # PUBLIC API
     # =========================================================================
 
-    async def get_opportunities(self) -> List[Dict[str, Any]]:
-        """Get current opportunities"""
-        now = datetime.now()
+    @staticmethod
+    def _coerce_json(value: Any, default: Any) -> Any:
+        """Normalize JSON/jsonb payloads from asyncpg rows."""
+        if value is None:
+            return default
+        if isinstance(value, (dict, list)):
+            return value
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except Exception:
+                return default
+        return default
+
+    async def get_opportunities(
+        self,
+        opportunity_type: Optional[str] = None,
+        min_score: float = 0.0,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Get opportunities with optional filtering."""
+        safe_limit = max(1, min(limit, 100))
+        safe_min_score = max(0.0, min(min_score, 1.0))
+
+        try:
+            rows = await self._db_fetch_with_retry(
+                """
+                SELECT
+                    opportunity_id,
+                    opportunity_type,
+                    title,
+                    description,
+                    potential_value,
+                    confidence,
+                    urgency,
+                    recommended_actions,
+                    context,
+                    created_at,
+                    expires_at,
+                    acted_upon
+                FROM brainops_opportunities
+                WHERE ($1::text IS NULL OR opportunity_type = $1)
+                  AND COALESCE(confidence, 0) >= $2
+                  AND COALESCE(acted_upon, false) = false
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                ORDER BY COALESCE(urgency, 0) DESC, COALESCE(confidence, 0) DESC, created_at DESC
+                LIMIT $3
+            """,
+                opportunity_type,
+                safe_min_score,
+                safe_limit,
+            )
+        except Exception as e:
+            logger.warning(f"Opportunity query fallback to in-memory cache: {e}")
+            now = datetime.now()
+            cached = [
+                {
+                    "id": opp.id,
+                    "type": opp.type.value,
+                    "title": opp.title,
+                    "description": opp.description,
+                    "potential_value": opp.potential_value,
+                    "confidence": opp.confidence,
+                    "urgency": opp.urgency,
+                    "priority": 0 if opp.urgency > 0.8 else (1 if opp.urgency > 0.5 else 2),
+                    "actions": opp.recommended_actions,
+                    "context": opp.context,
+                    "created_at": opp.detected_at.isoformat()
+                    if hasattr(opp.detected_at, "isoformat")
+                    else opp.detected_at,
+                    "expires_at": opp.expires_at.isoformat()
+                    if getattr(opp, "expires_at", None) and hasattr(opp.expires_at, "isoformat")
+                    else opp.expires_at,
+                    "acted_upon": opp.acted_upon,
+                }
+                for opp in self.opportunities.values()
+                if not opp.acted_upon and (not opp.expires_at or opp.expires_at > now)
+            ]
+            if opportunity_type:
+                cached = [c for c in cached if c.get("type") == opportunity_type]
+            cached = [c for c in cached if float(c.get("confidence") or 0) >= safe_min_score]
+            return cached[:safe_limit]
+
+        opportunities: List[Dict[str, Any]] = []
+        for row in rows:
+            urgency = float(row["urgency"] or 0)
+            confidence = float(row["confidence"] or 0)
+            opportunities.append(
+                {
+                    "id": row["opportunity_id"],
+                    "type": row["opportunity_type"],
+                    "title": row["title"],
+                    "description": row["description"],
+                    "potential_value": float(row["potential_value"] or 0),
+                    "confidence": confidence,
+                    "urgency": urgency,
+                    "priority": 0 if urgency > 0.8 else (1 if urgency > 0.5 else 2),
+                    "actions": self._coerce_json(row["recommended_actions"], []),
+                    "context": self._coerce_json(row["context"], {}),
+                    "created_at": row["created_at"].isoformat()
+                    if row["created_at"] and hasattr(row["created_at"], "isoformat")
+                    else row["created_at"],
+                    "expires_at": row["expires_at"].isoformat()
+                    if row["expires_at"] and hasattr(row["expires_at"], "isoformat")
+                    else row["expires_at"],
+                    "acted_upon": bool(row["acted_upon"]),
+                }
+            )
+        return opportunities
+
+    async def get_predictions(
+        self,
+        prediction_type: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Get stored predictions with optional type filtering."""
+        safe_limit = max(1, min(limit, 100))
+        rows = await self._db_fetch_with_retry(
+            """
+            SELECT
+                prediction_id,
+                prediction_type,
+                target,
+                probability,
+                timeframe,
+                impact,
+                preventive_actions,
+                verified,
+                created_at,
+                verified_at
+            FROM brainops_predictions
+            WHERE ($1::text IS NULL OR prediction_type = $1)
+            ORDER BY created_at DESC
+            LIMIT $2
+        """,
+            prediction_type,
+            safe_limit,
+        )
+
+        predictions: List[Dict[str, Any]] = []
+        for row in rows:
+            predictions.append(
+                {
+                    "id": row["prediction_id"],
+                    "type": row["prediction_type"],
+                    "target": row["target"],
+                    "probability": float(row["probability"] or 0),
+                    "timeframe": row["timeframe"],
+                    "impact": float(row["impact"] or 0),
+                    "preventive_actions": self._coerce_json(row["preventive_actions"], []),
+                    "verified": row["verified"],
+                    "created_at": row["created_at"].isoformat()
+                    if row["created_at"] and hasattr(row["created_at"], "isoformat")
+                    else row["created_at"],
+                    "verified_at": row["verified_at"].isoformat()
+                    if row["verified_at"] and hasattr(row["verified_at"], "isoformat")
+                    else row["verified_at"],
+                }
+            )
+        return predictions
+
+    async def get_insights(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get latest proactive insights for controller/routes."""
+        safe_limit = max(1, min(limit, 100))
+        rows = await self._db_fetch_with_retry(
+            """
+            SELECT
+                id,
+                insight_type,
+                title,
+                description,
+                data_source,
+                confidence,
+                actionable,
+                created_at
+            FROM brainops_insights
+            ORDER BY created_at DESC
+            LIMIT $1
+        """,
+            safe_limit,
+        )
+
         return [
             {
-                "id": opp.id,
-                "type": opp.type.value,
-                "title": opp.title,
-                "description": opp.description,
-                "potential_value": opp.potential_value,
-                "confidence": opp.confidence,
-                "urgency": opp.urgency,
-                "priority": 0 if opp.urgency > 0.8 else (1 if opp.urgency > 0.5 else 2),
-                "actions": opp.recommended_actions,
+                "id": str(row["id"]),
+                "type": row["insight_type"],
+                "title": row["title"],
+                "description": row["description"],
+                "data_source": row["data_source"],
+                "confidence": float(row["confidence"] or 0),
+                "actionable": bool(row["actionable"]),
+                "created_at": row["created_at"].isoformat()
+                if row["created_at"] and hasattr(row["created_at"], "isoformat")
+                else row["created_at"],
             }
-            for opp in self.opportunities.values()
-            if not opp.acted_upon and (not opp.expires_at or opp.expires_at > now)
+            for row in rows
         ]
+
+    async def scan(self, scan_type: Optional[str] = None) -> Dict[str, Any]:
+        """Run proactive scans on demand."""
+        normalized = (scan_type or "all").strip().lower()
+        allowed = {"all", "opportunities", "predictions", "insights"}
+        if normalized not in allowed:
+            raise ValueError(
+                f"Invalid scan_type '{scan_type}'. Allowed: {', '.join(sorted(allowed))}"
+            )
+
+        executed: List[str] = []
+        if normalized in {"all", "opportunities"}:
+            await self._scan_for_opportunities()
+            executed.append("opportunities")
+        if normalized in {"all", "predictions"}:
+            await self._generate_predictions()
+            executed.append("predictions")
+        if normalized in {"all", "insights"}:
+            await self._generate_insights()
+            executed.append("insights")
+
+        return {
+            "status": "completed",
+            "scan_type": normalized,
+            "executed": executed,
+            "timestamp": f"{datetime.utcnow().isoformat()}Z",
+        }
 
     async def process_prediction(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Process prediction request from controller"""
