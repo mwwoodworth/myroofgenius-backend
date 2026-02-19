@@ -160,9 +160,19 @@ async def _refresh_brain_status_timestamp(force_refresh: bool = False) -> Option
     return _last_brain_status_timestamp
 
 
-async def get_effective_brain_timestamp(force_refresh: bool = False) -> Optional[str]:
-    """Return the freshest known timestamp across local writes and remote brain status."""
+async def get_effective_brain_timestamp(
+    force_refresh: bool = False,
+    prefer_remote_status: bool = True,
+) -> Optional[str]:
+    """Return the effective brain timestamp for health/telemetry reporting.
+
+    In multi-instance production, in-process local write timestamps can drift between
+    instances. Prefer the central AI Agents `/brain/status` timestamp for a more
+    consistent cross-instance value, with local timestamp as fallback.
+    """
     status_timestamp = await _refresh_brain_status_timestamp(force_refresh=force_refresh)
+    if prefer_remote_status and status_timestamp:
+        return status_timestamp
     return _newer_iso_timestamp(_last_brain_store_timestamp, status_timestamp)
 
 

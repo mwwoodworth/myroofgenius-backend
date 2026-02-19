@@ -733,14 +733,17 @@ def _database_connection_snapshot() -> Dict[str, int]:
         return {"size": 0, "idle": 0, "active": 0}
 
 
-async def _runtime_health_metadata() -> Dict[str, Any]:
+async def _runtime_health_metadata(force_brain_refresh: bool = False) -> Dict[str, Any]:
     started_at = getattr(app.state, "started_at", None)
     uptime_seconds = 0
     if isinstance(started_at, datetime):
         uptime_seconds = max(int((datetime.now(timezone.utc) - started_at).total_seconds()), 0)
 
     db_connections = _database_connection_snapshot()
-    effective_brain_timestamp = await get_effective_brain_timestamp()
+    effective_brain_timestamp = await get_effective_brain_timestamp(
+        force_refresh=force_brain_refresh,
+        prefer_remote_status=True,
+    )
     return {
         "uptime_seconds": uptime_seconds,
         "total_requests_served": int(getattr(app.state, "total_requests_served", 0)),
@@ -761,7 +764,7 @@ async def health_check():
             "database": "skipped",
             "offline_mode": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **(await _runtime_health_metadata()),
+            **(await _runtime_health_metadata(force_brain_refresh=False)),
         }
 
     if OFFLINE_MODE:
@@ -771,7 +774,7 @@ async def health_check():
             "database": "offline",
             "offline_mode": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **(await _runtime_health_metadata()),
+            **(await _runtime_health_metadata(force_brain_refresh=False)),
         }
 
     probe = await _probe_database(timeout=1.0)
@@ -782,7 +785,7 @@ async def health_check():
         "database_latency_ms": probe["latency_ms"],
         "offline_mode": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        **(await _runtime_health_metadata()),
+        **(await _runtime_health_metadata(force_brain_refresh=False)),
     }
 
 
@@ -809,7 +812,7 @@ async def api_health_check():
             "cns_info": {},
             "pool_active": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **(await _runtime_health_metadata()),
+            **(await _runtime_health_metadata(force_brain_refresh=True)),
         }
 
     offline = OFFLINE_MODE
@@ -905,7 +908,7 @@ async def api_health_check():
         "cns_info": cns_info,
         "pool_active": pool_exists,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        **(await _runtime_health_metadata()),
+        **(await _runtime_health_metadata(force_brain_refresh=True)),
     }
 
     # Return appropriate HTTP status based on health
