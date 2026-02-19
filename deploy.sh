@@ -92,9 +92,9 @@ echo "Step 5: Verify /health reflects new version..."
 POST_VERSION=""
 for j in {1..24}; do
   sleep 5
-  HEALTH="$(curl -s \"$HEALTH_URL\" 2>/dev/null || true)"
-  POST_VERSION="$(echo \"$HEALTH\" | jq -r '.version // empty' 2>/dev/null | tr -d '[:space:]' || true)"
-  if [ -n \"${POST_VERSION:-}\" ] && [ \"$POST_VERSION\" != \"${PRE_VERSION:-}\" ]; then
+  HEALTH="$(curl -s "$HEALTH_URL" 2>/dev/null || true)"
+  POST_VERSION="$(echo "$HEALTH" | jq -r '.version // empty' 2>/dev/null | tr -d '[:space:]' || true)"
+  if [ -n "${POST_VERSION:-}" ] && [ "$POST_VERSION" != "${PRE_VERSION:-}" ]; then
     break
   fi
 done
