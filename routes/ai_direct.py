@@ -20,22 +20,49 @@ class AIRequest(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 500
+    allow_fallback: Optional[bool] = True
+
+
+async def _run_provider(provider: str, request: AIRequest):
+    if provider == "openai":
+        return await analyze_with_openai(request)
+    if provider == "anthropic":
+        return await analyze_with_anthropic(request)
+    if provider == "gemini":
+        return await analyze_with_gemini(request)
+    raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
 
 @router.post("/analyze")
 async def analyze_with_ai(request: AIRequest):
     """Direct AI analysis using configured providers"""
+    provider = (request.provider or "openai").lower()
     try:
-        if request.provider == "openai":
-            return await analyze_with_openai(request)
-        elif request.provider == "anthropic":
-            return await analyze_with_anthropic(request)
-        elif request.provider == "gemini":
-            return await analyze_with_gemini(request)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown provider: {request.provider}")
+        return await _run_provider(provider, request)
+    except HTTPException as primary_error:
+        if not request.allow_fallback or provider == "gemini":
+            raise
+
+        # Reliability-first fallback path: if the requested provider fails,
+        # try Gemini first (currently the most dependable provider in prod).
+        fallback_chain = [p for p in ("gemini", "anthropic", "openai") if p != provider]
+        for fallback_provider in fallback_chain:
+            try:
+                fallback_result = await _run_provider(fallback_provider, request)
+                if isinstance(fallback_result, dict):
+                    fallback_result["fallback"] = {
+                        "used": True,
+                        "requested_provider": provider,
+                        "actual_provider": fallback_provider,
+                        "reason": str(primary_error.detail),
+                    }
+                return fallback_result
+            except HTTPException:
+                continue
+
+        raise primary_error
     except Exception as e:
         logger.error(f"AI analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="AI analysis failed")
 
 async def analyze_with_openai(request: AIRequest):
     """Use OpenAI API directly"""

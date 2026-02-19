@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import json
 import logging
+from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -20,6 +21,14 @@ def get_db_session():
         yield db
     finally:
         db.close()
+
+
+def _safe_scalar(db: Session, query: str, params: Dict[str, Any], default: Any = 0) -> Any:
+    try:
+        value = db.execute(text(query), params).scalar()
+        return value if value is not None else default
+    except Exception:
+        return default
 
 class LeadCapture(BaseModel):
     email: str
@@ -240,6 +249,118 @@ def get_revenue_dashboard(
     except Exception as e:
         logger.error(f"Error getting revenue dashboard: {e}")
         raise HTTPException(status_code=500, detail="Failed to load revenue dashboard")
+
+
+@router.get("/pipeline")
+def get_revenue_pipeline(
+    db: Session = Depends(get_db_session),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
+    """Get high-level revenue pipeline metrics (lead -> customer conversion view)."""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    try:
+        total_leads = int(
+            _safe_scalar(
+                db,
+                "SELECT COUNT(*) FROM leads WHERE tenant_id = :tenant_id",
+                {"tenant_id": tenant_id},
+                0,
+            )
+        )
+        leads_30d = int(
+            _safe_scalar(
+                db,
+                """
+                SELECT COUNT(*)
+                FROM leads
+                WHERE tenant_id = :tenant_id
+                  AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                """,
+                {"tenant_id": tenant_id},
+                0,
+            )
+        )
+        new_customers_30d = int(
+            _safe_scalar(
+                db,
+                """
+                SELECT COUNT(*)
+                FROM customers
+                WHERE tenant_id = :tenant_id
+                  AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                """,
+                {"tenant_id": tenant_id},
+                0,
+            )
+        )
+        paid_revenue_30d = float(
+            _safe_scalar(
+                db,
+                """
+                SELECT COALESCE(SUM(COALESCE(total_amount, 0)), 0)
+                FROM invoices
+                WHERE tenant_id = :tenant_id
+                  AND (status = 'paid' OR payment_status = 'paid')
+                  AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                """,
+                {"tenant_id": tenant_id},
+                0.0,
+            )
+        )
+
+        conversion_rate_30d = 0.0
+        if leads_30d > 0:
+            conversion_rate_30d = round((new_customers_30d / leads_30d) * 100, 2)
+
+        return {
+            "tenant_id": tenant_id,
+            "total_leads": total_leads,
+            "leads_30d": leads_30d,
+            "new_customers_30d": new_customers_30d,
+            "conversion_rate_30d": conversion_rate_30d,
+            "paid_revenue_30d": round(paid_revenue_30d, 2),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+    except Exception as e:
+        logger.error(f"Error getting revenue pipeline: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load revenue pipeline")
+
+
+@router.get("/status")
+def get_revenue_status(
+    db: Session = Depends(get_db_session),
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+):
+    """Lightweight revenue subsystem status endpoint for operational checks."""
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant assignment required")
+
+    try:
+        dashboard = get_revenue_dashboard(db=db, current_user=current_user)
+        pipeline = get_revenue_pipeline(db=db, current_user=current_user)
+        return {
+            "status": "operational",
+            "tenant_id": tenant_id,
+            "dashboard": {
+                "mrr": dashboard.get("mrr"),
+                "arr": dashboard.get("arr"),
+                "active_subscriptions": dashboard.get("active_subscriptions"),
+                "total_revenue": dashboard.get("total_revenue"),
+            },
+            "pipeline": {
+                "total_leads": pipeline.get("total_leads"),
+                "leads_30d": pipeline.get("leads_30d"),
+                "conversion_rate_30d": pipeline.get("conversion_rate_30d"),
+            },
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+    except Exception as e:
+        logger.error(f"Error getting revenue status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load revenue status")
 
 @router.get("/metrics")
 def get_metrics(
