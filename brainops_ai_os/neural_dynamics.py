@@ -900,6 +900,81 @@ class DynamicNeuralNetwork(ResilientSubsystem):
     # PUBLIC API
     # =========================================================================
 
+    async def activate(
+        self, pattern: str, context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Compatibility method used by /brainops/neural/activate route.
+
+        Activates the network by routing a pattern/context payload through
+        the existing routing + neuron activation flow.
+        """
+        safe_context = context or {}
+        task_payload = {"pattern": pattern, "context": safe_context}
+        activated_agents = await self.route_to_agents(task_payload, safe_context)
+
+        return {
+            "pattern": pattern,
+            "activated_agents": activated_agents,
+            "activation_count": len(activated_agents),
+            "activity_level": await self.get_activity_level(),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    async def get_pathways(
+        self, min_strength: float = 0.5, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Return strongest neural pathways (synapses) for observability."""
+        safe_limit = max(1, min(limit, 500))
+        safe_min_strength = max(0.0, min(min_strength, 1.0))
+
+        pathways: List[Dict[str, Any]] = []
+        for synapse in self.synapses.values():
+            if synapse.weight < safe_min_strength:
+                continue
+            source = self.neurons.get(synapse.source_id)
+            target = self.neurons.get(synapse.target_id)
+            pathways.append(
+                {
+                    "id": synapse.id,
+                    "source_id": synapse.source_id,
+                    "target_id": synapse.target_id,
+                    "source_agent_id": source.agent_id if source else None,
+                    "target_agent_id": target.agent_id if target else None,
+                    "weight": synapse.weight,
+                    "plasticity": synapse.plasticity,
+                    "state": synapse.state.value if hasattr(synapse.state, "value") else str(synapse.state),
+                    "co_activation_count": synapse.co_activation_count,
+                    "last_active": synapse.last_active.isoformat()
+                    if synapse.last_active
+                    else None,
+                }
+            )
+
+        pathways.sort(key=lambda p: p.get("weight", 0), reverse=True)
+        return pathways[:safe_limit]
+
+    async def get_clusters(self) -> List[Dict[str, Any]]:
+        """Return emergent neural clusters."""
+        clusters: List[Dict[str, Any]] = []
+        for cluster in self.clusters.values():
+            clusters.append(
+                {
+                    "id": cluster.id,
+                    "name": cluster.name,
+                    "specialization": cluster.specialization,
+                    "size": len(cluster.neuron_ids),
+                    "neuron_ids": sorted(cluster.neuron_ids),
+                    "activation_pattern": cluster.activation_pattern,
+                    "created_at": cluster.created_at.isoformat()
+                    if cluster.created_at
+                    else None,
+                }
+            )
+
+        clusters.sort(key=lambda c: c.get("size", 0), reverse=True)
+        return clusters
+
     async def get_health(self) -> Dict[str, Any]:
         """Get neural network health"""
         active_tasks = sum(1 for t in self._tasks if not t.done())
