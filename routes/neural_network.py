@@ -45,6 +45,25 @@ class _EngineProxy:
 
 engine = _EngineProxy()
 
+
+def _parse_json_field(value, default):
+    """Parse DB values that may be json/jsonb, text JSON, or native arrays."""
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        payload = value.strip()
+        if not payload:
+            return default
+        try:
+            return json.loads(payload)
+        except Exception:
+            return default
+    return default
+
 # Pydantic Models
 class NeuronCreate(BaseModel):
     neuron_type: str = Field(..., description="Type of neuron (input, hidden, output)")
@@ -226,7 +245,7 @@ class NeuralNetworkProcessor:
             """))
             
             for row in neuron_result:
-                metadata = json.loads(row.metadata) if row.metadata else None
+                metadata = _parse_json_field(row.metadata, None)
                 self.neurons[row.id] = Neuron(
                     id=row.id,
                     neuron_type=row.neuron_type,
@@ -634,8 +653,8 @@ class MemoryProcessor:
                 "type": memory_data.memory_type,
                 "content": json.dumps(memory_data.content),
                 "importance": memory_data.importance_score,
-                "tags": json.dumps(memory_data.tags),
-                "associations": json.dumps(memory_data.associations),
+                "tags": memory_data.tags,
+                "associations": json.dumps(memory_data.associations or []),
                 "embedding": json.dumps(embedding)
             })
             conn.commit()
@@ -652,8 +671,11 @@ class MemoryProcessor:
         with engine.connect() as conn:
             # Get memories with similarity search
             result = conn.execute(text("""
-                SELECT id, memory_type, content, importance_score, tags, 
-                       associations, content_embedding, created_at
+                SELECT id, memory_type, content, importance_score,
+                       CASE WHEN tags IS NULL THEN '[]' ELSE to_json(tags)::text END AS tags_json,
+                       COALESCE(associations, '[]') AS associations_json,
+                       COALESCE(content_embedding, '[]') AS content_embedding_json,
+                       created_at
                 FROM ai_memories 
                 WHERE (:memory_type IS NULL OR memory_type = :memory_type)
                 AND importance_score >= :min_importance
@@ -668,17 +690,19 @@ class MemoryProcessor:
             memories = []
             for row in result:
                 # Calculate similarity (simplified cosine similarity)
-                stored_embedding = json.loads(row.content_embedding)
+                stored_embedding = _parse_json_field(row.content_embedding_json, [])
+                if not isinstance(stored_embedding, list):
+                    stored_embedding = []
                 similarity = await self._calculate_similarity(query_embedding, stored_embedding)
                 
                 if similarity >= recall_request.similarity_threshold:
                     memories.append({
                         "id": row.id,
                         "memory_type": row.memory_type,
-                        "content": json.loads(row.content),
+                        "content": _parse_json_field(row.content, {}),
                         "importance_score": row.importance_score,
-                        "tags": json.loads(row.tags),
-                        "associations": json.loads(row.associations),
+                        "tags": _parse_json_field(row.tags_json, []),
+                        "associations": _parse_json_field(row.associations_json, []),
                         "similarity": similarity,
                         "created_at": row.created_at
                     })
@@ -696,15 +720,17 @@ class MemoryProcessor:
         with engine.connect() as conn:
             for memory_id in cluster_data.memory_ids:
                 result = conn.execute(text("""
-                    SELECT id, content, content_embedding FROM ai_memories WHERE id = :id
+                    SELECT id, content, COALESCE(content_embedding, '[]') AS content_embedding_json
+                    FROM ai_memories
+                    WHERE id = :id
                 """), {"id": memory_id})
                 
                 row = result.fetchone()
                 if row:
                     memories.append({
                         "id": row.id,
-                        "content": json.loads(row.content),
-                        "embedding": json.loads(row.content_embedding)
+                        "content": _parse_json_field(row.content, {}),
+                        "embedding": _parse_json_field(row.content_embedding_json, [])
                     })
         
         # Apply clustering algorithm
@@ -740,7 +766,9 @@ class MemoryProcessor:
         with engine.connect() as conn:
             # Get recent memories for pattern analysis
             result = conn.execute(text("""
-                SELECT id, memory_type, content, tags, importance_score, created_at
+                SELECT id, memory_type, content,
+                       CASE WHEN tags IS NULL THEN '[]' ELSE to_json(tags)::text END AS tags_json,
+                       importance_score, created_at
                 FROM ai_memories 
                 WHERE created_at >= NOW() - INTERVAL '7 days'
                 ORDER BY importance_score DESC
@@ -752,8 +780,8 @@ class MemoryProcessor:
                 memories.append({
                     "id": row.id,
                     "memory_type": row.memory_type,
-                    "content": json.loads(row.content),
-                    "tags": json.loads(row.tags),
+                    "content": _parse_json_field(row.content, {}),
+                    "tags": _parse_json_field(row.tags_json, []),
                     "importance_score": row.importance_score,
                     "created_at": row.created_at
                 })
@@ -953,7 +981,7 @@ async def list_neurons(
                     "activation_function": row.activation_function,
                     "threshold": row.threshold,
                     "current_value": row.current_value or 0.0,
-                    "metadata": json.loads(row.metadata) if row.metadata else None,
+                    "metadata": _parse_json_field(row.metadata, None),
                     "created_at": row.created_at,
                     "updated_at": row.updated_at
                 })
@@ -1139,8 +1167,8 @@ async def list_neural_pathways(limit: int = 50):
                 pathways.append({
                     "id": row.id,
                     "pathway_name": row.pathway_name,
-                    "neuron_sequence": json.loads(row.neuron_sequence),
-                    "activation_pattern": json.loads(row.activation_pattern),
+                    "neuron_sequence": _parse_json_field(row.neuron_sequence, []),
+                    "activation_pattern": _parse_json_field(row.activation_pattern, []),
                     "total_strength": row.total_strength,
                     "created_at": row.created_at
                 })
@@ -1227,7 +1255,7 @@ async def list_board_sessions(
                 sessions.append({
                     "id": row.id,
                     "session_name": row.session_name,
-                    "participants": json.loads(row.participants),
+                    "participants": _parse_json_field(row.participants, []),
                     "decision_topic": row.decision_topic,
                     "voting_method": row.voting_method,
                     "status": row.status,
@@ -1297,9 +1325,9 @@ async def list_decisions(
                 decisions.append({
                     "id": row.id,
                     "session_id": row.session_id,
-                    "decision_data": json.loads(row.decision_data),
+                    "decision_data": _parse_json_field(row.decision_data, {}),
                     "confidence_score": row.confidence_score,
-                    "supporting_evidence": json.loads(row.supporting_evidence),
+                    "supporting_evidence": _parse_json_field(row.supporting_evidence, []),
                     "status": row.status,
                     "created_at": row.created_at
                 })
