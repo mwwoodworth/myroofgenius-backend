@@ -28,5 +28,9 @@ venv/
 CLAUDE.md
 node_modules/
 
+# Test coverage
+.coverage
+htmlcov/
+
 # OS_XRAY evidence packs (live in ~/dev/reports/)
 reports/

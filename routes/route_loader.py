@@ -93,6 +93,21 @@ EXCLUDED_MODULES = {
     "stripe_automation",  # redundant, already handled by canonical
     "webhooks",  # /revenue/webhook has zero auth
     "payment_processing",  # /webhook/stripe uses Dict body (sig impossible)
+    
+    # HALLUCINATION CONTAINMENT PROTOCOL (2026-02-19)
+    # These modules reference non-existent database tables and cause startup instability.
+    # They are excluded until proper migrations are applied.
+    "ab_testing", "asset_allocation", "asset_analytics", "asset_disposal", 
+    "asset_registry", "asset_valuation", "budget_tracking", "collections_workflow", 
+    "content_management", "customer_feedback", "data_governance", "data_warehouse", 
+    "gantt_charts", "google_ads_automation", "hr_management", "incident_reporting", 
+    "inspection_management", "kpi_tracking", "lead_capture_ml", "leave_management_extended", 
+    "milestone_tracking", "opportunity_tracking", "overtime_tracking", "performance_metrics", 
+    "project_creation", "project_planning", "purchase_orders", "purchase_requisitions", 
+    "push_notifications", "quality_control", "recruitment", "resource_allocation", 
+    "revenue_dashboard", "risk_assessment", "risk_management", "risk_mitigation", 
+    "scheduled_tasks", "shift_management", "sla_tracking", "warehouse_management", 
+    "warranty_tracking", "workflow_automation"
 }
 
 
