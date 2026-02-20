@@ -34,7 +34,11 @@ from config import get_database_url, settings
 from middleware.authentication import AuthenticationMiddleware
 from middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.security import APIKeyMiddleware
-from core.brain_store import get_effective_brain_timestamp, store_api_insight, store_event
+from core.brain_store import (
+    get_effective_brain_timestamp,
+    store_api_insight,
+    store_event,
+)
 from database import get_db  # Legacy import path used by many route modules
 
 # Configure logging
@@ -47,7 +51,9 @@ DATABASE_URL = None if OPENAPI_EXPORT else get_database_url()
 
 cors_origins = settings.cors_origins
 if isinstance(cors_origins, str):
-    cors_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+    cors_origins = [
+        origin.strip() for origin in cors_origins.split(",") if origin.strip()
+    ]
 
 # Global instances
 db_pool = None
@@ -68,6 +74,7 @@ CNS_AVAILABLE = False
 cns = None  # Will be initialized in lifespan
 try:
     from cns_service_simplified import BrainOpsCNS, create_cns_routes
+
     CNS_AVAILABLE = True
     logger.info("✅ CNS module is available")
 except ImportError as e:
@@ -79,6 +86,7 @@ except Exception as e:
 CREDENTIAL_MANAGER_AVAILABLE = False
 try:
     from credential_manager import CredentialManager, initialize_credential_manager
+
     CREDENTIAL_MANAGER_AVAILABLE = True
     logger.info("✅ Credential Manager module is available")
 except ImportError as e:
@@ -88,6 +96,7 @@ except ImportError as e:
 ORCHESTRATOR_AVAILABLE = False
 try:
     from agent_orchestrator_v2 import AgentOrchestratorV2, initialize_orchestrator
+
     ORCHESTRATOR_AVAILABLE = True
     logger.info("✅ Agent Orchestrator V2 module is available")
 except ImportError as e:
@@ -97,6 +106,7 @@ except ImportError as e:
 ELENA_AVAILABLE = False
 try:
     from services.elena_roofing_ai import ElenaRoofingAI, initialize_elena
+
     ELENA_AVAILABLE = True
     logger.info("✅ Elena Roofing AI module is available")
 except ImportError as e:
@@ -108,6 +118,7 @@ brainops_controller = None
 brainops_init_error = None  # Capture initialization errors for diagnostics
 try:
     from brainops_ai_os import MetacognitiveController, initialize_brainops
+
     BRAINOPS_AI_OS_AVAILABLE = True
     logger.info("✅ BrainOps AI OS module is available")
 except ImportError as e:
@@ -117,7 +128,10 @@ except Exception as e:
     brainops_init_error = f"Module error: {e}"
     logger.error(f"Error checking BrainOps AI OS availability: {e}")
 
-async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asyncpg.Pool:
+
+async def _init_db_pool_with_retries(
+    database_url: str, retries: int = 3
+) -> asyncpg.Pool:
     """Initialize the asyncpg pool with retry, backoff, and connection recycling. Raises on failure."""
     import ssl as ssl_module
 
@@ -137,7 +151,9 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
                 max_size=int(os.getenv("ASYNCPG_POOL_MAX_SIZE", "40")),
                 command_timeout=float(os.getenv("ASYNCPG_COMMAND_TIMEOUT_SECS", "15")),
                 statement_cache_size=0,  # MUST be 0 for Supabase pgBouncer compatibility
-                max_inactive_connection_lifetime=float(os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")),
+                max_inactive_connection_lifetime=float(
+                    os.getenv("ASYNCPG_MAX_INACTIVE_SECS", "60")
+                ),
                 timeout=float(os.getenv("ASYNCPG_CONNECT_TIMEOUT_SECS", "10")),
                 ssl=ssl_context,
             )
@@ -150,20 +166,35 @@ async def _init_db_pool_with_retries(database_url: str, retries: int = 3) -> asy
         except Exception as e:
             last_err = e
             # Log rich error information to help diagnose environment issues
-            logger.exception("❌ Database initialization failed on attempt %d: %r", attempt, e)
-            print(f"❌ Database initialization failed (attempt {attempt}/{retries}): {e}")
+            logger.exception(
+                "❌ Database initialization failed on attempt %d: %r", attempt, e
+            )
+            print(
+                f"❌ Database initialization failed (attempt {attempt}/{retries}): {e}"
+            )
             if attempt < retries:
                 await asyncio.sleep(backoffs[min(attempt - 1, len(backoffs) - 1)])
     assert last_err is not None
-    raise RuntimeError(f"Database initialization failed after {retries} attempts: {last_err}")
+    raise RuntimeError(
+        f"Database initialization failed after {retries} attempts: {last_err}"
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle"""
-    global db_pool, cns, credential_manager, agent_orchestrator, weathercraft_integration, relationship_awareness, brainops_controller
+    global \
+        db_pool, \
+        cns, \
+        credential_manager, \
+        agent_orchestrator, \
+        weathercraft_integration, \
+        relationship_awareness, \
+        brainops_controller
 
-    print(f"🚀 Starting BrainOps Backend v{__version__} - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES")
+    print(
+        f"🚀 Starting BrainOps Backend v{__version__} - COMPREHENSIVE AI AGENTS + ARCHITECTURAL FIXES"
+    )
     print("=" * 80)
 
     app.state.offline_mode = OFFLINE_MODE
@@ -178,7 +209,9 @@ async def lifespan(app: FastAPI):
     app.state.last_api_summary_at = None
 
     if FAST_TEST_MODE:
-        print("🚀 FAST_TEST_MODE enabled - skipping heavy startup (DB, credential manager, CNS)")
+        print(
+            "🚀 FAST_TEST_MODE enabled - skipping heavy startup (DB, credential manager, CNS)"
+        )
         app.state.db_pool = None
         yield
         return
@@ -226,24 +259,26 @@ async def lifespan(app: FastAPI):
 
             # Try to store startup memory (non-blocking - AI provider issues shouldn't prevent CNS from working)
             try:
-                await cns.remember({
-                    'type': 'system',
-                    'category': 'startup',
-                    'title': f'BrainOps v{app.version} Startup',
-                    'content': {
-                        'version': app.version,
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'status': status,
-                        'integrations': {
-                            'credential_manager': CREDENTIAL_MANAGER_AVAILABLE,
-                            'agent_orchestrator': ORCHESTRATOR_AVAILABLE,
-                            'cns': True,
-                            'langgraph_workflows': True
-                        }
-                    },
-                    'importance': 1.0,
-                    'tags': ['startup', 'initialization', 'v163']
-                })
+                await cns.remember(
+                    {
+                        "type": "system",
+                        "category": "startup",
+                        "title": f"BrainOps v{app.version} Startup",
+                        "content": {
+                            "version": app.version,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "status": status,
+                            "integrations": {
+                                "credential_manager": CREDENTIAL_MANAGER_AVAILABLE,
+                                "agent_orchestrator": ORCHESTRATOR_AVAILABLE,
+                                "cns": True,
+                                "langgraph_workflows": True,
+                            },
+                        },
+                        "importance": 1.0,
+                        "tags": ["startup", "initialization", "v163"],
+                    }
+                )
                 print("💾 Stored initialization memory in CNS")
             except Exception as mem_err:
                 print(f"⚠️  Could not store startup memory (non-critical): {mem_err}")
@@ -271,6 +306,7 @@ async def lifespan(app: FastAPI):
     try:
         print("\n🏢 Initializing Weathercraft ERP Deep Integration...")
         from integrations.weathercraft_erp import WeathercraftERPIntegration
+
         weathercraft_integration = WeathercraftERPIntegration(db_pool)
         await weathercraft_integration.initialize()
         print("✅ Weathercraft ERP Integration initialized!")
@@ -286,6 +322,7 @@ async def lifespan(app: FastAPI):
     try:
         print("\n🔗 Initializing Relationship Awareness System...")
         from core.relationship_awareness import RelationshipAwareness
+
         relationship_awareness = RelationshipAwareness(db_pool)
         print("✅ Relationship Awareness System initialized!")
         print("  🔗 Auto-linking on entity creation")
@@ -303,10 +340,7 @@ async def lifespan(app: FastAPI):
             print("\n🏗️ Initializing Elena Roofing AI...")
             # Use production URL in deployment, localhost for local dev
             backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-            elena_instance = await initialize_elena(
-                db_pool,
-                backend_url=backend_url
-            )
+            elena_instance = await initialize_elena(db_pool, backend_url=backend_url)
             print("✅ Elena Roofing AI initialized!")
             print("  🎯 Roofing estimation capabilities active")
             print("  🏗️ Integrated with roofing backend")
@@ -320,19 +354,37 @@ async def lifespan(app: FastAPI):
     # Initialize BrainOps AI OS - The Unified AI Operating System
     if BRAINOPS_AI_OS_AVAILABLE:
         try:
-            print("\n🧠 Initializing BrainOps AI OS - The Unified AI Operating System...")
+            print(
+                "\n🧠 Initializing BrainOps AI OS - The Unified AI Operating System..."
+            )
             brainops_controller = await initialize_brainops(db_pool)
             brainops_health = await brainops_controller.get_health()
             print(f"✅ BrainOps AI OS initialized!")
             print(f"  🧬 Metacognitive Controller: ACTIVE")
-            print(f"  👁️  Continuous Awareness: {brainops_health.get('subsystems', {}).get('awareness', {}).get('status', 'unknown')}")
-            print(f"  🧠 Unified Memory: {brainops_health.get('subsystems', {}).get('memory', {}).get('status', 'unknown')}")
-            print(f"  ⚡ Neural Dynamics: {brainops_health.get('subsystems', {}).get('neural', {}).get('status', 'unknown')}")
-            print(f"  🎯 Goal Architecture: {brainops_health.get('subsystems', {}).get('goals', {}).get('status', 'unknown')}")
-            print(f"  📚 Learning Pipeline: {brainops_health.get('subsystems', {}).get('learning', {}).get('status', 'unknown')}")
-            print(f"  🔮 Proactive Engine: {brainops_health.get('subsystems', {}).get('proactive', {}).get('status', 'unknown')}")
-            print(f"  💭 Reasoning Engine: {brainops_health.get('subsystems', {}).get('reasoning', {}).get('status', 'unknown')}")
-            print(f"  🔧 Self-Optimization: {brainops_health.get('subsystems', {}).get('optimization', {}).get('status', 'unknown')}")
+            print(
+                f"  👁️  Continuous Awareness: {brainops_health.get('subsystems', {}).get('awareness', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  🧠 Unified Memory: {brainops_health.get('subsystems', {}).get('memory', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  ⚡ Neural Dynamics: {brainops_health.get('subsystems', {}).get('neural', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  🎯 Goal Architecture: {brainops_health.get('subsystems', {}).get('goals', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  📚 Learning Pipeline: {brainops_health.get('subsystems', {}).get('learning', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  🔮 Proactive Engine: {brainops_health.get('subsystems', {}).get('proactive', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  💭 Reasoning Engine: {brainops_health.get('subsystems', {}).get('reasoning', {}).get('status', 'unknown')}"
+            )
+            print(
+                f"  🔧 Self-Optimization: {brainops_health.get('subsystems', {}).get('optimization', {}).get('status', 'unknown')}"
+            )
             print("🧠 BrainOps AI OS is AWAKE, AWARE, and OPERATIONAL!")
             app.state.brainops_controller = brainops_controller
         except Exception as e:
@@ -345,6 +397,7 @@ async def lifespan(app: FastAPI):
     try:
         print("\n🔌 Initializing MCP Bridge Client...")
         from services.mcp_client import initialize_mcp_client
+
         mcp_client = await initialize_mcp_client()
         app.state.mcp_client = mcp_client
         print("🔌 MCP Bridge Client ACTIVE!")
@@ -355,7 +408,10 @@ async def lifespan(app: FastAPI):
     print("✅ BrainOps Backend v163.0.29 FULLY OPERATIONAL")
     print("  🤖 23 AI agent endpoints active")
     print("  🔗 Complete relationship awareness")
-    print("  🧠 BrainOps AI OS: " + ("ACTIVE" if BRAINOPS_AI_OS_AVAILABLE and brainops_controller else "INACTIVE"))
+    print(
+        "  🧠 BrainOps AI OS: "
+        + ("ACTIVE" if BRAINOPS_AI_OS_AVAILABLE and brainops_controller else "INACTIVE")
+    )
     print("  ✅ All frontend linkages verified")
     print("=" * 80 + "\n")
 
@@ -377,13 +433,16 @@ async def lifespan(app: FastAPI):
     if db_pool:
         await db_pool.close()
     print("✅ Shutdown complete")
+
+
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="BrainOps Backend API",
     version=__version__,
     description="AI-Powered Business Operations Platform with Elena Roofing AI + 23 AI Agents + Deep Relationship Awareness",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
+
 
 # Consistent error envelope while preserving FastAPI's `detail` shape for compatibility.
 @app.exception_handler(HTTPException)
@@ -430,7 +489,9 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
 
 
 @app.exception_handler(RequestValidationError)
-async def _validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def _validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     return JSONResponse(
         status_code=422,
         content={
@@ -447,8 +508,12 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
 
 
 @app.exception_handler(Exception)
-async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled exception for %s %s: %s", request.method, request.url.path, exc)
+async def _unhandled_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    logger.exception(
+        "Unhandled exception for %s %s: %s", request.method, request.url.path, exc
+    )
     detail: Any = "Internal server error"
     return JSONResponse(
         status_code=500,
@@ -463,6 +528,24 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Correlation ID Middleware — cross-service traceability
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """Attach correlation ID to every request for cross-service tracing."""
+    correlation_id = (
+        request.headers.get("x-correlation-id")
+        or request.headers.get("x-request-id")
+        or str(uuid.uuid4())
+    )
+    request.state.correlation_id = correlation_id
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = correlation_id
+    response.headers["X-Request-ID"] = correlation_id
+    return response
 
 
 @app.middleware("http")
@@ -511,7 +594,9 @@ async def api_performance_tracking_middleware(request: Request, call_next):
             window = {"count": 0, "total_response_time_ms": 0.0, "status_counts": {}}
 
         window["count"] = int(window.get("count", 0)) + 1
-        window["total_response_time_ms"] = float(window.get("total_response_time_ms", 0.0)) + response_time_ms
+        window["total_response_time_ms"] = (
+            float(window.get("total_response_time_ms", 0.0)) + response_time_ms
+        )
         window["last_route"] = route_signature
         window["last_method"] = method
         window["last_status_code"] = status_code
@@ -523,7 +608,9 @@ async def api_performance_tracking_middleware(request: Request, call_next):
         window["status_counts"] = status_counts
 
         if window["count"] >= 100:
-            avg_response_time_ms = round(window["total_response_time_ms"] / window["count"], 2)
+            avg_response_time_ms = round(
+                window["total_response_time_ms"] / window["count"], 2
+            )
 
             store_api_insight(
                 route=f"summary:{route_signature}",
@@ -554,6 +641,7 @@ async def api_performance_tracking_middleware(request: Request, call_next):
         else:
             app.state.api_insight_window = window
 
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -569,6 +657,7 @@ app.add_middleware(
         "X-API-Key",
         "X-Tenant-ID",
         "X-Request-Id",
+        "X-Correlation-ID",
         "Stripe-Signature",
     ],
     expose_headers=[
@@ -576,6 +665,7 @@ app.add_middleware(
         "X-RateLimit-Remaining",
         "X-RateLimit-Reset",
         "X-Request-Id",
+        "X-Correlation-ID",
     ],
     max_age=3600,
 )
@@ -607,9 +697,14 @@ app.add_middleware(AuthenticationMiddleware)
 dynamic_routes_loaded = False
 try:
     from routes.route_loader import load_all_routes
+
     loaded_count, failed_count = load_all_routes(app)
     dynamic_routes_loaded = loaded_count > 0
-    logger.info("✅ Dynamic route loading complete: %d loaded, %d failed", loaded_count, failed_count)
+    logger.info(
+        "✅ Dynamic route loading complete: %d loaded, %d failed",
+        loaded_count,
+        failed_count,
+    )
 except Exception as e:
     logger.error(f"⚠️  Failed to load routes: {e}")
 
@@ -621,6 +716,7 @@ except Exception as e:
 if not dynamic_routes_loaded:
     try:
         from routes.invoices import router as invoices_router
+
         app.include_router(invoices_router)
         logger.info("✅ Invoices routes loaded (fallback)")
     except Exception as e:
@@ -628,6 +724,7 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.jobs import router as jobs_router
+
         app.include_router(jobs_router)
         logger.info("✅ Jobs routes loaded (fallback)")
     except Exception as e:
@@ -635,6 +732,7 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.relationships import router as relationships_router
+
         app.include_router(relationships_router)
         logger.info("✅ Relationships routes loaded (fallback)")
     except Exception as e:
@@ -642,6 +740,7 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.credits import router as credits_router
+
         app.include_router(credits_router)
         logger.info("✅ Credits routes loaded (fallback)")
     except Exception as e:
@@ -652,6 +751,7 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.workflows_langgraph import router as workflows_router
+
         app.include_router(workflows_router)
         logger.info("✅ LangGraph workflow routes loaded (fallback)")
     except Exception as e:
@@ -659,21 +759,28 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.weathercraft_integration import router as weathercraft_router
+
         app.include_router(weathercraft_router)
         logger.info("✅ Weathercraft ERP integration routes loaded (fallback)")
     except Exception as e:
-        logger.error(f"⚠️  Failed to load Weathercraft integration routes (fallback): {e}")
+        logger.error(
+            f"⚠️  Failed to load Weathercraft integration routes (fallback): {e}"
+        )
 
     try:
         from routes.relationship_aware import router as relationship_router
+
         app.include_router(relationship_router)
-        logger.info("✅ Relationship Awareness routes loaded at /api/v1/aware (fallback)")
+        logger.info(
+            "✅ Relationship Awareness routes loaded at /api/v1/aware (fallback)"
+        )
     except Exception as e:
         logger.error(f"⚠️  Failed to load Relationship Awareness routes (fallback): {e}")
 
     if ELENA_AVAILABLE:
         try:
             from routes.elena_roofing_agent import router as elena_router
+
             app.include_router(elena_router)
             logger.info("✅ Elena Roofing AI routes loaded at /api/v1/elena (fallback)")
         except Exception as e:
@@ -681,6 +788,7 @@ if not dynamic_routes_loaded:
 
     try:
         from routes.ai_agents import router as ai_agents_router
+
         app.include_router(ai_agents_router)
         logger.info("✅ AI Agents routes loaded at /api/v1/agents (fallback)")
     except Exception as e:
@@ -693,6 +801,7 @@ elif ELENA_AVAILABLE:
 # Load Gemini Estimation Engine
 try:
     from routes.gemini_estimation.endpoints import router as gemini_estimation_router
+
     app.include_router(gemini_estimation_router, prefix="/api/v1/gemini-estimation")
     logger.info("✅ Gemini Estimation Engine loaded at /api/v1/gemini-estimation")
 except Exception as e:
@@ -702,6 +811,7 @@ except Exception as e:
 # This fixes the API contract mismatch between MRG (calls /api/v1/complete-erp/*) and backend (/api/v1/erp/*)
 try:
     from routes.complete_erp_alias import router as complete_erp_alias_router
+
     app.include_router(complete_erp_alias_router)
     logger.info("✅ Complete-ERP alias routes loaded at /api/v1/complete-erp/*")
 except Exception as e:
@@ -710,6 +820,7 @@ except Exception as e:
 # Load MCP Bridge routes for active tool execution
 try:
     from routes.mcp_bridge import router as mcp_bridge_router
+
     app.include_router(mcp_bridge_router)
     logger.info("✅ MCP Bridge routes loaded at /api/v1/mcp/*")
 except Exception as e:
@@ -737,7 +848,9 @@ async def _runtime_health_metadata(force_brain_refresh: bool = False) -> Dict[st
     started_at = getattr(app.state, "started_at", None)
     uptime_seconds = 0
     if isinstance(started_at, datetime):
-        uptime_seconds = max(int((datetime.now(timezone.utc) - started_at).total_seconds()), 0)
+        uptime_seconds = max(
+            int((datetime.now(timezone.utc) - started_at).total_seconds()), 0
+        )
 
     db_connections = _database_connection_snapshot()
     effective_brain_timestamp = await get_effective_brain_timestamp(
@@ -835,15 +948,20 @@ async def api_health_check():
                 db_status = "connected"
                 db_ok = True
         except asyncio.TimeoutError:
-            logger.warning("Health check database probe timed out (2s limit) - service still running")
+            logger.warning(
+                "Health check database probe timed out (2s limit) - service still running"
+            )
             db_status = "timeout"
         except Exception as e:
-            logger.warning("Health check database probe failed: %s - service still running", e)
+            logger.warning(
+                "Health check database probe failed: %s - service still running", e
+            )
             db_status = "error"
     elif not offline and not db_pool:
         # Lazily probe DB when pool isn't initialized (e.g., tests or partial startup)
         try:
             import ssl as ssl_module
+
             ssl_ctx = ssl_module.create_default_context()
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl_module.CERT_NONE
@@ -878,7 +996,9 @@ async def api_health_check():
         try:
             # Avoid cancelling CNS work mid-flight; cancellation during asyncpg
             # connection reset/release can emit noisy asyncio errors under load.
-            cns_info = await asyncio.wait_for(asyncio.shield(cns.get_status()), timeout=1.0)
+            cns_info = await asyncio.wait_for(
+                asyncio.shield(cns.get_status()), timeout=1.0
+            )
             cns_status = cns_info.get("status", "unknown")
         except asyncio.TimeoutError:
             logger.warning("Health check CNS probe timed out (1s limit)")
@@ -919,6 +1039,7 @@ async def api_health_check():
     else:
         # Database is completely unreachable - return 503
         from fastapi.responses import JSONResponse
+
         return JSONResponse(status_code=503, content=payload)
 
 
@@ -936,15 +1057,28 @@ async def _probe_database(timeout: float = 2.0) -> Dict[str, Any]:
             async with db_pool.acquire(timeout=timeout) as conn:
                 result = await conn.fetchval("SELECT 1", timeout=timeout)
             ok = result == 1
-            return {"ok": ok, "status": "connected" if ok else "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+            return {
+                "ok": ok,
+                "status": "connected" if ok else "error",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+            }
         except asyncio.TimeoutError:
-            return {"ok": False, "status": "timeout", "latency_ms": int((time.monotonic() - start) * 1000)}
+            return {
+                "ok": False,
+                "status": "timeout",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+            }
         except Exception as exc:
             logger.warning("Readiness DB probe failed: %s", exc)
-            return {"ok": False, "status": "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+            return {
+                "ok": False,
+                "status": "error",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+            }
 
     try:
         import ssl as ssl_module
+
         ssl_ctx = ssl_module.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl_module.CERT_NONE
@@ -957,14 +1091,26 @@ async def _probe_database(timeout: float = 2.0) -> Dict[str, Any]:
         try:
             result = await conn.fetchval("SELECT 1")
             ok = result == 1
-            return {"ok": ok, "status": "connected" if ok else "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+            return {
+                "ok": ok,
+                "status": "connected" if ok else "error",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+            }
         finally:
             await conn.close()
     except asyncio.TimeoutError:
-        return {"ok": False, "status": "timeout", "latency_ms": int((time.monotonic() - start) * 1000)}
+        return {
+            "ok": False,
+            "status": "timeout",
+            "latency_ms": int((time.monotonic() - start) * 1000),
+        }
     except Exception as exc:
         logger.warning("Readiness direct DB probe failed: %s", exc)
-        return {"ok": False, "status": "error", "latency_ms": int((time.monotonic() - start) * 1000)}
+        return {
+            "ok": False,
+            "status": "error",
+            "latency_ms": int((time.monotonic() - start) * 1000),
+        }
 
 
 def _require_diagnostics_key(request: Request) -> None:
@@ -1018,7 +1164,9 @@ async def readiness_check():
                         headers={"X-API-Key": api_key},
                     )
                 ai_agents_ok = resp.status_code == 200
-                ai_agents_status = "healthy" if ai_agents_ok else f"unhealthy:{resp.status_code}"
+                ai_agents_status = (
+                    "healthy" if ai_agents_ok else f"unhealthy:{resp.status_code}"
+                )
             except Exception as exc:
                 ai_agents_ok = False
                 ai_agents_status = f"error:{exc}"
@@ -1104,9 +1252,12 @@ async def diagnostics(request: Request):
         "brainops_ai_os": {
             "module_available": BRAINOPS_AI_OS_AVAILABLE,
             "controller_initialized": brainops_controller is not None,
-            "controller_state": brainops_controller.state.value if brainops_controller else None,
+            "controller_state": brainops_controller.state.value
+            if brainops_controller
+            else None,
         },
     }
+
 
 # Customer model
 class Customer(BaseModel):
@@ -1117,6 +1268,7 @@ class Customer(BaseModel):
     company: Optional[str] = None
     status: Optional[str] = "active"
     metadata: Optional[Dict[str, Any]] = {}
+
 
 # ============================================================================
 # BUSINESS LOGIC ENDPOINTS REMOVED (v147.0.0)
@@ -1142,6 +1294,7 @@ class Customer(BaseModel):
 # - /api/v1/workflows    → routes/workflows_*.py (full CRUD)
 # ============================================================================
 
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -1157,9 +1310,11 @@ async def root():
             "error": brainops_init_error,
         },
         "documentation": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
