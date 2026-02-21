@@ -172,9 +172,7 @@ class MetacognitiveController:
 
         # Alert dedup: track processed alert IDs and rate-limit repeated alerts
         self._processed_alert_ids: set = set()
-        self._alert_last_recorded: Dict[
-            str, datetime
-        ] = {}  # alert_type -> last recorded time
+        self._alert_last_recorded: Dict[str, datetime] = {}  # alert_type -> last recorded time
         self._alert_record_interval = timedelta(
             minutes=5
         )  # min interval between recording same alert type
@@ -209,16 +207,12 @@ class MetacognitiveController:
                 await self._initialize_database()
             except RuntimeError as e:
                 if "BLOCKED_RUNTIME_DDL" in str(e):
-                    logger.info(
-                        "DDL kill-switch active — skipping runtime table creation"
-                    )
+                    logger.info("DDL kill-switch active — skipping runtime table creation")
                 else:
                     raise
             except Exception as e:
                 if "permission denied" in str(e).lower():
-                    logger.info(
-                        "Skipping DDL init (restricted role) - tables already exist"
-                    )
+                    logger.info("Skipping DDL init (restricted role) - tables already exist")
                 else:
                     raise
 
@@ -258,9 +252,7 @@ class MetacognitiveController:
                 "metacognitive_controller",
             )
 
-            logger.info(
-                "✅ BrainOps AI OS - Metacognitive Controller fully initialized"
-            )
+            logger.info("✅ BrainOps AI OS - Metacognitive Controller fully initialized")
             return True
 
         except Exception as e:
@@ -490,9 +482,7 @@ class MetacognitiveController:
                 return
             exc = t.exception()
             if exc is not None:
-                logger.error(
-                    "Background task %s failed: %s", t.get_name(), exc, exc_info=exc
-                )
+                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
 
         task.add_done_callback(_on_done)
         return task
@@ -572,23 +562,17 @@ class MetacognitiveController:
         """Start all background processes for continuous operation"""
         # Main consciousness loop - always running
         self._background_tasks.append(
-            self._create_safe_task(
-                self._consciousness_loop(), name="consciousness_loop"
-            )
+            self._create_safe_task(self._consciousness_loop(), name="consciousness_loop")
         )
 
         # Attention management
         self._background_tasks.append(
-            self._create_safe_task(
-                self._attention_management_loop(), name="attention_management"
-            )
+            self._create_safe_task(self._attention_management_loop(), name="attention_management")
         )
 
         # Decision processing
         self._background_tasks.append(
-            self._create_safe_task(
-                self._decision_processing_loop(), name="decision_processing"
-            )
+            self._create_safe_task(self._decision_processing_loop(), name="decision_processing")
         )
 
         # Self-reflection cycle
@@ -598,16 +582,12 @@ class MetacognitiveController:
 
         # State persistence
         self._background_tasks.append(
-            self._create_safe_task(
-                self._state_persistence_loop(), name="state_persistence"
-            )
+            self._create_safe_task(self._state_persistence_loop(), name="state_persistence")
         )
 
         # Metrics collection
         self._background_tasks.append(
-            self._create_safe_task(
-                self._metrics_collection_loop(), name="metrics_collection"
-            )
+            self._create_safe_task(self._metrics_collection_loop(), name="metrics_collection")
         )
 
         logger.info(f"Started {len(self._background_tasks)} background processes")
@@ -668,9 +648,7 @@ class MetacognitiveController:
     async def _process_thought_stream(self):
         """Process thoughts in the thought stream"""
         # Get unprocessed thoughts by priority
-        thoughts_to_process = [
-            t for t in self.current_thoughts.values() if not t.processed
-        ]
+        thoughts_to_process = [t for t in self.current_thoughts.values() if not t.processed]
 
         # Sort by priority
         priority_order = {
@@ -704,7 +682,9 @@ class MetacognitiveController:
 
         # Route to appropriate subsystem
         if thought_type in ["alert", "warning", "error"]:
-            return await self.awareness_system.handle_alert(thought.content)
+            # Alerts are already persisted by the awareness system that generated them.
+            # Routing back to handle_alert() would create duplicate DB entries.
+            return {"status": "acknowledged", "thought_type": thought_type}
 
         elif thought_type in ["memory", "recall", "remember"]:
             return await self.unified_memory.process_memory_request(thought.content)
@@ -719,9 +699,7 @@ class MetacognitiveController:
             return await self.proactive_engine.process_prediction(thought.content)
 
         elif thought_type in ["reasoning", "analysis", "decision"]:
-            return await self.reasoning_engine.process_reasoning_request(
-                thought.content
-            )
+            return await self.reasoning_engine.process_reasoning_request(thought.content)
 
         elif thought_type in ["optimization", "improvement"]:
             return await self.self_optimization.process_optimization(thought.content)
@@ -781,9 +759,7 @@ class MetacognitiveController:
                 self._processed_alert_ids.add(alert_id)
                 # Cap set size to prevent memory leak
                 if len(self._processed_alert_ids) > 10000:
-                    self._processed_alert_ids = set(
-                        list(self._processed_alert_ids)[-5000:]
-                    )
+                    self._processed_alert_ids = set(list(self._processed_alert_ids)[-5000:])
 
     async def _handle_critical_alert(self, alert: Dict[str, Any]):
         """Handle a critical alert with immediate action"""
@@ -866,9 +842,7 @@ class MetacognitiveController:
 
     async def _update_system_state(self):
         """Update the unified system state"""
-        self.metrics["uptime_hours"] = (
-            datetime.now() - self.start_time
-        ).total_seconds() / 3600
+        self.metrics["uptime_hours"] = (datetime.now() - self.start_time).total_seconds() / 3600
 
     # =========================================================================
     # ATTENTION MANAGEMENT
@@ -1082,9 +1056,7 @@ class MetacognitiveController:
         )
 
         if recent_decisions:
-            success_rate = sum(1 for d in recent_decisions if d["success"]) / len(
-                recent_decisions
-            )
+            success_rate = sum(1 for d in recent_decisions if d["success"]) / len(recent_decisions)
 
             avg_confidence = sum(d["confidence"] or 0 for d in recent_decisions) / len(
                 recent_decisions
@@ -1179,9 +1151,7 @@ class MetacognitiveController:
             self.state.value,
             self.attention_focus,
             json.dumps(
-                system_state.__dict__
-                if hasattr(system_state, "__dict__")
-                else system_state,
+                system_state.__dict__ if hasattr(system_state, "__dict__") else system_state,
                 cls=DateTimeEncoder,
             ),
             json.dumps(self.metrics, cls=DateTimeEncoder),
@@ -1206,9 +1176,7 @@ class MetacognitiveController:
     async def _collect_metrics(self):
         """Collect metrics from all subsystems"""
         # Update uptime
-        self.metrics["uptime_hours"] = (
-            datetime.now() - self.start_time
-        ).total_seconds() / 3600
+        self.metrics["uptime_hours"] = (datetime.now() - self.start_time).total_seconds() / 3600
 
     # =========================================================================
     # PUBLIC API
@@ -1320,14 +1288,10 @@ class MetacognitiveController:
             timestamp=datetime.now(),
             consciousness_state=self.state,
             attention_focus=self.attention_focus,
-            active_goals=await self._get_active_goals()
-            if self.goal_architecture
-            else [],
+            active_goals=await self._get_active_goals() if self.goal_architecture else [],
             active_agents={aid: a["status"] for aid, a in self.agents.items()},
             memory_usage=await self._get_memory_usage() if self.unified_memory else {},
-            neural_activity=await self._get_neural_activity()
-            if self.neural_network
-            else 0,
+            neural_activity=await self._get_neural_activity() if self.neural_network else 0,
             pending_decisions=len(self.pending_decisions),
             active_tasks=len(self.current_thoughts),
             system_health=await self._calculate_system_health(),
@@ -1423,9 +1387,7 @@ class MetacognitiveController:
             thought.source,
             thought.priority.value,
             thought.processed,
-            json.dumps(thought.outcome, cls=DateTimeEncoder)
-            if thought.outcome
-            else None,
+            json.dumps(thought.outcome, cls=DateTimeEncoder) if thought.outcome else None,
             datetime.now() if thought.processed else None,
         )
 
@@ -1508,9 +1470,7 @@ class MetacognitiveController:
                 subsystems["optimization"] = {"status": "error", "error": str(e)}
 
         # Calculate overall health
-        healthy_count = sum(
-            1 for s in subsystems.values() if s.get("status") == "healthy"
-        )
+        healthy_count = sum(1 for s in subsystems.values() if s.get("status") == "healthy")
         total_count = len(subsystems)
         health_score = healthy_count / total_count if total_count > 0 else 0
 
@@ -1619,9 +1579,7 @@ class MetacognitiveController:
             reflection["recent_activity"] = {
                 "thoughts_count": len(recent_thoughts),
                 "processed_count": processed_count,
-                "processing_rate": processed_count / len(recent_thoughts)
-                if recent_thoughts
-                else 0,
+                "processing_rate": processed_count / len(recent_thoughts) if recent_thoughts else 0,
             }
 
             # Get learning insights
@@ -1646,8 +1604,7 @@ class MetacognitiveController:
                 "overall_health": health.get("status"),
                 "health_score": health.get("health_score"),
                 "subsystem_status": {
-                    name: info.get("status")
-                    for name, info in health.get("subsystems", {}).items()
+                    name: info.get("status") for name, info in health.get("subsystems", {}).items()
                 },
             }
 

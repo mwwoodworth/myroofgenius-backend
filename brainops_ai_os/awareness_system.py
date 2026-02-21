@@ -434,7 +434,7 @@ class AwarenessSystem:
                         f"Auto-resolved database_error alert after successful DB query ({query_time:.0f}ms)"
                     )
 
-                # Alert on sustained slow queries
+                # Alert on sustained slow queries (not single spikes)
                 if self._check_sustained_breach(
                     "db_query", query_time, ALERT_THRESHOLDS["db_query_ms"]
                 ):
