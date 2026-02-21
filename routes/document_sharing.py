@@ -11,6 +11,7 @@ import asyncpg
 import uuid
 import json
 from core.supabase_auth import get_current_user
+import re
 
 router = APIRouter()
 
@@ -147,6 +148,8 @@ async def update_document_sharing(
     set_clauses = []
     params = [tenant_id]
     for i, (field, value) in enumerate(updates.items(), 2):
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+            raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
         set_clauses.append(f"{field} = ${i}")
         params.append(value)
 

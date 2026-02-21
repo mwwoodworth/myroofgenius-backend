@@ -71,3 +71,23 @@ def raise_internal_error(
     """Log internal errors and raise a safe 500 response."""
     logger.exception("%s failed", operation, exc_info=exc)
     raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Compiled once at module level for performance
+_SAFE_COLUMN_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def validate_column_name(field: str) -> str:
+    """Validate that a field name is a safe SQL column identifier.
+
+    Only allows alphanumeric characters and underscores, and the name
+    must start with a letter or underscore.  Raises HTTP 400 if the
+    name is invalid, preventing SQL injection through dynamic column
+    names in UPDATE statements.
+    """
+    if not _SAFE_COLUMN_RE.match(field):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid field name: {field}",
+        )
+    return field

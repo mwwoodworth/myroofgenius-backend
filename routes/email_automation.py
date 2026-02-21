@@ -12,6 +12,7 @@ from pydantic import BaseModel, EmailStr, Field
 from core.request_safety import parse_uuid, require_tenant_id, sanitize_payload, sanitize_text
 from core.supabase_auth import get_authenticated_user
 from services.email_engine import email_engine
+import re
 
 router = APIRouter()
 
@@ -183,6 +184,8 @@ async def update_email_automation(
     params: List[Any] = []
     for field, value in update_data.items():
         params.append(value)
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+            raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
         set_clauses.append(f"{field} = ${len(params)}")
 
     params.extend([item_uuid, tenant_id])

@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,8 @@ class AutomationEngine:
         params = {'entity_id': entity_id}
         
         for field, value in updates.items():
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+                raise ValueError(f"Invalid field name: {field}")
             set_clauses.append(f"{field} = :{field}")
             params[field] = self._resolve_value(value, context)
         

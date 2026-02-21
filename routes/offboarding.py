@@ -14,6 +14,7 @@ import uuid
 import json
 
 from core.supabase_auth import get_authenticated_user
+import re
 
 router = APIRouter()
 
@@ -149,6 +150,8 @@ async def update_offboarding(
 
     for field, value in updates.items():
         param_count += 1
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+            raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
         set_clauses.append(f"{field} = ${param_count}")
         params.append(value)
 

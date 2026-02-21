@@ -4,6 +4,7 @@ Implementation of Tasks 81-90: Customer Service & Support System
 """
 
 import os
+import re
 
 # Define all 10 customer service modules
 modules = {
@@ -893,6 +894,8 @@ async def update_customer_profile(
     for field, value in profile_data.items():
         if field in allowed_fields:
             params.append(value)
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+                raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
             set_clauses.append(f"{field} = ${len(params)}")
 
     if not set_clauses:

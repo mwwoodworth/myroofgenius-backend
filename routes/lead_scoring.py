@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from core.request_safety import parse_uuid, require_tenant_id, sanitize_payload, sanitize_text
 from core.supabase_auth import get_current_user
+import re
 
 router = APIRouter()
 
@@ -231,6 +232,8 @@ async def update_lead_scoring(
     set_clauses: List[str] = []
     for field, value in update_data.items():
         params.append(value)
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+            raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
         set_clauses.append(f"{field} = ${len(params)}")
 
     params.append(item_uuid)

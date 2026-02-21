@@ -13,6 +13,7 @@ import uuid
 import json
 
 from core.supabase_auth import get_authenticated_user
+import re
 
 router = APIRouter()
 
@@ -153,6 +154,8 @@ async def update_business_rules(
     set_clauses = []
     params = []
     for i, (field, value) in enumerate(updates.items(), 1):
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', field):
+            raise HTTPException(status_code=400, detail=f"Invalid field name: {field}")
         set_clauses.append(f"{field} = ${i}")
         params.append(value)
 
