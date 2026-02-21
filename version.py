@@ -2,9 +2,14 @@
 Version management for BrainOps Backend
 """
 
-__version__ = "163.11.0"
-__build__ = "2026-02-18T18:50:00Z"
+__version__ = "163.12.0"
+__build__ = "2026-02-21T03:00:00Z"
 __status__ = "production"
+# v163.12.0: Final Sweep — security dead code removal + perfection program merge
+#   - Removed auth_production_ready.py (hardcoded JWT fallback + plaintext passwords)
+#   - Removed auth_simple_working.py, dead middleware (cors_config, rls_middleware)
+#   - Archived 142 dead root scripts and 15 dead routes
+#   - Updated .dockerignore to exclude _archive/ from Docker builds
 # v163.11.0: Brain integration throughout + API performance tracking
 #   - Enhanced brain_store.py: store_event(), recall_context(), store_api_insight()
 #   - API performance tracking middleware (every 100th request → brain)

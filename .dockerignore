@@ -29,3 +29,14 @@ logs/
 .ai_persistent/
 memory/
 reports/
+
+# Dead code archive - never ship in production image
+_archive/
+routes/_dead/
+
+# Coverage and analysis artifacts
+.coveragerc
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
