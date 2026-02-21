@@ -28,6 +28,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ---- Configurable alert thresholds (env-overridable) ----
+ALERT_THRESHOLDS = {
+    "cpu_percent": float(os.environ.get("ALERT_THRESHOLD_CPU", "95")),
+    "memory_percent": float(os.environ.get("ALERT_THRESHOLD_MEMORY", "95")),
+    "disk_percent": float(os.environ.get("ALERT_THRESHOLD_DISK", "90")),
+    "db_query_ms": float(os.environ.get("ALERT_THRESHOLD_DB_MS", "2000")),
+    "api_error_rate": float(os.environ.get("ALERT_THRESHOLD_API_ERROR", "0.05")),
+    "anomaly_score": float(os.environ.get("ALERT_THRESHOLD_ANOMALY", "0.8")),
+}
+# Number of consecutive breaches required before alerting
+BREACH_WINDOW_SIZE = int(os.environ.get("ALERT_BREACH_WINDOW", "3"))
+
 
 class AlertSeverity(str, Enum):
     """Alert severity levels"""
@@ -105,6 +117,9 @@ class AwarenessSystem:
         # Active alerts
         self.alerts: Dict[str, Alert] = {}
         self.alert_history: deque = deque(maxlen=10000)
+
+        # Sustained breach tracking (rolling window per metric)
+        self._breach_windows: Dict[str, List[bool]] = {}
 
         # Background task handles
         self._tasks: List[asyncio.Task] = []
@@ -320,28 +335,34 @@ class AwarenessSystem:
                 # Store reading
                 await self._store_reading(reading)
 
-                # Generate alerts if needed
-                if cpu_percent > 90:
+                # Generate alerts only on sustained breaches
+                if self._check_sustained_breach(
+                    "cpu", cpu_percent, ALERT_THRESHOLDS["cpu_percent"]
+                ):
                     await self._generate_alert(
                         AlertSeverity.WARNING,
                         "high_cpu",
-                        f"CPU usage at {cpu_percent}%",
+                        f"CPU usage at {cpu_percent}% (>{ALERT_THRESHOLDS['cpu_percent']}% sustained)",
                         reading.value,
                     )
 
-                if memory.percent > 90:
+                if self._check_sustained_breach(
+                    "memory", memory.percent, ALERT_THRESHOLDS["memory_percent"]
+                ):
                     await self._generate_alert(
                         AlertSeverity.WARNING,
                         "high_memory",
-                        f"Memory usage at {memory.percent}%",
+                        f"Memory usage at {memory.percent}% (>{ALERT_THRESHOLDS['memory_percent']}% sustained)",
                         reading.value,
                     )
 
-                if disk.percent > 90:
+                if self._check_sustained_breach(
+                    "disk", disk.percent, ALERT_THRESHOLDS["disk_percent"]
+                ):
                     await self._generate_alert(
                         AlertSeverity.WARNING,
                         "low_disk",
-                        f"Disk usage at {disk.percent}%",
+                        f"Disk usage at {disk.percent}% (>{ALERT_THRESHOLDS['disk_percent']}% sustained)",
                         reading.value,
                     )
 
@@ -413,12 +434,14 @@ class AwarenessSystem:
                         f"Auto-resolved database_error alert after successful DB query ({query_time:.0f}ms)"
                     )
 
-                # Alert on slow queries
-                if query_time > 1000:
+                # Alert on sustained slow queries
+                if self._check_sustained_breach(
+                    "db_query", query_time, ALERT_THRESHOLDS["db_query_ms"]
+                ):
                     await self._generate_alert(
                         AlertSeverity.WARNING,
                         "slow_database",
-                        f"Database query took {query_time:.0f}ms",
+                        f"Database query took {query_time:.0f}ms (>{ALERT_THRESHOLDS['db_query_ms']}ms sustained)",
                         reading.value,
                     )
 
@@ -503,7 +526,7 @@ class AwarenessSystem:
                 await self._store_reading(reading)
 
                 # Alert on unusual activity
-                if reading.anomaly_score > 0.8:
+                if reading.anomaly_score > ALERT_THRESHOLDS["anomaly_score"]:
                     await self._generate_alert(
                         AlertSeverity.INFO,
                         "business_anomaly",
@@ -561,11 +584,11 @@ class AwarenessSystem:
                     # Alert on high error rate
                     if metrics["request_count"] and metrics["error_count"]:
                         error_rate = metrics["error_count"] / metrics["request_count"]
-                        if error_rate > 0.05:  # 5% error rate
+                        if error_rate > ALERT_THRESHOLDS["api_error_rate"]:
                             await self._generate_alert(
                                 AlertSeverity.WARNING,
                                 "high_api_errors",
-                                f"API error rate at {error_rate*100:.1f}%",
+                                f"API error rate at {error_rate*100:.1f}% (>{ALERT_THRESHOLDS['api_error_rate']*100:.0f}% threshold)",
                                 reading.value,
                             )
 
@@ -769,6 +792,19 @@ class AwarenessSystem:
     # ALERT MANAGEMENT
     # =========================================================================
 
+    def _check_sustained_breach(
+        self, metric: str, value: float, threshold: float
+    ) -> bool:
+        """Return True only if the last N readings all exceeded the threshold."""
+        breach = value > threshold
+        window = self._breach_windows.setdefault(metric, [])
+        window.append(breach)
+        if len(window) > BREACH_WINDOW_SIZE:
+            window.pop(0)
+        if not breach:
+            return False
+        return len(window) >= BREACH_WINDOW_SIZE and all(window)
+
     async def _generate_alert(
         self,
         severity: AlertSeverity,
@@ -799,12 +835,17 @@ class AwarenessSystem:
         self.alert_history.append(alert)
         self.metrics["alerts_generated"] += 1
 
-        # Store in database (with retry)
+        # Store in database (upsert — one active alert per type+severity)
         await self._db_execute_with_retry(
             """
             INSERT INTO brainops_alerts
             (alert_id, severity, alert_type, message, details)
             VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (alert_type, severity) WHERE resolved = false
+            DO UPDATE SET
+                message = EXCLUDED.message,
+                details = EXCLUDED.details,
+                last_seen_at = NOW()
         """,
             alert_id,
             severity.value,
@@ -813,7 +854,8 @@ class AwarenessSystem:
             json.dumps(details),
         )
 
-        # Notify controller
+        # Notify controller (use "alert_raised" to avoid feedback loop —
+        # the controller routes "alert" back to handle_alert which would re-insert)
         if self.controller and severity in [
             AlertSeverity.CRITICAL,
             AlertSeverity.WARNING,
@@ -822,7 +864,7 @@ class AwarenessSystem:
 
             await self.controller._record_thought(
                 {
-                    "type": "alert",
+                    "type": "alert_raised",
                     "severity": severity.value,
                     "alert_type": alert_type,
                     "message": message,
@@ -1027,7 +1069,7 @@ class AwarenessSystem:
         severity = AlertSeverity(alert_data.get("severity", "info"))
         await self._generate_alert(
             severity,
-            alert_data.get("type", "external"),
+            alert_data.get("alert_type", alert_data.get("type", "external")),
             alert_data.get("message", "External alert"),
             alert_data.get("details", {}),
         )

@@ -759,6 +759,7 @@ class MetacognitiveController:
                 await self._record_thought(
                     {
                         "type": "alert",
+                        "alert_type": f"subsystem_unhealthy_{name}",
                         "severity": "warning",
                         "subsystem": name,
                         "message": f"Subsystem {name} health check failed",
