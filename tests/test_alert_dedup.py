@@ -125,15 +125,16 @@ class TestHandleAlertKeyExtraction:
 
 
 class TestSlowDatabaseThreshold:
-    """Verify slow_database threshold is reasonable."""
+    """Verify slow_database uses sustained breach (not single-spike threshold)."""
 
-    def test_threshold_is_3000ms(self):
-        """Slow database alert should trigger at 3000ms, not 1000ms."""
+    def test_uses_sustained_breach_not_single_spike(self):
+        """Slow database alert should use _check_sustained_breach, not a raw threshold."""
         import inspect
 
         from brainops_ai_os.awareness_system import AwarenessSystem
 
         source = inspect.getsource(AwarenessSystem._database_sensor)
-        # Should contain 3000 threshold, not 1000
-        assert "query_time > 3000" in source
+        # Should use sustained breach pattern (not single-spike threshold)
+        assert "_check_sustained_breach" in source
+        # Should NOT use old 1000ms single-spike threshold
         assert "query_time > 1000" not in source
