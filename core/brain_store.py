@@ -15,11 +15,28 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BRAIN_BASE_URL = "https://brainops-ai-agents.onrender.com/brain/"
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("BRAINOPS_BRAIN_TIMEOUT_SECS", "8"))
-STATUS_CACHE_SECONDS = max(float(os.getenv("BRAINOPS_BRAIN_STATUS_CACHE_SECS", "10")), 1.0)
+STATUS_CACHE_SECONDS = max(
+    float(os.getenv("BRAINOPS_BRAIN_STATUS_CACHE_SECS", "10")), 1.0
+)
 
 _last_brain_store_timestamp: Optional[str] = None
 _last_brain_status_timestamp: Optional[str] = None
 _last_brain_status_checked_at: Optional[datetime] = None
+
+# ── Failure telemetry (visible via get_brain_store_health) ────────────────────
+_dispatch_count: int = 0
+_dispatch_failures: int = 0
+_last_failure_detail: Optional[str] = None
+
+
+def get_brain_store_health() -> Dict[str, Any]:
+    """Return brain store dispatch counters for the /health endpoint."""
+    return {
+        "dispatches": _dispatch_count,
+        "failures": _dispatch_failures,
+        "last_failure": _last_failure_detail,
+        "last_store_timestamp": _last_brain_store_timestamp,
+    }
 
 
 def _now_utc_iso() -> str:
@@ -54,14 +71,18 @@ def _newer_iso_timestamp(first: Optional[str], second: Optional[str]) -> Optiona
 def _record_local_store_timestamp(value: Optional[str]) -> None:
     global _last_brain_store_timestamp
     candidate = value or _now_utc_iso()
-    _last_brain_store_timestamp = _newer_iso_timestamp(_last_brain_store_timestamp, candidate)
+    _last_brain_store_timestamp = _newer_iso_timestamp(
+        _last_brain_store_timestamp, candidate
+    )
 
 
 def _record_brain_status_timestamp(value: Optional[str]) -> None:
     global _last_brain_status_timestamp
     if not value:
         return
-    _last_brain_status_timestamp = _newer_iso_timestamp(_last_brain_status_timestamp, value)
+    _last_brain_status_timestamp = _newer_iso_timestamp(
+        _last_brain_status_timestamp, value
+    )
 
 
 def _resolve_brain_base_url() -> str:
@@ -147,11 +168,23 @@ async def _refresh_brain_status_timestamp(force_refresh: bool = False) -> Option
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(url, headers=headers)
             if response.is_success:
-                payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                payload = (
+                    response.json()
+                    if response.headers.get("content-type", "").startswith(
+                        "application/json"
+                    )
+                    else {}
+                )
                 if isinstance(payload, dict):
-                    _record_brain_status_timestamp(payload.get("last_update") or payload.get("timestamp"))
+                    _record_brain_status_timestamp(
+                        payload.get("last_update") or payload.get("timestamp")
+                    )
             else:
-                logger.debug("Brain status fetch failed status=%s body=%s", response.status_code, response.text[:300])
+                logger.debug(
+                    "Brain status fetch failed status=%s body=%s",
+                    response.status_code,
+                    response.text[:300],
+                )
     except Exception as exc:
         logger.debug("Brain status fetch failed: %s", exc)
     finally:
@@ -170,7 +203,9 @@ async def get_effective_brain_timestamp(
     instances. Prefer the central AI Agents `/brain/status` timestamp for a more
     consistent cross-instance value, with local timestamp as fallback.
     """
-    status_timestamp = await _refresh_brain_status_timestamp(force_refresh=force_refresh)
+    status_timestamp = await _refresh_brain_status_timestamp(
+        force_refresh=force_refresh
+    )
     if prefer_remote_status and status_timestamp:
         return status_timestamp
     return _newer_iso_timestamp(_last_brain_store_timestamp, status_timestamp)
@@ -184,7 +219,12 @@ async def store_to_brain(
     source: str = "backend_api",
 ) -> None:
     """Write a memory record to the AI Agents brain API."""
-    global _last_brain_store_timestamp
+    global \
+        _last_brain_store_timestamp, \
+        _dispatch_count, \
+        _dispatch_failures, \
+        _last_failure_detail
+    _dispatch_count += 1
 
     url = f"{_resolve_brain_base_url()}/store"
     payload = {
@@ -201,23 +241,37 @@ async def store_to_brain(
             response = await client.post(url, json=payload, headers=_brain_headers())
             if response.is_success:
                 response_timestamp: Optional[str] = None
-                if response.headers.get("content-type", "").startswith("application/json"):
+                if response.headers.get("content-type", "").startswith(
+                    "application/json"
+                ):
                     try:
                         body = response.json()
                         if isinstance(body, dict):
-                            response_timestamp = body.get("last_update") or body.get("timestamp")
+                            response_timestamp = body.get("last_update") or body.get(
+                                "timestamp"
+                            )
                     except Exception:
                         response_timestamp = None
                 _record_local_store_timestamp(response_timestamp or _now_utc_iso())
             else:
-                logger.debug(
-                    "Brain store write failed status=%s key=%s body=%s",
+                _dispatch_failures += 1
+                _last_failure_detail = f"status={response.status_code} key={key}"
+                logger.warning(
+                    "BRAIN_STORE_FAIL: status=%s key=%s failures=%d body=%s",
                     response.status_code,
                     key,
+                    _dispatch_failures,
                     response.text[:500],
                 )
-    except Exception as exc:  # pragma: no cover - non-blocking telemetry path
-        logger.debug("Brain store write failed for key=%s: %s", key, exc)
+    except Exception as exc:
+        _dispatch_failures += 1
+        _last_failure_detail = f"{key}: {exc}"
+        logger.warning(
+            "BRAIN_STORE_FAIL: key=%s failures=%d err=%s",
+            key,
+            _dispatch_failures,
+            exc,
+        )
 
 
 def dispatch_brain_store(
@@ -239,12 +293,16 @@ def dispatch_brain_store(
     )
 
 
-def store_event(event_type: str, data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> None:
+def store_event(
+    event_type: str, data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None
+) -> None:
     """Store an operational event in the brain using fire-and-forget dispatch."""
     safe_action = (event_type or "event").strip().lower().replace(" ", "_")
     tenant_id = None
     if metadata and isinstance(metadata, dict):
-        tenant_id = str(metadata.get("tenant_id")) if metadata.get("tenant_id") else None
+        tenant_id = (
+            str(metadata.get("tenant_id")) if metadata.get("tenant_id") else None
+        )
 
     dispatch_brain_store(
         key=build_brain_key(scope="event", action=safe_action, tenant_id=tenant_id),
@@ -255,7 +313,9 @@ def store_event(event_type: str, data: Dict[str, Any], metadata: Optional[Dict[s
             "recorded_at": _now_utc_iso(),
         },
         category="operational_event",
-        priority="high" if safe_action in {"error", "failure", "critical"} else "medium",
+        priority="high"
+        if safe_action in {"error", "failure", "critical"}
+        else "medium",
         source="backend_api",
     )
 
@@ -275,7 +335,9 @@ async def recall_context(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
             for endpoint in endpoints:
                 try:
-                    response = await client.post(endpoint, json=payload, headers=headers)
+                    response = await client.post(
+                        endpoint, json=payload, headers=headers
+                    )
                     if response.status_code == 404:
                         continue
                     response.raise_for_status()
@@ -291,7 +353,9 @@ async def recall_context(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     return []
 
 
-def store_api_insight(route: str, method: str, status_code: int, response_time_ms: float) -> None:
+def store_api_insight(
+    route: str, method: str, status_code: int, response_time_ms: float
+) -> None:
     """Store API performance insight records in the brain service."""
     safe_route = route or "/unknown"
     safe_method = (method or "GET").upper()
