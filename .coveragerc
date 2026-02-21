@@ -1,0 +1,23 @@
+[run]
+source = .
+omit =
+    venv/*
+    tests/*
+    *_deprecated_*
+    scripts/*
+    fix_*
+    test_*
+    ACTIVATE_*
+    VERIFY_*
+    migrate_*
+
+[report]
+show_missing = true
+precision = 1
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+[html]
+directory = htmlcov
