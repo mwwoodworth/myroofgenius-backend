@@ -231,9 +231,7 @@ class AwarenessSystem:
                 return
             exc = t.exception()
             if exc is not None:
-                logger.error(
-                    "Background task %s failed: %s", t.get_name(), exc, exc_info=exc
-                )
+                logger.error("Background task %s failed: %s", t.get_name(), exc, exc_info=exc)
 
         task.add_done_callback(_on_done)
         return task
@@ -242,28 +240,20 @@ class AwarenessSystem:
         """Start all sensor loops"""
         # System health sensor - every 5 seconds
         self._tasks.append(
-            self._create_safe_task(
-                self._system_health_sensor(), name="system_health_sensor"
-            )
+            self._create_safe_task(self._system_health_sensor(), name="system_health_sensor")
         )
 
         # Database sensor - every 10 seconds
-        self._tasks.append(
-            self._create_safe_task(self._database_sensor(), name="database_sensor")
-        )
+        self._tasks.append(self._create_safe_task(self._database_sensor(), name="database_sensor"))
 
         # Business metrics sensor - every 30 seconds
         self._tasks.append(
-            self._create_safe_task(
-                self._business_metrics_sensor(), name="business_metrics_sensor"
-            )
+            self._create_safe_task(self._business_metrics_sensor(), name="business_metrics_sensor")
         )
 
         # API performance sensor - every 15 seconds
         self._tasks.append(
-            self._create_safe_task(
-                self._api_performance_sensor(), name="api_performance_sensor"
-            )
+            self._create_safe_task(self._api_performance_sensor(), name="api_performance_sensor")
         )
 
         # External services sensor - every 60 seconds
@@ -274,15 +264,11 @@ class AwarenessSystem:
         )
 
         # Weather sensor - every 5 minutes
-        self._tasks.append(
-            self._create_safe_task(self._weather_sensor(), name="weather_sensor")
-        )
+        self._tasks.append(self._create_safe_task(self._weather_sensor(), name="weather_sensor"))
 
         # Anomaly detection processor - every 30 seconds
         self._tasks.append(
-            self._create_safe_task(
-                self._anomaly_detection_loop(), name="anomaly_detection"
-            )
+            self._create_safe_task(self._anomaly_detection_loop(), name="anomaly_detection")
         )
 
         logger.info(f"Started {len(self._tasks)} sensor loops")
@@ -385,9 +371,7 @@ class AwarenessSystem:
                         "query_time_ms": query_time,
                         "pool_size": pool_size,
                         "pool_free": pool_free,
-                        "active_connections": stats["active_connections"]
-                        if stats
-                        else 0,
+                        "active_connections": stats["active_connections"] if stats else 0,
                         "idle_connections": stats["idle_connections"] if stats else 0,
                     },
                 )
@@ -400,10 +384,7 @@ class AwarenessSystem:
 
                 # Auto-resolve database_error alert if DB is healthy again
                 db_error_key = "database_error_critical"
-                if (
-                    db_error_key in self.alerts
-                    and not self.alerts[db_error_key].resolved
-                ):
+                if db_error_key in self.alerts and not self.alerts[db_error_key].resolved:
                     self.alerts[db_error_key].resolved = True
                     self.alerts[
                         db_error_key
@@ -414,7 +395,7 @@ class AwarenessSystem:
                     )
 
                 # Alert on slow queries
-                if query_time > 1000:
+                if query_time > 3000:
                     await self._generate_alert(
                         AlertSeverity.WARNING,
                         "slow_database",
@@ -542,12 +523,8 @@ class AwarenessSystem:
                         timestamp=datetime.now(),
                         value={
                             "request_count_5m": metrics["request_count"] or 0,
-                            "avg_response_time_ms": float(
-                                metrics["avg_duration_ms"] or 0
-                            ),
-                            "max_response_time_ms": float(
-                                metrics["max_duration_ms"] or 0
-                            ),
+                            "avg_response_time_ms": float(metrics["avg_duration_ms"] or 0),
+                            "max_response_time_ms": float(metrics["max_duration_ms"] or 0),
                             "error_count_5m": metrics["error_count"] or 0,
                         },
                     )
@@ -596,9 +573,7 @@ class AwarenessSystem:
                         response = await self._http_client.get(url, timeout=10)
                         latency = (time.time() - start) * 1000
                         statuses[service_name] = {
-                            "status": "up"
-                            if response.status_code < 500
-                            else "degraded",
+                            "status": "up" if response.status_code < 500 else "degraded",
                             "latency_ms": latency,
                             "status_code": response.status_code,
                         }
@@ -683,9 +658,7 @@ class AwarenessSystem:
                 logger.error(f"Anomaly detection error: {e}")
                 await asyncio.sleep(60)
 
-    async def _calculate_anomaly_score(
-        self, category: str, values: Dict[str, Any]
-    ) -> float:
+    async def _calculate_anomaly_score(self, category: str, values: Dict[str, Any]) -> float:
         """Calculate anomaly score for a reading"""
         scores = []
 
@@ -1027,7 +1000,7 @@ class AwarenessSystem:
         severity = AlertSeverity(alert_data.get("severity", "info"))
         await self._generate_alert(
             severity,
-            alert_data.get("type", "external"),
+            alert_data.get("alert_type", alert_data.get("type", "external")),
             alert_data.get("message", "External alert"),
             alert_data.get("details", {}),
         )
@@ -1046,9 +1019,7 @@ class AwarenessSystem:
             "active_alerts": len([a for a in self.alerts.values() if not a.resolved]),
         }
 
-    async def get_latest_readings(
-        self, sensor_type: Optional[SensorType] = None
-    ) -> Dict[str, Any]:
+    async def get_latest_readings(self, sensor_type: Optional[SensorType] = None) -> Dict[str, Any]:
         """Get latest sensor readings"""
         result = {}
 
