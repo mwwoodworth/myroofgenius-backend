@@ -695,8 +695,30 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
         safe_min_score = max(0.0, min(min_score, 1.0))
 
         try:
-            rows = await self._db_fetch_with_retry(
-                """
+            # Build dynamic WHERE clause — only include predicates when
+            # filter values are provided so the planner can use indexes.
+            conditions = [
+                "acted_upon IS NOT TRUE",
+                "(expires_at IS NULL OR expires_at > NOW())",
+            ]
+            args: list = []
+            param_idx = 1
+
+            if opportunity_type is not None:
+                conditions.append(f"opportunity_type = ${param_idx}")
+                args.append(opportunity_type)
+                param_idx += 1
+
+            conditions.append(f"COALESCE(confidence, 0) >= ${param_idx}")
+            args.append(safe_min_score)
+            param_idx += 1
+
+            where_clause = " AND ".join(conditions)
+
+            args.append(safe_limit)
+            limit_param = f"${param_idx}"
+
+            query = f"""
                 SELECT
                     opportunity_id,
                     opportunity_type,
@@ -711,17 +733,12 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                     expires_at,
                     acted_upon
                 FROM brainops_opportunities
-                WHERE ($1::text IS NULL OR opportunity_type = $1)
-                  AND COALESCE(confidence, 0) >= $2
-                  AND COALESCE(acted_upon, false) = false
-                  AND (expires_at IS NULL OR expires_at > NOW())
-                ORDER BY COALESCE(urgency, 0) DESC, COALESCE(confidence, 0) DESC, created_at DESC
-                LIMIT $3
-            """,
-                opportunity_type,
-                safe_min_score,
-                safe_limit,
-            )
+                WHERE {where_clause}
+                ORDER BY urgency DESC NULLS LAST, confidence DESC NULLS LAST, created_at DESC
+                LIMIT {limit_param}
+            """
+
+            rows = await self._db_fetch_with_retry(query, *args)
         except Exception as e:
             logger.warning(f"Opportunity query fallback to in-memory cache: {e}")
             now = datetime.now()
@@ -734,14 +751,17 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                     "potential_value": opp.potential_value,
                     "confidence": opp.confidence,
                     "urgency": opp.urgency,
-                    "priority": 0 if opp.urgency > 0.8 else (1 if opp.urgency > 0.5 else 2),
+                    "priority": 0
+                    if opp.urgency > 0.8
+                    else (1 if opp.urgency > 0.5 else 2),
                     "actions": opp.recommended_actions,
                     "context": opp.context,
                     "created_at": opp.detected_at.isoformat()
                     if hasattr(opp.detected_at, "isoformat")
                     else opp.detected_at,
                     "expires_at": opp.expires_at.isoformat()
-                    if getattr(opp, "expires_at", None) and hasattr(opp.expires_at, "isoformat")
+                    if getattr(opp, "expires_at", None)
+                    and hasattr(opp.expires_at, "isoformat")
                     else opp.expires_at,
                     "acted_upon": opp.acted_upon,
                 }
@@ -750,7 +770,9 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
             ]
             if opportunity_type:
                 cached = [c for c in cached if c.get("type") == opportunity_type]
-            cached = [c for c in cached if float(c.get("confidence") or 0) >= safe_min_score]
+            cached = [
+                c for c in cached if float(c.get("confidence") or 0) >= safe_min_score
+            ]
             return cached[:safe_limit]
 
         opportunities: List[Dict[str, Any]] = []
@@ -787,8 +809,23 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
     ) -> List[Dict[str, Any]]:
         """Get stored predictions with optional type filtering."""
         safe_limit = max(1, min(limit, 100))
-        rows = await self._db_fetch_with_retry(
-            """
+
+        # Build dynamic WHERE clause so the planner can use indexes.
+        conditions: list[str] = []
+        args: list = []
+        param_idx = 1
+
+        if prediction_type is not None:
+            conditions.append(f"prediction_type = ${param_idx}")
+            args.append(prediction_type)
+            param_idx += 1
+
+        args.append(safe_limit)
+        limit_param = f"${param_idx}"
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        query = f"""
             SELECT
                 prediction_id,
                 prediction_type,
@@ -801,13 +838,11 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                 created_at,
                 verified_at
             FROM brainops_predictions
-            WHERE ($1::text IS NULL OR prediction_type = $1)
+            {where_clause}
             ORDER BY created_at DESC
-            LIMIT $2
-        """,
-            prediction_type,
-            safe_limit,
-        )
+            LIMIT {limit_param}
+        """
+        rows = await self._db_fetch_with_retry(query, *args)
 
         predictions: List[Dict[str, Any]] = []
         for row in rows:
@@ -819,7 +854,9 @@ class ProactiveIntelligenceEngine(ResilientSubsystem):
                     "probability": float(row["probability"] or 0),
                     "timeframe": row["timeframe"],
                     "impact": float(row["impact"] or 0),
-                    "preventive_actions": self._coerce_json(row["preventive_actions"], []),
+                    "preventive_actions": self._coerce_json(
+                        row["preventive_actions"], []
+                    ),
                     "verified": row["verified"],
                     "created_at": row["created_at"].isoformat()
                     if row["created_at"] and hasattr(row["created_at"], "isoformat")
